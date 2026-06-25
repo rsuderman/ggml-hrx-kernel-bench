@@ -85,18 +85,64 @@ def f32_pattern(np: Any, shape: tuple[int, ...], *, seed: int, scale: float = 1.
     return (values * np.float32(scale)).astype(np.float32)
 
 
-def q4_k_pattern(np: Any, k: int, rows: int, *, seed: int):
+def normalized_f32_rows(np: Any, shape: tuple[int, int], *, seed: int, l2_norm: float = 1.0):
+    values = f32_pattern(np, shape, seed=seed)
+    # Keep every RHS row at a fixed energy. This makes the dot-product error
+    # budget depend on the accumulator behavior instead of accidental input
+    # magnitude or cancellation from an unconstrained random vector.
+    values = values - np.mean(values, axis=1, keepdims=True, dtype=np.float32)
+    norms = np.linalg.norm(values.astype(np.float32), axis=1, keepdims=True).astype(np.float32)
+    safe_norms = np.where(norms > np.float32(0.0), norms, np.float32(1.0))
+    return (values / safe_norms * np.float32(l2_norm)).astype(np.float32)
+
+
+def pack_q4_k_scales(np: Any, scales: Any, minimums: Any):
+    packed = np.zeros((12,), dtype=np.uint8)
+    scales_u32 = scales.astype(np.uint32)
+    minimums_u32 = minimums.astype(np.uint32)
+    for group in range(4):
+        packed[group] = np.uint8((scales_u32[group] & 0x3F) | ((scales_u32[group + 4] >> 4) << 6))
+        packed[group + 4] = np.uint8((minimums_u32[group] & 0x3F) | ((minimums_u32[group + 4] >> 4) << 6))
+        packed[group + 8] = np.uint8((scales_u32[group + 4] & 0x0F) | ((minimums_u32[group + 4] & 0x0F) << 4))
+    return packed
+
+
+def q4_k_pattern(np: Any, k: int, rows: int, *, seed: int, target_rms: float = 0.5):
     blocks = rows * (k // QK_K)
     data = np.zeros((blocks, Q4_K_BLOCK_BYTES), dtype=np.uint8)
     rng = np.random.default_rng(seed)
-    d = np.float16(0.5).view(np.uint16)
-    dmin = np.float16(0.125).view(np.uint16)
-    data[:, 0] = int(d) & 0xFF
-    data[:, 1] = (int(d) >> 8) & 0xFF
-    data[:, 2] = int(dmin) & 0xFF
-    data[:, 3] = (int(dmin) >> 8) & 0xFF
-    data[:, 4:16] = rng.integers(1, 16, size=(blocks, 12), dtype=np.uint8)
-    data[:, 16:144] = rng.integers(0, 256, size=(blocks, 128), dtype=np.uint8)
+    q_base = np.tile(np.arange(16, dtype=np.uint8), 2)
+    for block_index in range(blocks):
+        # Use valid Q4_K scale/min metadata with balanced nibble coverage. The
+        # minimum is chosen near scale * mean(q), so each 32-value quant group is
+        # roughly centered after dequantization instead of producing huge
+        # one-sided sums that swamp f16acc checks.
+        scales = rng.integers(2, 7, size=(8,), dtype=np.uint8)
+        minimums = np.floor(scales.astype(np.float32) * np.float32(7.5) + np.float32(0.5)).astype(np.uint8)
+        qs = np.zeros((128,), dtype=np.uint8)
+        logical = np.empty((QK_K,), dtype=np.float32)
+        for group in range(8):
+            q_values = rng.permutation(q_base).astype(np.uint8)
+            byte_base = (group // 2) * 32
+            if group % 2:
+                qs[byte_base : byte_base + 32] |= q_values << np.uint8(4)
+            else:
+                qs[byte_base : byte_base + 32] |= q_values
+            offset = group * 32
+            logical[offset : offset + 32] = (
+                np.float32(scales[group]) * q_values.astype(np.float32) - np.float32(minimums[group])
+            )
+        # Normalize per block after constructing the exact packed q/scales/mins.
+        # The Loom assertion is still a plain close check, so the fixture has to
+        # keep outputs in a range where the existing absolute tolerance is a
+        # useful f16acc guard instead of a high-dynamic-range stress test.
+        rms = np.float32(np.sqrt(np.mean(logical * logical, dtype=np.float32)))
+        d_value = np.float16(np.float32(target_rms) / rms) if rms > np.float32(0.0) else np.float16(1.0)
+        d_bytes = np.array([d_value], dtype=np.float16).view(np.uint8)
+        data[block_index, 0:2] = d_bytes
+        data[block_index, 2:4] = d_bytes
+        data[block_index, 4:16] = pack_q4_k_scales(np, scales, minimums)
+        data[block_index, 16:144] = qs
     return data.reshape(-1)
 
 
@@ -216,7 +262,7 @@ def _mul_mat_q4_k_f32(np: Any, candidate: Candidate, fixture_dir: Path, seed: in
     rows = int(candidate.shape.get("rows", 1))
     cols = int(candidate.shape.get("cols", 1))
     src0 = q4_k_pattern(np, k, rows, seed=seed)
-    src1 = f32_pattern(np, (cols, k), seed=seed + 1)
+    src1 = normalized_f32_rows(np, (cols, k), seed=seed + 1)
     weights = dequant_q4_k(np, src0, k, rows)
     expected = np.matmul(weights.astype(np.float32), src1.T.astype(np.float32)).T.reshape(cols * rows)
     dst_init = f32_pattern(np, (cols * rows,), seed=seed + 2, scale=0.25)
@@ -224,7 +270,11 @@ def _mul_mat_q4_k_f32(np: Any, candidate: Candidate, fixture_dir: Path, seed: in
     np.save(fixture_dir / "src1.npy", src1.reshape(cols * k), allow_pickle=False)
     np.save(fixture_dir / "dst_init.npy", dst_init.astype(np.float32), allow_pickle=False)
     np.save(fixture_dir / "expected.npy", expected.astype(np.float32), allow_pickle=False)
-    meta = _metadata(candidate, seed, "mul_mat_q4_k_f32_numpy_dequant_matmul", {"atol": 0.08, "rtol": 0.02})
+    meta = _metadata(candidate, seed, "mul_mat_q4_k_f32_normalized_numpy_dequant_matmul", {"atol": 0.08, "rtol": 0.02})
+    meta["fixture_policy"] = {
+        "src0": "valid_q4_k_balanced_nibbles_centered_groups_block_rms_0.5",
+        "src1": "mean_centered_rows_l2_norm_1.0",
+    }
     meta["bytes"] = {
         "src0": q4_k_bytes(k, rows),
         "src1": k * cols * F32_BYTES,
