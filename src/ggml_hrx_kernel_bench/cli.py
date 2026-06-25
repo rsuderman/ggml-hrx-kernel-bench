@@ -14,6 +14,7 @@ from .hrx2 import (
     build_manifest,
 )
 from .ledger import LedgerWriter, utc_run_id
+from .llama_catalog import export_llama_catalog
 from .observed_shapes import load_observed_shapes, read_observations_jsonl, save_observed_shapes
 from .oracles import generate_oracle, write_workbench
 from .reporting import ReportOptions, write_markdown_report
@@ -74,6 +75,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--report-output", type=Path, help="markdown report path; defaults to <output-dir>/report.md")
     parser.add_argument("--report-max-issues", type=int, default=50)
     parser.add_argument("--report-top", type=int, default=5, help="timed rows to list per family in markdown reports")
+    parser.add_argument("--llama-catalog-dir", type=Path, help="sparse llama.cpp generated/catalog directory to update")
+    parser.add_argument("--llama-catalog-id", help="catalog id to write when exporting llama.cpp catalog metadata")
 
     subparsers = parser.add_subparsers(dest="command", required=True)
     subparsers.add_parser("import-hrx2")
@@ -86,6 +89,7 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers.add_parser("verify")
     subparsers.add_parser("tune")
     subparsers.add_parser("catalog")
+    subparsers.add_parser("export-llama")
     subparsers.add_parser("sweep-supported")
     subparsers.add_parser("report")
     return parser
@@ -116,6 +120,8 @@ def main(argv: list[str] | None = None) -> int:
             return command_sweep_supported(args, config, ledger)
         if args.command == "report":
             return command_report(args, ledger)
+        if args.command == "export-llama":
+            return command_export_llama(args, ledger)
         if args.spec:
             return command_legacy_spec(args, config, ledger)
         return command_corpus(args, config, ledger)
@@ -317,6 +323,29 @@ def command_report(args: argparse.Namespace, ledger: LedgerWriter) -> int:
             "action": "report",
             "status": "ok",
             **report,
+        }
+    )
+    return 0
+
+
+def command_export_llama(args: argparse.Namespace, ledger: LedgerWriter) -> int:
+    if args.llama_catalog_dir is None:
+        raise ValueError("export-llama requires --llama-catalog-dir")
+    result = export_llama_catalog(
+        output_dir=args.llama_catalog_dir,
+        kernel_dir=args.hrx2_kernel_dir,
+        catalog_dir=args.hrx2_catalog_dir,
+        target_key=args.target,
+        families=filter_set(args.family),
+        catalog_id=args.llama_catalog_id,
+    )
+    ledger.append(
+        {
+            "schema": "ggml_hrx_kernel_bench.ledger.v1",
+            "run_id": utc_run_id(),
+            "action": "export-llama",
+            "status": "ok",
+            "export": result.to_ledger(),
         }
     )
     return 0
