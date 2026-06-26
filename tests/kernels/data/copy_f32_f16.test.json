@@ -1,0 +1,39 @@
+{
+  "$schema": "../../../schemas/kernel-test-config.schema.json",
+  "id": "copy_f32_f16",
+  "op": "CPY",
+  "source": "../../../kernels/hrx2/copy_f32_f16.loom",
+  "root_symbol": "@hrx2_copy_f32_f16",
+  "cases": [
+    {
+      "id": "copy_n64",
+      "inputs": {
+        "src": {
+          "nrows": 1,
+          "ncols": 64
+        }
+      },
+      "outputs": {
+        "dst": {
+          "nrows": 1,
+          "ncols": 64
+        }
+      }
+    },
+    {
+      "id": "copy_n256",
+      "inputs": {
+        "src": {
+          "nrows": 1,
+          "ncols": 256
+        }
+      },
+      "outputs": {
+        "dst": {
+          "nrows": 1,
+          "ncols": 256
+        }
+      }
+    }
+  ]
+}

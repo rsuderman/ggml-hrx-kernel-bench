@@ -1,11 +1,13 @@
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
 
+set(GGML_HRX_TESTS_ROOT ${CMAKE_CURRENT_SOURCE_DIR})
 set(GGML_HRX_TOOL_DIR "" CACHE PATH "Optional directory containing loom-link, loom-compile, and iree-benchmark-loom")
+set(GGML_HRX_ROCM_PATH "" CACHE PATH "Optional ROCm root for runtime tests")
 
 function(add_required_tool_test tool_name)
   set(test_command
     ${Python3_EXECUTABLE}
-    ${CMAKE_CURRENT_SOURCE_DIR}/check_required_tool.py
+    ${GGML_HRX_TESTS_ROOT}/infra/check_required_tool.py
     ${tool_name}
   )
   if(GGML_HRX_TOOL_DIR)
@@ -17,6 +19,35 @@ function(add_required_tool_test tool_name)
   )
 endfunction()
 
-add_required_tool_test(loom-link)
-add_required_tool_test(loom-compile)
-add_required_tool_test(iree-benchmark-loom)
+function(add_kernel_test_config_test test_name config_path)
+  add_test(
+    NAME ${test_name}
+    COMMAND
+      ${Python3_EXECUTABLE}
+      ${GGML_HRX_TESTS_ROOT}/infra/check_kernel_test_config.py
+      ${config_path}
+  )
+endfunction()
+
+function(add_kernel_execution_test test_name config_path case_id)
+  set(test_command
+    ${Python3_EXECUTABLE}
+    ${GGML_HRX_TESTS_ROOT}/infra/run_kernel_test_config.py
+    ${config_path}
+    ${case_id}
+    --output-dir ${CMAKE_CURRENT_BINARY_DIR}/artifacts/${test_name}
+  )
+  if(GGML_HRX_TOOL_DIR)
+    list(APPEND test_command --tool-dir ${GGML_HRX_TOOL_DIR})
+  endif()
+  if(GGML_HRX_ROCM_PATH)
+    list(APPEND test_command --rocm-path ${GGML_HRX_ROCM_PATH})
+  endif()
+  add_test(
+    NAME ${test_name}
+    COMMAND ${test_command}
+  )
+endfunction()
+
+add_subdirectory(infra)
+add_subdirectory(kernels)
