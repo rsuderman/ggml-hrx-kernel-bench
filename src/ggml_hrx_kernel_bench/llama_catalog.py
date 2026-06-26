@@ -17,6 +17,39 @@ SCHEMA = "ggml-hrx-catalog-v1"
 LAYOUT = "ggml-hrx-split-catalog-v1"
 
 
+_SCHEDULE_FAMILIES = {
+    "add_f32",
+    "argsort_f32_i32",
+    "clamp_f32",
+    "cont_f32",
+    "copy_f32_f16",
+    "div_f32",
+    "get_rows_f32",
+    "mul_f32",
+    "mul_mat_f32_f32",
+    "mul_mat_q4_k_f32",
+    "mul_mat_q5_k_f32",
+    "mul_mat_q6_k_f32",
+    "mul_mat_q8_0_f32",
+    "rms_norm_f32",
+    "scale_f32",
+    "soft_max_f32",
+    "sum_rows_f32",
+    "swiglu_f32",
+}
+
+_SCHEDULE_TOLERANCE_BY_FAMILY = {
+    "mul_mat_q4_k_f32": 8.0e-2,
+    "mul_mat_q5_k_f32": 8.0e-2,
+    "mul_mat_q6_k_f32": 8.0e-2,
+    "mul_mat_q8_0_f32": 8.0e-2,
+    "mul_mat_f32_f32": 1.0e-4,
+    "rms_norm_f32": 1.0e-4,
+    "soft_max_f32": 1.0e-4,
+    "swiglu_f32": 1.0e-4,
+}
+
+
 @dataclass(frozen=True)
 class LlamaCatalogExportResult:
     output_dir: Path
@@ -179,7 +212,7 @@ def _route_selected(route: dict[str, Any], *, target_key: str, families: set[str
     route_target = str(route.get("target_key") or "")
     if route_target and route_target != target_key:
         return False
-    if route.get("op") != "MUL_MAT":
+    if route.get("op") == "EXPERIMENT":
         return False
     supports = route.get("supports") or {}
     if supports.get("src0_type") == "Q4_K" and supports.get("src1_type") == "F32" and supports.get("dst_type") == "F32":
@@ -264,12 +297,15 @@ def _test_schedule_for_family(
     family_id: str,
     routes: list[dict[str, Any]],
 ) -> OrderedDict[str, Any] | None:
-    if family_id != "mul_mat_q4_k_f32":
+    if family_id not in _SCHEDULE_FAMILIES:
         return None
-    direct_route = next((route for route in routes if "_direct_" in str(route.get("id", ""))), None)
-    if direct_route is None:
+    route = _schedule_route(family_id, routes)
+    if route is None:
         return None
-    supports = direct_route.get("supports") if isinstance(direct_route.get("supports"), dict) else {}
+    shape = _schedule_shape(route)
+    if shape is None:
+        return None
+    supports = route.get("supports") if isinstance(route.get("supports"), dict) else {}
     return OrderedDict(
         [
             ("schema", "ggml-hrx-test-schedule-v1"),
@@ -278,24 +314,95 @@ def _test_schedule_for_family(
             ("cases", [
                 OrderedDict(
                     [
-                        ("id", "mul_mat_q4_k_f32_direct_decode_k256_r3_c1"),
-                        ("op", "MUL_MAT"),
-                        ("expected_route_id", direct_route["id"]),
-                        ("supports", OrderedDict(
-                            [
-                                ("src0_type", supports.get("src0_type", "Q4_K")),
-                                ("src1_type", supports.get("src1_type", "F32")),
-                                ("dst_type", supports.get("dst_type", "F32")),
-                            ]
-                        )),
-                        ("shape", OrderedDict([("k", 256), ("rows", 3), ("cols", 1)])),
-                        ("tolerance", 8.0e-2),
+                        ("id", f"{family_id}_{route['id']}_smoke"),
+                        ("op", route["op"]),
+                        ("expected_route_id", route["id"]),
+                        ("supports", OrderedDict((str(key), value) for key, value in supports.items())),
+                        ("shape", shape),
+                        ("tolerance", _SCHEDULE_TOLERANCE_BY_FAMILY.get(family_id, 1.0e-6)),
                         ("repeat", 2),
                     ]
                 )
             ]),
         ]
     )
+
+
+def _schedule_route(family_id: str, routes: list[dict[str, Any]]) -> dict[str, Any] | None:
+    if family_id == "mul_mat_q4_k_f32":
+        route = next((route for route in routes if "_direct_" in str(route.get("id", ""))), None)
+        if route is not None:
+            return route
+    if family_id == "mul_mat_q8_0_f32":
+        route = next((route for route in routes if "_packed_loop_" in str(route.get("id", ""))), None)
+        if route is not None:
+            return route
+    preferred_layouts = {
+        "add_f32": {"contiguous", "contiguous_or_rhs_row_broadcast"},
+        "mul_f32": {"contiguous"},
+        "swiglu_f32": {"packed_contiguous", "contiguous_split_swiglu"},
+    }.get(family_id)
+    if preferred_layouts:
+        preferred = [
+            route for route in routes
+            if isinstance(route.get("supports"), dict)
+            and route["supports"].get("layout") in preferred_layouts
+        ]
+        if preferred:
+            routes = preferred
+    exact = [
+        route for route in routes
+        if isinstance(route.get("shape_domain"), dict)
+        and any(str(key).endswith("_min") and route["shape_domain"].get(key) == route["shape_domain"].get(str(key)[:-4] + "_max")
+                for key in route["shape_domain"])
+    ]
+    candidates = exact or routes
+    return min(candidates, key=lambda route: (
+        _domain_cost(route.get("shape_domain") if isinstance(route.get("shape_domain"), dict) else {}),
+        str(route.get("id", "")),
+    ), default=None)
+
+
+def _domain_cost(domain: dict[str, Any]) -> int:
+    cost = 0
+    for key, value in domain.items():
+        if not str(key).endswith("_min"):
+            continue
+        stem = str(key)[:-4]
+        max_value = domain.get(f"{stem}_max", value)
+        if isinstance(value, int) and isinstance(max_value, int):
+            cost += max(value, 1) * max(max_value, 1)
+    return cost
+
+
+def _schedule_shape(route: dict[str, Any]) -> OrderedDict[str, int] | None:
+    domain = route.get("shape_domain") if isinstance(route.get("shape_domain"), dict) else {}
+
+    def pick(name: str, default: int) -> int:
+        min_value = domain.get(f"{name}_min", default)
+        max_value = domain.get(f"{name}_max", min_value)
+        if not isinstance(min_value, int) or not isinstance(max_value, int):
+            return default
+        return max(min(default, max_value), min_value)
+
+    op = str(route.get("op") or "")
+    if op == "MUL_MAT":
+        return OrderedDict([
+            ("k", pick("k", 256)),
+            ("rows", pick("rows", 64 if route.get("family") != "mul_mat_q4_k_f32" else 3)),
+            ("cols", pick("cols", 1)),
+        ])
+    if op in {"ADD", "MUL", "DIV", "SCALE", "CLAMP"}:
+        return OrderedDict([("ncols", pick("ncols", 8)), ("nrows", pick("nrows", 64))])
+    if op in {"RMS_NORM", "SOFT_MAX", "GLU", "ARGSORT"}:
+        return OrderedDict([("ncols", pick("ncols", 128)), ("nrows", pick("nrows", 1))])
+    if op == "SUM_ROWS":
+        return OrderedDict([("ncols", pick("ncols", 8)), ("nrows", pick("nrows", 1))])
+    if op == "GET_ROWS":
+        return OrderedDict([("ncols", pick("ncols", 2048)), ("nrows", pick("nrows", 3))])
+    if op in {"CONT", "CPY"}:
+        return OrderedDict([("ncols", pick("ncols", 257)), ("nrows", pick("nrows", 1))])
+    return None
 
 
 def _default_catalog_id(target_key: str, family_ids: list[str]) -> str:
