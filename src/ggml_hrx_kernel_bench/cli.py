@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from .config import BenchConfig, ToolPaths
+from .fusion_profitability import analyze_fusion_profitability
 from .hrx2 import (
     DEFAULT_HRX2_CATALOG_DIR,
     DEFAULT_HRX2_KERNEL_DIR,
@@ -18,6 +19,7 @@ from .llama_catalog import export_llama_catalog
 from .observed_shapes import load_observed_shapes, read_observations_jsonl, save_observed_shapes
 from .oracles import generate_oracle, write_workbench
 from .reporting import ReportOptions, write_markdown_report
+from .route_reducer import reduce_routes
 from .specs import KernelSpec, config_args, file_sha256, spec_sha256
 from .tools import CommandResult, run_command
 
@@ -668,6 +670,15 @@ def command_catalog(args: argparse.Namespace, candidates: list[Candidate], ledge
     catalog_dir.mkdir(parents=True, exist_ok=True)
     catalog_path = catalog_dir / "candidates.json"
     catalog_path.write_text(json.dumps(catalog_rows, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    reduced_routes = reduce_routes(catalog_rows)
+    reduced_routes_path = catalog_dir / "reduced_routes.json"
+    reduced_routes_path.write_text(json.dumps(reduced_routes, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    fusion_profitability = analyze_fusion_profitability(catalog_rows)
+    fusion_profitability_path = catalog_dir / "fusion_profitability.json"
+    fusion_profitability_path.write_text(
+        json.dumps(fusion_profitability, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
     ledger.append(
         {
             "schema": "ggml_hrx_kernel_bench.ledger.v1",
@@ -675,8 +686,12 @@ def command_catalog(args: argparse.Namespace, candidates: list[Candidate], ledge
             "action": "catalog",
             "status": "ok",
             "catalog_path": str(catalog_path),
+            "reduced_routes_path": str(reduced_routes_path),
+            "fusion_profitability_path": str(fusion_profitability_path),
             "candidate_count": len(catalog_rows),
             "catalog_ready_count": sum(1 for row in catalog_rows if row["catalog_ready"]),
+            "reduced_route_count": reduced_routes["summary"]["accepted_count"],
+            "profitable_fusion_count": fusion_profitability["summary"]["accepted_count"],
         }
     )
     return 0

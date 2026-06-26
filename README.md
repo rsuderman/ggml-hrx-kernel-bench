@@ -16,11 +16,11 @@ bench pipeline:
 - HRX2 kernel and catalog import/reporting,
 - route-backed candidate planning,
 - explicit per-family config binding specs,
-- observed shape metadata ingestion for live-profiled llama.cpp runs,
+- atlas-first route schedules with optional observed-shape refinement,
 - NumPy fixture and golden generation for pilot families,
 - focused Loom link/compile/run commands,
 - JSONL ledgers plus preserved evidence directories,
-- catalog candidate summary generation.
+- catalog candidate, reduced-route, and fusion-profitability summaries.
 
 Unsupported or broken kernels are represented as ledger rows instead of being
 excluded. Imported HRX2 kernels should remain source-faithful; target-specific
@@ -48,9 +48,15 @@ Family-specific route binding policy lives in
 `src/ggml_hrx_kernel_bench/family_specs.py`. Add or correct kernel shape/config
 requirements there instead of adding global string-matching fallbacks.
 
+Search schedule policy lives in `src/ggml_hrx_kernel_bench/route_schedules.py`.
+The default path is atlas-first: schedules encode a small set of representative
+decode, short prompt, tail, and prefill shapes for each family class. Observed
+live shapes are metadata that refine the atlas later; they are not required to
+make a route visible.
+
 Observed live shapes live in `catalog/hrx2/observed_shapes.json`. Synthetic
-search schedules are only bootstrap probes; real tuning sweeps should converge
-on observed shapes collected from llama.cpp runs.
+trace ingestion is available so llama.cpp profiling can extend the atlas once
+there are enough anchored wins to justify broadening coverage.
 
 ## Install
 
@@ -96,6 +102,20 @@ python3 -m ggml_hrx_kernel_bench \
 
 If no observed shape matches a route, `--sweep observed` falls back to that
 route's minimal smoke shape so the route remains visible in ledgers.
+
+Plan a bounded atlas sweep:
+
+```bash
+python3 -m ggml_hrx_kernel_bench \
+  --output-dir runs/hrx2-edge-plan \
+  --sweep edge \
+  plan
+```
+
+`--sweep edge` emits up to roughly six schedule points per route, depending on
+family. The points are intentionally opinionated rather than exhaustive; each
+candidate ledger row includes a `candidate.schedule` object with the selected
+scenario, source, and weight.
 
 Merge extracted llama.cpp shape traces into the bench metadata:
 
@@ -250,6 +270,32 @@ Reports put failures, unsupported workbenches, rejected correctness checks, and
 tool errors first. They then summarize status counts, per-family timing winners,
 candidate shapes/config bindings/dispatch metadata, and standalone compile
 statistics when available.
+
+## Catalog Summaries
+
+The `catalog` command consumes existing stage ledgers under `--output-dir` and
+writes:
+
+```text
+<output-dir>/catalog/candidates.json
+<output-dir>/catalog/reduced_routes.json
+<output-dir>/catalog/fusion_profitability.json
+```
+
+`candidates.json` is the raw per-candidate evidence join. `reduced_routes.json`
+is a conservative summary of candidates that have compile evidence and no failed
+run evidence. `fusion_profitability.json` compares fused timings against the
+best available decomposed component timings and marks fusions as missing
+baseline evidence until the individual component rows are present.
+
+Example:
+
+```bash
+python3 -m ggml_hrx_kernel_bench \
+  --output-dir runs/supported-gfx1100 \
+  --sweep edge \
+  catalog
+```
 
 Legacy single-spec mode is still available:
 

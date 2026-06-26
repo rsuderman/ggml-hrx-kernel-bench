@@ -1105,7 +1105,7 @@ def _write_sum_rows_workbench(candidate: Candidate, linked_source: Path, workben
     body = "\n".join(
         [
             _read_f32(workbench_path, fixture_dir, "src0", elems),
-            f"  %dst = check.file.read.npy path(\"{_rel_fixture(workbench_path, fixture_dir, "expected.npy")}\") : tensor<{nrows}xf32>",
+            f"  %dst = check.file.read.npy path(\"{_rel_fixture(workbench_path, fixture_dir, 'expected.npy')}\") : tensor<{nrows}xf32>",
             _read_f32(workbench_path, fixture_dir, "expected", nrows),
             f"  func.call {candidate.root_symbol}(%src0, %dst) : (tensor<{elems}xf32>, tensor<{nrows}xf32>)",
             f"  check.expect.close actual(%dst) expected(%expected) atol(0.0001) rtol(0.0001) nan(same) : tensor<{nrows}xf32>",
@@ -1208,8 +1208,8 @@ def _write_quantize_q8_1_workbench(candidate: Candidate, linked_source: Path, wo
             f"  %ne = check.literal value({elems}) : index",
             f"  %num_blocks = check.literal value({num_blocks}) : index",
             *lines,
-            f"  %dst = check.file.read.npy path(\"{_rel_fixture(workbench_path, fixture_dir, "expected.npy")}\") : tensor<{expected_elems}xi8>",
-            f"  %expected = check.file.read.npy path(\"{_rel_fixture(workbench_path, fixture_dir, "expected.npy")}\") : tensor<{expected_elems}xi8>",
+            f"  %dst = check.file.read.npy path(\"{_rel_fixture(workbench_path, fixture_dir, 'expected.npy')}\") : tensor<{expected_elems}xi8>",
+            f"  %expected = check.file.read.npy path(\"{_rel_fixture(workbench_path, fixture_dir, 'expected.npy')}\") : tensor<{expected_elems}xi8>",
             f"  func.call {candidate.root_symbol}(%ne, %num_blocks, %src, %dst) : (index, index, tensor<{elems}xf32>, tensor<{expected_elems}xi8>)",
             f"  check.expect.equal actual(%dst) expected(%expected) : tensor<{expected_elems}xi8>",
         ]
@@ -1223,8 +1223,8 @@ def _write_quantize_q8_1_workbench(candidate: Candidate, linked_source: Path, wo
             f"  %ne1 = check.literal value({nrows}) : index",
             "  %ne2 = check.literal value(1) : index",
             *lines,
-            f"  %dst = check.file.read.npy path(\"{_rel_fixture(workbench_path, fixture_dir, "expected.npy")}\") : tensor<{expected_elems}xi8>",
-            f"  %expected = check.file.read.npy path(\"{_rel_fixture(workbench_path, fixture_dir, "expected.npy")}\") : tensor<{expected_elems}xi8>",
+            f"  %dst = check.file.read.npy path(\"{_rel_fixture(workbench_path, fixture_dir, 'expected.npy')}\") : tensor<{expected_elems}xi8>",
+            f"  %expected = check.file.read.npy path(\"{_rel_fixture(workbench_path, fixture_dir, 'expected.npy')}\") : tensor<{expected_elems}xi8>",
             f"  func.call {candidate.root_symbol}(%ne00, %s01, %s02, %s03, %ne0, %ne1, %ne2, %src, %dst) : (index, index, index, index, index, index, index, tensor<{elems}xf32>, tensor<{expected_elems}xi8>)",
             f"  check.expect.equal actual(%dst) expected(%expected) : tensor<{expected_elems}xi8>",
         ]
@@ -1240,7 +1240,7 @@ def _write_mul_mat_q8_0_workbench(candidate: Candidate, linked_source: Path, wor
     dst_elems = rows * cols
     case_name, bench_name = _case_names(candidate)
     lines = [
-        f"  %src0 = check.file.read.npy path(\"{_rel_fixture(workbench_path, fixture_dir, "src0.npy")}\") : tensor<{src0_elems}xi8>",
+        f"  %src0 = check.file.read.npy path(\"{_rel_fixture(workbench_path, fixture_dir, 'src0.npy')}\") : tensor<{src0_elems}xi8>",
         _read_f32(workbench_path, fixture_dir, "src1", src1_elems),
         _read_f32(workbench_path, fixture_dir, "dst_init", dst_elems).replace("%dst_init", "%dst"),
         _read_f32(workbench_path, fixture_dir, "expected", dst_elems),

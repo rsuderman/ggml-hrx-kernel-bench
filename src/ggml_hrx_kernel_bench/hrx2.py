@@ -9,6 +9,7 @@ from typing import Any, Iterable
 
 from .family_specs import concrete_shapes_for_route, resolve_binding_value
 from .observed_shapes import ObservedShapeCatalog
+from .route_schedules import schedule_for_shape
 from .specs import file_sha256
 
 
@@ -51,6 +52,7 @@ class Candidate:
     dispatch: dict[str, Any]
     supports: dict[str, Any]
     coverage: str
+    schedule: dict[str, Any] | None = None
     status: str = "planned"
     message: str | None = None
 
@@ -70,6 +72,7 @@ class Candidate:
             "config_bindings": self.config,
             "dispatch": self.dispatch,
             "supports": self.supports,
+            "schedule": self.schedule,
             "coverage": self.coverage,
             "status": self.status,
             "message": self.message,
@@ -320,7 +323,14 @@ def route_candidates(
             continue
         source_id = str(route.get("source_id") or "")
         source = sources.get(source_id)
+        observed_for_route = observed_shapes.shapes_for_route(route) if observed_shapes else ()
         for shape in concrete_shapes(route, sweep=sweep, observed_shapes=observed_shapes):
+            schedule = schedule_for_shape(
+                route,
+                shape,
+                sweep=sweep,
+                observed_shapes=observed_for_route,
+            )
             config, values, missing = build_config(route, shape)
             status = "planned" if source and not missing else "missing_config"
             message = None
@@ -352,6 +362,7 @@ def route_candidates(
                     config=config,
                     dispatch=route_launch(route, shape),
                     supports=dict(route.get("supports") or {}),
+                    schedule=schedule.to_ledger(),
                     coverage="route_backed",
                     status=status,
                     message=message,
@@ -399,6 +410,7 @@ def source_only_candidates(
                     config={},
                     dispatch={},
                     supports={},
+                    schedule=None,
                     coverage="source_only",
                     status="missing_shape" if source.config_keys else "planned",
                     message="source-only kernel has no route-derived shape/config" if source.config_keys else None,
