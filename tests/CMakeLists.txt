@@ -19,33 +19,15 @@ function(add_required_tool_test tool_name)
   )
 endfunction()
 
-function(add_kernel_test_config_test test_name config_path)
+function(add_grouped_yaml_import_test test_name yaml_path output_dir)
   add_test(
     NAME ${test_name}
     COMMAND
       ${Python3_EXECUTABLE}
-      ${GGML_HRX_TESTS_ROOT}/infra/check_kernel_test_config.py
-      ${config_path}
-  )
-endfunction()
-
-function(add_kernel_execution_test test_name config_path case_id)
-  set(test_command
-    ${Python3_EXECUTABLE}
-    ${GGML_HRX_TESTS_ROOT}/infra/run_kernel_test_config.py
-    ${config_path}
-    ${case_id}
-    --output-dir ${CMAKE_CURRENT_BINARY_DIR}/artifacts/${test_name}
-  )
-  if(GGML_HRX_TOOL_DIR)
-    list(APPEND test_command --tool-dir ${GGML_HRX_TOOL_DIR})
-  endif()
-  if(GGML_HRX_ROCM_PATH)
-    list(APPEND test_command --rocm-path ${GGML_HRX_ROCM_PATH})
-  endif()
-  add_test(
-    NAME ${test_name}
-    COMMAND ${test_command}
+      ${GGML_HRX_TESTS_ROOT}/infra/check_grouped_yaml_import.py
+      ${yaml_path}
+      ${output_dir}
+      ${ARGN}
   )
 endfunction()
 

@@ -1,0 +1,83 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/ggml-hrx-kernel-bench/import-unmapped-cases.schema.json",
+  "title": "GGML HRX Import Unmapped Cases",
+  "type": "object",
+  "required": ["schema", "source_path", "case_count", "rows"],
+  "properties": {
+    "schema": {
+      "type": "string"
+    },
+    "source_path": {
+      "type": "string"
+    },
+    "case_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "rows": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/unmappedCase"
+      }
+    }
+  },
+  "$defs": {
+    "importedCase": {
+      "type": "object",
+      "required": [
+        "op",
+        "dtype",
+        "raw_case",
+        "normalized_params",
+        "source_path",
+        "source_group_index",
+        "source_case_index"
+      ],
+      "properties": {
+        "op": { "type": "string" },
+        "dtype": { "type": "object", "additionalProperties": true },
+        "raw_case": { "type": "object", "additionalProperties": true },
+        "normalized_params": { "type": "object", "additionalProperties": true },
+        "source_path": { "type": "string" },
+        "source_group_index": { "type": "integer", "minimum": 0 },
+        "source_case_index": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": false
+    },
+    "unmappedCase": {
+      "type": "object",
+      "required": ["mapping_status", "reason", "candidate_kernel_families", "candidate_route_ids", "imported"],
+      "properties": {
+        "mapping_status": {
+          "type": "string",
+          "enum": ["unmapped", "ambiguous"]
+        },
+        "reason": {
+          "type": "string",
+          "enum": [
+            "no_kernel_family_mapping",
+            "no_dtype_mapping",
+            "shape_lowering_not_implemented",
+            "no_route_match",
+            "ambiguous_route_match"
+          ]
+        },
+        "detail": {
+          "type": ["string", "null"]
+        },
+        "candidate_kernel_families": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "candidate_route_ids": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "imported": { "$ref": "#/$defs/importedCase" }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

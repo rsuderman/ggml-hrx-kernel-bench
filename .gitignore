@@ -5,3 +5,5 @@ __pycache__/
 .ruff_cache/
 cache/
 build/
+benchmark-artifacts/
+benchmark-results/

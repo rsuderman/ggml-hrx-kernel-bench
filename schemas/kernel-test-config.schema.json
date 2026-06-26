@@ -8,6 +8,10 @@
     "kernel": {
       "type": "string"
     },
+    "route_id": {
+      "type": "string",
+      "minLength": 1
+    },
     "params": {
       "type": "array",
       "minItems": 1,
@@ -33,6 +37,7 @@
   "examples": [
     {
       "kernel": "copy_f32_f16",
+      "route_id": "copy_f32_f16_generic_wg256",
       "params": ["nrows", "ncols"],
       "cases": [
         [1, 64],

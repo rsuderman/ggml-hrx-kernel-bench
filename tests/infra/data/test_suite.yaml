@@ -1,0 +1,35 @@
+ops:
+  ABS:
+    - dtype:
+        type: f16
+      cases:
+        - ne_a: [128, 2, 2, 2]
+          v: 0
+  ACC:
+    - dtype:
+        type: f32
+      cases:
+        - ne_a: [256, 17, 1, 1]
+          ne_b: [256, 16, 1, 1]
+          stride_dim: -1
+  ADD:
+    - dtype:
+        type: f16
+      cases:
+        - ne: [1, 1, 1, 1]
+          nf: 1
+          nr: [32, 1, 1, 1]
+          perm1: 0
+  CPY:
+    - dtype:
+        type_dst: f16
+        type_src: f32
+      cases:
+        - _src_transpose: 0
+          ne: [256, 4, 4, 4]
+          permute_dst: [0, 0, 0, 0]
+          permute_src: [0, 0, 0, 0]
+        - _src_transpose: 0
+          ne: [256, 2, 3, 4]
+          permute_dst: [0, 0, 0, 0]
+          permute_src: [0, 2, 1, 3]

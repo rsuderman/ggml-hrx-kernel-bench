@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import unittest
 
-from required_tools import require_tool
+import bootstrap  # noqa: F401
+
+from ggml_hrx_kernel_bench.required_tools import require_tool
 
 
 class RequiredToolAvailabilityTest(unittest.TestCase):
