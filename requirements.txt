@@ -1,0 +1,7 @@
+# Required Python dependency for fixture generation and correctness verification.
+numpy>=1.26
+
+# External non-Python tools used by compile/run flows are installed separately:
+# - loom-link
+# - loom-compile
+# - iree-benchmark-loom
