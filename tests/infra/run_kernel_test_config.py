@@ -13,7 +13,7 @@ if str(SRC) not in sys.path:
 from ggml_hrx_kernel_bench.cli import run_candidate_row
 from ggml_hrx_kernel_bench.config import BenchConfig, ToolPaths
 from ggml_hrx_kernel_bench.family_specs import normalize_shape
-from ggml_hrx_kernel_bench.hrx2 import Candidate, build_config, iter_routes, route_launch, stable_id
+from ggml_hrx_kernel_bench.hrx2 import Candidate, build_config, iter_routes, load_sources_by_id, route_launch, stable_id
 from ggml_hrx_kernel_bench.reporting import correctness_ok
 
 from required_tools import require_tool
@@ -25,91 +25,99 @@ def _expect(condition: bool, message: str) -> None:
 
 
 def _load_config(path: Path) -> dict:
-    data = json.loads(path.read_text(encoding='utf-8'))
-    _expect(isinstance(data, dict), 'config must be a JSON object')
+    data = json.loads(path.read_text(encoding="utf-8"))
+    _expect(isinstance(data, dict), "config must be a JSON object")
     return data
 
 
-def _select_case(config: dict, case_id: str) -> dict:
-    for case in config.get('cases', []):
-        if case.get('id') == case_id:
-            return dict(case)
-    raise RuntimeError(f'case not found in config: {case_id}')
+def _case_id(params: list[str], values: list[int]) -> str:
+    return "_".join(f"{name}{value}" for name, value in zip(params, values, strict=True))
 
 
-def _select_route(catalog_dir: Path, *, root_symbol: str, op: str, family: str) -> dict:
+def _select_case(config: dict, selector: str) -> tuple[str, list[int]]:
+    params = list(config["params"])
+    cases = list(config["cases"])
+    if selector.isdigit():
+        index = int(selector)
+        _expect(0 <= index < len(cases), f"case index out of range: {index}")
+        values = list(cases[index])
+        return _case_id(params, values), values
+    for values in cases:
+        case_values = list(values)
+        case_id = _case_id(params, case_values)
+        if case_id == selector:
+            return case_id, case_values
+    raise RuntimeError(f"case not found in config: {selector}")
+
+
+def _select_route(catalog_dir: Path, *, family: str) -> dict:
     matches = [
         route
         for route in iter_routes(catalog_dir)
-        if str(route.get('root_symbol') or '') == root_symbol
-        and str(route.get('op') or '') == op
-        and str(route.get('family') or route.get('source_id') or '') == family
+        if str(route.get("family") or route.get("source_id") or "") == family
     ]
-    _expect(matches, f'no route found for family={family} op={op} root_symbol={root_symbol}')
-    _expect(len(matches) == 1, f'expected exactly one route, found {len(matches)}')
+    _expect(matches, f"no route found for family={family}")
+    _expect(len(matches) == 1, f"minimal config requires exactly one route for {family}, found {len(matches)}")
     return matches[0]
 
 
-def _copy_shape_for_case(case: dict) -> dict[str, int]:
-    inputs = case.get('inputs') or {}
-    outputs = case.get('outputs') or {}
-    _expect('src' in inputs, 'copy case must define inputs.src')
-    _expect('dst' in outputs, 'copy case must define outputs.dst')
-    src_shape = normalize_shape(dict(inputs['src']))
-    dst_shape = normalize_shape(dict(outputs['dst']))
-    _expect(src_shape == dst_shape, 'copy case requires src and dst shapes to match')
-    return dst_shape
+def _shape_for_case(config: dict, values: list[int]) -> dict[str, int]:
+    params = list(config["params"])
+    _expect(len(params) == len(values), "params and case values must have the same length")
+    return normalize_shape(dict(zip(params, values, strict=True)))
 
 
-def _build_candidate(config_path: Path, config_data: dict, case_data: dict) -> Candidate:
-    op = str(config_data['op'])
-    family = str(config_data['id'])
-    _expect(op == 'CPY', f'only CPY is supported by this execution test, got {op}')
-    root_symbol = str(config_data['root_symbol'])
-    catalog_dir = ROOT / 'catalog' / 'hrx2'
-    route = _select_route(catalog_dir, root_symbol=root_symbol, op=op, family=family)
-    shape = _copy_shape_for_case(case_data)
+def _build_candidate(config_data: dict, case_id: str, case_values: list[int]) -> Candidate:
+    family = str(config_data["kernel"])
+    catalog_dir = ROOT / "catalog" / "hrx2"
+    kernel_dir = ROOT / "kernels" / "hrx2"
+    route = _select_route(catalog_dir, family=family)
+    op = str(route.get("op") or "")
+    _expect(op == "CPY", f"only CPY is supported by this execution test, got {op}")
+    shape = _shape_for_case(config_data, case_values)
     config_bindings, values, missing = build_config(route, shape)
-    _expect(not missing, f'missing shape/config bindings: {missing}')
-    source_path = (config_path.parent / str(config_data['source'])).resolve()
-    _expect(source_path.exists(), f'kernel source does not exist: {source_path}')
-    candidate_id = f"{family}_{case_data['id']}_{stable_id(shape, config_bindings, length=8)}"
+    _expect(not missing, f"missing shape/config bindings: {missing}")
+    sources = load_sources_by_id(kernel_dir, catalog_dir)
+    source_id = str(route.get("source_id") or family)
+    source = sources.get(source_id)
+    _expect(source is not None, f"kernel source is not available for source_id={source_id}")
+    candidate_id = f"{family}_{case_id}_{stable_id(shape, config_bindings, length=8)}"
     return Candidate(
         id=candidate_id,
         family=family,
         op=op,
-        source_id=str(route.get('source_id') or family),
-        source_path=source_path,
-        root_symbol=root_symbol,
-        export_name=route.get('export_name'),
-        route_id=str(route.get('id') or ''),
+        source_id=source_id,
+        source_path=source.path,
+        root_symbol=str(route.get("root_symbol") or ""),
+        export_name=route.get("export_name"),
+        route_id=str(route.get("id") or ""),
         route=route,
         shape=shape,
         values=values,
         config=config_bindings,
         dispatch=route_launch(route, shape),
-        supports=dict(route.get('supports') or {}),
-        coverage='route_backed',
+        supports=dict(route.get("supports") or {}),
+        coverage="route_backed",
     )
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description='Run a kernel correctness test from a kernel-test-config file.')
-    parser.add_argument('config_path')
-    parser.add_argument('case_id')
-    parser.add_argument('--tool-dir', help='optional directory containing loom-link and iree-benchmark-loom')
-    parser.add_argument('--output-dir', required=True)
-    parser.add_argument('--target', default='gfx1100')
-    parser.add_argument('--rocm-path')
-    parser.add_argument('--iterations', type=int, default=1)
-    parser.add_argument('--warmup-iterations', type=int, default=0)
-    parser.add_argument('--max-batches', type=int, default=1)
+    parser = argparse.ArgumentParser(description="Run a kernel correctness test from a kernel-test-config file.")
+    parser.add_argument("config_path")
+    parser.add_argument("case_selector")
+    parser.add_argument("--tool-dir", help="optional directory containing loom-link and iree-benchmark-loom")
+    parser.add_argument("--output-dir", required=True)
+    parser.add_argument("--target", default="gfx1100")
+    parser.add_argument("--rocm-path")
+    parser.add_argument("--iterations", type=int, default=1)
+    parser.add_argument("--warmup-iterations", type=int, default=0)
+    parser.add_argument("--max-batches", type=int, default=1)
     args = parser.parse_args()
 
     config_path = Path(args.config_path).resolve()
     config_data = _load_config(config_path)
-    case_data = _select_case(config_data, args.case_id)
-    candidate = _build_candidate(config_path, config_data, case_data)
+    case_id, case_values = _select_case(config_data, args.case_selector)
+    candidate = _build_candidate(config_data, case_id, case_values)
     output_dir = Path(args.output_dir).resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -117,8 +125,8 @@ def main() -> int:
         output_dir=output_dir,
         target=args.target,
         tools=ToolPaths(
-            loom_link=Path(require_tool('loom-link', tool_dir=args.tool_dir)),
-            iree_benchmark_loom=Path(require_tool('iree-benchmark-loom', tool_dir=args.tool_dir)),
+            loom_link=Path(require_tool("loom-link", tool_dir=args.tool_dir)),
+            iree_benchmark_loom=Path(require_tool("iree-benchmark-loom", tool_dir=args.tool_dir)),
         ),
         rocm_path=Path(args.rocm_path).resolve() if args.rocm_path else None,
     )
@@ -131,22 +139,22 @@ def main() -> int:
         max_batches=args.max_batches,
     )
 
-    row = run_candidate_row(run_args, bench_config, candidate, sanitizer='none')
-    if row.get('status') != 'ran':
+    row = run_candidate_row(run_args, bench_config, candidate, sanitizer="none")
+    if row.get("status") != "ran":
         raise RuntimeError(f"kernel run failed with status={row.get('status')} row={json.dumps(row, sort_keys=True)}")
-    benchmark = row.get('benchmark') or {}
-    summary = benchmark.get('summary') or {}
-    correctness = summary.get('correctness')
+    benchmark = row.get("benchmark") or {}
+    summary = benchmark.get("summary") or {}
+    correctness = summary.get("correctness")
     if not correctness_ok(correctness):
         raise RuntimeError(
-            'kernel correctness check failed: '
+            "kernel correctness check failed: "
             + json.dumps(
                 {
-                    'candidate_id': candidate.id,
-                    'correctness': correctness,
-                    'failure': summary.get('failure'),
-                    'results_path': benchmark.get('results_path'),
-                    'output_dir': str(output_dir),
+                    "candidate_id": candidate.id,
+                    "correctness": correctness,
+                    "failure": summary.get("failure"),
+                    "results_path": benchmark.get("results_path"),
+                    "output_dir": str(output_dir),
                 },
                 sort_keys=True,
             )
@@ -155,11 +163,11 @@ def main() -> int:
     print(
         json.dumps(
             {
-                'candidate_id': candidate.id,
-                'case_id': args.case_id,
-                'correctness': correctness,
-                'results_path': benchmark.get('results_path'),
-                'output_dir': str(output_dir),
+                "candidate_id": candidate.id,
+                "case_id": case_id,
+                "correctness": correctness,
+                "results_path": benchmark.get("results_path"),
+                "output_dir": str(output_dir),
             },
             sort_keys=True,
         )
@@ -167,5 +175,5 @@ def main() -> int:
     return 0
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     raise SystemExit(main())

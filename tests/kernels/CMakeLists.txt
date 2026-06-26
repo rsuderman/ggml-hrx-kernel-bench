@@ -6,5 +6,5 @@ add_kernel_test_config_test(
 add_kernel_execution_test(
   kernel-run-copy-f32-f16
   ${CMAKE_CURRENT_SOURCE_DIR}/data/copy_f32_f16.test.json
-  copy_n256
+  1
 )
