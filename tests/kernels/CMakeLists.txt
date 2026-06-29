@@ -1,19 +1,15 @@
 set(GGML_HRX_GROUPED_YAML ${CMAKE_CURRENT_SOURCE_DIR}/data/llamacpp_test.yaml)
+set(GGML_HRX_EXPECTED_IMPORT_COVERAGE ${CMAKE_CURRENT_SOURCE_DIR}/data/llamacpp_test.import-coverage.json)
 set(GGML_HRX_GENERATED_IMPORT_DIR ${CMAKE_CURRENT_BINARY_DIR}/artifacts/grouped-yaml-import)
-set(GGML_HRX_GENERATED_COPY_CONFIG ${GGML_HRX_GENERATED_IMPORT_DIR}/ops/CPY/generated-import-configs/copy_f32_f16.json)
+set(GGML_HRX_GENERATED_COPY_CONFIG ${GGML_HRX_GENERATED_IMPORT_DIR}/ops/CPY/generated-import-configs)
 
-set(import_grouped_yaml_command
-  ${Python3_EXECUTABLE}
-  ${GGML_HRX_TESTS_ROOT}/infra/import_grouped_yaml.py
+add_grouped_yaml_import_validation_target(
+  kernel-grouped-yaml-import-coverage
   ${GGML_HRX_GROUPED_YAML}
+  ${GGML_HRX_GENERATED_IMPORT_DIR}
+  ${GGML_HRX_EXPECTED_IMPORT_COVERAGE}
   --split-by-op
-  --output-dir ${GGML_HRX_GENERATED_IMPORT_DIR}
 )
-add_test(
-  NAME kernel-generate-grouped-yaml-import
-  COMMAND ${import_grouped_yaml_command}
-)
-set_tests_properties(kernel-generate-grouped-yaml-import PROPERTIES FIXTURES_SETUP grouped_yaml_import)
 
 add_test(
   NAME kernel-test-config-copy-f32-f16-generated
@@ -23,7 +19,6 @@ add_test(
     ${GGML_HRX_GENERATED_COPY_CONFIG}
     --expect-case 1,16384
 )
-set_tests_properties(kernel-test-config-copy-f32-f16-generated PROPERTIES FIXTURES_REQUIRED grouped_yaml_import)
 
 set(kernel_run_generated_command
   ${Python3_EXECUTABLE}
@@ -42,4 +37,3 @@ add_test(
   NAME kernel-run-copy-f32-f16-generated
   COMMAND ${kernel_run_generated_command}
 )
-set_tests_properties(kernel-run-copy-f32-f16-generated PROPERTIES FIXTURES_REQUIRED grouped_yaml_import)

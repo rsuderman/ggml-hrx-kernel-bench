@@ -16,7 +16,7 @@ def main() -> int:
     parser.add_argument("yaml_path")
     parser.add_argument(
         "--output-dir",
-        help="output directory for imported-workload.json, unmapped.json, import-summary.md, and generated-import-configs/",
+        help="output directory for import-coverage.json, imported-workload.json, unmapped.json, import-summary.md, and generated-import-configs/",
     )
     parser.add_argument(
         "--split-by-op",

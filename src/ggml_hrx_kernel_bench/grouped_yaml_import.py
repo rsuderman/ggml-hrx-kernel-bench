@@ -28,6 +28,7 @@ from .import_models import (
 
 IMPORTED_WORKLOAD_SCHEMA = "ggml_hrx_kernel_bench.imported_workload.v1"
 UNMAPPED_CASES_SCHEMA = "ggml_hrx_kernel_bench.import_unmapped_cases.v1"
+IMPORT_TEST_COVERAGE_SCHEMA = "ggml_hrx_kernel_bench.import_test_coverage.v1"
 
 
 def _expect(condition: bool, message: str) -> None:
@@ -386,9 +387,53 @@ def summary_payload(suite: ImportedSuite, config_paths: list[Path]) -> dict[str,
     }
 
 
+def _operation_coverage_rows(suite: ImportedSuite) -> list[dict[str, Any]]:
+    source_case_counts: Counter[str] = Counter()
+    imported_case_counts: Counter[str] = Counter()
+
+    for group in suite.op_groups:
+        source_case_counts[group.op] += len(group.cases)
+    for row in suite.resolved:
+        imported_case_counts[row.imported.op] += 1
+
+    return [
+        {
+            "op": op_name,
+            "pass_case_count": imported_case_counts.get(op_name, 0),
+            "fail_case_count": source_case_counts[op_name] - imported_case_counts.get(op_name, 0),
+        }
+        for op_name in sorted(source_case_counts)
+    ]
+
+
+def import_coverage_payload(suite: ImportedSuite, config_paths: list[Path]) -> dict[str, Any]:
+    counts = summary_payload(suite, config_paths)
+    operation_rows = _operation_coverage_rows(suite)
+    return {
+        "schema": IMPORT_TEST_COVERAGE_SCHEMA,
+        "source_path": suite.source_path,
+        "operation_count": len(operation_rows),
+        "total_pass_case_count": counts["mapped_case_count"],
+        "total_fail_case_count": counts["total_cases"] - counts["mapped_case_count"],
+        "operations": operation_rows,
+    }
+
+
 def write_imported_workload_json(suite: ImportedSuite, path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(suite.to_json(), indent=2) + "\n", encoding="utf-8")
+
+
+def write_import_coverage_json(
+    suite: ImportedSuite,
+    config_paths: list[Path],
+    path: Path,
+) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(import_coverage_payload(suite, config_paths), indent=2) + "\n",
+        encoding="utf-8",
+    )
 
 
 def write_unmapped_json(suite: ImportedSuite, path: Path) -> None:
@@ -486,15 +531,18 @@ def materialize_suite_bundle(
     config_dir = output_dir / "generated-import-configs"
     resolve_imported_suite(suite, catalog_dir=catalog_dir)
     config_paths = emit_compact_configs(suite, config_dir)
+    import_coverage_path = output_dir / "import-coverage.json"
     imported_workload_path = output_dir / "imported-workload.json"
     unmapped_path = output_dir / "unmapped.json"
     summary_markdown_path = output_dir / "import-summary.md"
+    write_import_coverage_json(suite, config_paths, import_coverage_path)
     write_imported_workload_json(suite, imported_workload_path)
     write_unmapped_json(suite, unmapped_path)
     write_import_summary_markdown(suite, config_paths, summary_markdown_path)
     return {
         **summary_payload(suite, config_paths),
         "output_dir": str(output_dir),
+        "import_coverage_path": str(import_coverage_path),
         "imported_workload_path": str(imported_workload_path),
         "unmapped_path": str(unmapped_path),
         "summary_markdown_path": str(summary_markdown_path),
@@ -524,14 +572,46 @@ def materialize_grouped_yaml(
             catalog_dir=catalog_dir,
         )
 
+    import_coverage_payload = {
+        "schema": IMPORT_TEST_COVERAGE_SCHEMA,
+        "source_path": str(yaml_path),
+        "operation_count": len(operation_payloads),
+        "total_pass_case_count": sum(
+            int(payload["mapped_case_count"]) for payload in operation_payloads.values()
+        ),
+        "total_fail_case_count": sum(
+            int(payload["total_cases"]) - int(payload["mapped_case_count"])
+            for payload in operation_payloads.values()
+        ),
+        "operations": [
+            {
+                "op": op_name,
+                "pass_case_count": int(payload["mapped_case_count"]),
+                "fail_case_count": int(payload["total_cases"]) - int(payload["mapped_case_count"]),
+            }
+            for op_name, payload in sorted(operation_payloads.items())
+        ],
+    }
+    import_coverage_path = output_dir / "import-coverage.json"
+    import_coverage_path.parent.mkdir(parents=True, exist_ok=True)
+    import_coverage_path.write_text(
+        json.dumps(import_coverage_payload, indent=2) + "\n",
+        encoding="utf-8",
+    )
     payload: dict[str, Any] = {
         "source_path": str(yaml_path),
         "output_dir": str(output_dir),
         "operation_count": len(operation_payloads),
+        "total_cases": sum(int(payload["total_cases"]) for payload in operation_payloads.values()),
+        "mapped_case_count": sum(int(payload["mapped_case_count"]) for payload in operation_payloads.values()),
+        "unmapped_case_count": sum(int(payload["unmapped_case_count"]) for payload in operation_payloads.values()),
+        "ambiguous_case_count": sum(int(payload["ambiguous_case_count"]) for payload in operation_payloads.values()),
+        "generated_config_count": sum(int(payload["generated_config_count"]) for payload in operation_payloads.values()),
         "operations": operation_payloads,
     }
     index_path = output_dir / "operation-index.json"
     index_path.parent.mkdir(parents=True, exist_ok=True)
     index_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    payload["import_coverage_path"] = str(import_coverage_path)
     payload["operation_index_path"] = str(index_path)
     return payload

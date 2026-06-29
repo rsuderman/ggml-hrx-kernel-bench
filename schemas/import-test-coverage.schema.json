@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/ggml-hrx-kernel-bench/import-test-coverage.schema.json",
+  "type": "object",
+  "required": [
+    "schema",
+    "operation_count",
+    "total_pass_case_count",
+    "total_fail_case_count",
+    "operations"
+  ],
+  "properties": {
+    "schema": {
+      "const": "ggml_hrx_kernel_bench.import_test_coverage.v1"
+    },
+    "source_path": {
+      "type": "string",
+      "minLength": 1
+    },
+    "operation_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "operations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "op",
+          "pass_case_count",
+          "fail_case_count"
+        ],
+        "properties": {
+          "op": {
+            "type": "string",
+            "minLength": 1
+          },
+          "pass_case_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "fail_case_count": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "total_pass_case_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "total_fail_case_count": {
+      "type": "integer",
+      "minimum": 0
+    }
+  },
+  "additionalProperties": false
+}

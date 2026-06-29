@@ -15,6 +15,16 @@ from ggml_hrx_kernel_bench.kernel_test_config_runtime import (
 from ggml_hrx_kernel_bench.required_tools import require_tool
 
 
+def _resolve_config_path(raw_path: str) -> Path:
+    path = Path(raw_path).resolve()
+    if path.is_dir():
+        matches = sorted(candidate for candidate in path.glob("*.json") if candidate.is_file())
+        if len(matches) != 1:
+            raise RuntimeError(f"expected exactly one config JSON in {path}, saw {matches}")
+        return matches[0]
+    return path
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="Run a kernel correctness test from a kernel-test-config file."
@@ -33,7 +43,7 @@ def main() -> int:
     parser.add_argument("--max-batches", type=int, default=1)
     args = parser.parse_args()
 
-    config_path = Path(args.config_path).resolve()
+    config_path = _resolve_config_path(args.config_path)
     config_data = load_config(config_path)
     current_case_id, current_case_values = select_case(config_data, args.case_selector)
     output_dir = Path(args.output_dir).resolve()

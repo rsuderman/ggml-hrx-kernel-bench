@@ -13,6 +13,15 @@ def _expect(condition: bool, message: str) -> None:
         raise RuntimeError(message)
 
 
+def _resolve_config_path(raw_path: str) -> Path:
+    path = Path(raw_path).resolve()
+    if path.is_dir():
+        matches = sorted(candidate for candidate in path.glob("*.json") if candidate.is_file())
+        _expect(len(matches) == 1, f"expected exactly one config JSON in {path}, saw {matches}")
+        return matches[0]
+    return path
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Validate a kernel test config JSON file.")
     parser.add_argument("config_path")
@@ -22,7 +31,7 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    path = Path(args.config_path).resolve()
+    path = _resolve_config_path(args.config_path)
     data = load_config(path)
     validate_config(data)
 
