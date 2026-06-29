@@ -41,11 +41,24 @@ def _expect_subset(actual: object, expected: object, *, context: str) -> None:
     _expect(actual == expected, f"expected {context}={expected!r}, saw {actual!r}")
 
 
+def _validate_generated_kernel_tests(path: Path, generated_config_paths: list[str]) -> None:
+    _expect(path.is_file(), "missing generated-kernel-tests.json")
+    payload = _load_json(path)
+    entries = payload.get("entries", [])
+    _expect(isinstance(entries, list), "generated kernel test entries must be a list")
+    manifest_paths = [str(entry.get("config_path")) for entry in entries]
+    _expect(
+        sorted(manifest_paths) == sorted(str(Path(raw_path)) for raw_path in generated_config_paths),
+        "generated-kernel-tests.json does not match generated config paths",
+    )
+
+
 def _validate_bundle_artifacts(payload: dict) -> None:
     import_coverage_path = Path(str(payload["import_coverage_path"]))
     imported_workload_path = Path(str(payload["imported_workload_path"]))
     unmapped_path = Path(str(payload["unmapped_path"]))
     summary_markdown_path = Path(str(payload["summary_markdown_path"]))
+    generated_kernel_tests_path = Path(str(payload["generated_kernel_tests_path"]))
     _expect(import_coverage_path.is_file(), "missing import-coverage.json")
     _expect(imported_workload_path.is_file(), "missing imported-workload.json")
     _expect(unmapped_path.is_file(), "missing unmapped.json")
@@ -62,6 +75,8 @@ def _validate_bundle_artifacts(payload: dict) -> None:
     for raw_path in generated_config_paths:
         config_path = Path(str(raw_path))
         _expect(config_path.is_file(), f"missing generated config {config_path}")
+
+    _validate_generated_kernel_tests(generated_kernel_tests_path, generated_config_paths)
 
 
 def main() -> int:
@@ -92,6 +107,15 @@ def main() -> int:
     if args.split_by_op:
         operation_index_path = Path(str(payload["operation_index_path"]))
         _expect(operation_index_path.is_file(), "missing operation-index.json")
+        generated_kernel_tests_path = Path(str(payload["generated_kernel_tests_path"]))
+        _validate_generated_kernel_tests(
+            generated_kernel_tests_path,
+            [
+                raw_path
+                for op_payload in payload.get("operations", {}).values()
+                for raw_path in op_payload.get("generated_config_paths", [])
+            ],
+        )
         operations = payload.get("operations")
         _expect(isinstance(operations, dict), "operations must be an object")
         for op_payload in operations.values():

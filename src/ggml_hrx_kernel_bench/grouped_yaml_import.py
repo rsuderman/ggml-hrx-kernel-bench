@@ -29,6 +29,7 @@ from .import_models import (
 IMPORTED_WORKLOAD_SCHEMA = "ggml_hrx_kernel_bench.imported_workload.v1"
 UNMAPPED_CASES_SCHEMA = "ggml_hrx_kernel_bench.import_unmapped_cases.v1"
 IMPORT_TEST_COVERAGE_SCHEMA = "ggml_hrx_kernel_bench.import_test_coverage.v1"
+GENERATED_KERNEL_TESTS_SCHEMA = "ggml_hrx_kernel_bench.generated_kernel_tests.v1"
 
 
 def _expect(condition: bool, message: str) -> None:
@@ -577,11 +578,51 @@ def write_import_summary_markdown(
     path.write_text(_markdown_summary(suite, config_paths), encoding="utf-8")
 
 
+def _generated_kernel_test_entries(config_paths: list[Path], *, op: str | None = None) -> list[dict[str, Any]]:
+    entries: list[dict[str, Any]] = []
+    for path in sorted(config_paths):
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        entry = {
+            "config_path": str(path),
+            "config_name": path.name,
+            "kernel": str(payload.get("kernel") or ""),
+            "case_count": len(payload.get("cases", [])),
+        }
+        route_id = payload.get("route_id")
+        if route_id:
+            entry["route_id"] = str(route_id)
+        if op:
+            entry["op"] = op
+        entries.append(entry)
+    return entries
+
+
+def write_generated_kernel_tests_json(
+    *,
+    source_path: Path,
+    config_paths: list[Path],
+    path: Path,
+    op: str | None = None,
+) -> dict[str, Any]:
+    payload = {
+        "schema": GENERATED_KERNEL_TESTS_SCHEMA,
+        "source_path": str(source_path),
+        "entry_count": len(config_paths),
+        "entries": _generated_kernel_test_entries(config_paths, op=op),
+    }
+    if op is not None:
+        payload["op"] = op
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    return payload
+
+
 def materialize_suite_bundle(
     suite: ImportedSuite,
     *,
     output_dir: Path,
     catalog_dir: Path,
+    op_name: str | None = None,
 ) -> dict[str, Any]:
     config_dir = output_dir / "generated-import-configs"
     resolve_imported_suite(suite, catalog_dir=catalog_dir)
@@ -590,10 +631,17 @@ def materialize_suite_bundle(
     imported_workload_path = output_dir / "imported-workload.json"
     unmapped_path = output_dir / "unmapped.json"
     summary_markdown_path = output_dir / "import-summary.md"
+    generated_kernel_tests_path = output_dir / "generated-kernel-tests.json"
     write_import_coverage_json(suite, config_paths, import_coverage_path)
     write_imported_workload_json(suite, imported_workload_path)
     write_unmapped_json(suite, unmapped_path)
     write_import_summary_markdown(suite, config_paths, summary_markdown_path)
+    write_generated_kernel_tests_json(
+        source_path=Path(str(suite.source_path)),
+        config_paths=config_paths,
+        path=generated_kernel_tests_path,
+        op=op_name,
+    )
     return {
         **summary_payload(suite, config_paths),
         "output_dir": str(output_dir),
@@ -601,6 +649,7 @@ def materialize_suite_bundle(
         "imported_workload_path": str(imported_workload_path),
         "unmapped_path": str(unmapped_path),
         "summary_markdown_path": str(summary_markdown_path),
+        "generated_kernel_tests_path": str(generated_kernel_tests_path),
         "generated_config_paths": [str(path) for path in config_paths],
     }
 
@@ -625,6 +674,7 @@ def materialize_grouped_yaml(
             op_suite,
             output_dir=op_output_dir,
             catalog_dir=catalog_dir,
+            op_name=op_name,
         )
 
     import_coverage_payload = {
@@ -647,6 +697,27 @@ def materialize_grouped_yaml(
             for op_name, payload in sorted(operation_payloads.items())
         ],
     }
+    aggregated_generated_kernel_tests = {
+        "schema": GENERATED_KERNEL_TESTS_SCHEMA,
+        "source_path": str(yaml_path),
+        "entry_count": sum(
+            len(payload.get("generated_config_paths", [])) for payload in operation_payloads.values()
+        ),
+        "entries": [
+            entry
+            for op_name, payload in sorted(operation_payloads.items())
+            for entry in _generated_kernel_test_entries(
+                [Path(str(raw_path)) for raw_path in payload.get("generated_config_paths", [])],
+                op=op_name,
+            )
+        ],
+    }
+    generated_kernel_tests_path = output_dir / "generated-kernel-tests.json"
+    generated_kernel_tests_path.parent.mkdir(parents=True, exist_ok=True)
+    generated_kernel_tests_path.write_text(
+        json.dumps(aggregated_generated_kernel_tests, indent=2) + "\n",
+        encoding="utf-8",
+    )
     import_coverage_path = output_dir / "import-coverage.json"
     import_coverage_path.parent.mkdir(parents=True, exist_ok=True)
     import_coverage_path.write_text(
@@ -663,10 +734,12 @@ def materialize_grouped_yaml(
         "ambiguous_case_count": sum(int(payload["ambiguous_case_count"]) for payload in operation_payloads.values()),
         "generated_config_count": sum(int(payload["generated_config_count"]) for payload in operation_payloads.values()),
         "operations": operation_payloads,
+        "generated_kernel_tests_path": str(generated_kernel_tests_path),
     }
     index_path = output_dir / "operation-index.json"
     index_path.parent.mkdir(parents=True, exist_ok=True)
     index_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
     payload["import_coverage_path"] = str(import_coverage_path)
+    payload["generated_kernel_tests_path"] = str(generated_kernel_tests_path)
     payload["operation_index_path"] = str(index_path)
     return payload
