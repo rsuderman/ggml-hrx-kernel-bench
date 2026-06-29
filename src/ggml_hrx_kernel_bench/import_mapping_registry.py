@@ -69,6 +69,10 @@ def _all_zero(values: list[int]) -> bool:
     return all(value == 0 for value in values)
 
 
+def _all_one(values: list[int]) -> bool:
+    return all(value == 1 for value in values)
+
+
 def copy_f32_f16_contiguous(case: ImportedCase) -> bool:
     params = case.normalized_params
     if int(params.get("_src_transpose", 0)) != 0:
@@ -87,7 +91,41 @@ def lower_copy_f32_f16_contiguous(case: ImportedCase) -> tuple[list[str], list[i
     return ["nrows", "ncols"], [1, math.prod(ne)]
 
 
+def add_f32_dense_same_shape(case: ImportedCase) -> bool:
+    params = case.normalized_params
+    try:
+        ne = _int_list(case, "ne")
+        nr = _int_list(case, "nr")
+    except ValueError:
+        return False
+    return (
+        len(ne) == 4
+        and len(nr) == 4
+        and int(params.get("nf", 0)) == 1
+        and int(params.get("perm1", 0)) == 0
+        and _all_one(nr)
+    )
+
+
+def lower_add_f32_dense_same_shape(case: ImportedCase) -> tuple[list[str], list[int]]:
+    ne = _int_list(case, "ne")
+    ncols = ne[0]
+    nrows = math.prod(ne[1:])
+    return (
+        ["ncols", "nrows", "src0_row_stride", "src1_row_stride", "src1_ncols"],
+        [ncols, nrows, ncols, ncols, ncols],
+    )
+
+
 IMPORT_MAPPING_RULES: list[ImportMappingRule] = [
+    ImportMappingRule(
+        op="ADD",
+        dtype_filters={"type": "f32"},
+        kernel_family="add_f32",
+        predicate=add_f32_dense_same_shape,
+        lowering=lower_add_f32_dense_same_shape,
+        notes="maps dense same-shape F32 adds into the existing pointwise add family",
+    ),
     ImportMappingRule(
         op="CPY",
         dtype_filters={"type_src": "f32", "type_dst": "f16"},

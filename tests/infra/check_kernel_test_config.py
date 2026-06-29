@@ -29,6 +29,10 @@ def main() -> int:
         "--expect-case",
         help="comma-separated integer case values, for example 1,16384",
     )
+    parser.add_argument(
+        "--expect-route-id",
+        help="exact route_id expected in the config",
+    )
     args = parser.parse_args()
 
     path = _resolve_config_path(args.config_path)
@@ -40,7 +44,18 @@ def main() -> int:
         cases = data.get("cases")
         _expect(isinstance(cases, list), "cases must be a list")
         _expect(expected_case in cases, f"expected case {expected_case} in config, saw {cases}")
-        print(f"validated {path} with expected case {expected_case}")
+
+    if args.expect_route_id:
+        route_id = data.get("route_id")
+        _expect(route_id == args.expect_route_id, f"expected route_id {args.expect_route_id!r}, saw {route_id!r}")
+
+    details: list[str] = []
+    if args.expect_case:
+        details.append(f"expected case {expected_case}")
+    if args.expect_route_id:
+        details.append(f"route_id {args.expect_route_id}")
+    if details:
+        print(f"validated {path} with {' and '.join(details)}")
         return 0
 
     print(f"validated {path} with {len(data['cases'])} case(s)")

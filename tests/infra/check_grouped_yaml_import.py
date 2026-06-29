@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shutil
 from pathlib import Path
 
@@ -68,8 +69,12 @@ def main() -> int:
     parser.add_argument("yaml_path")
     parser.add_argument("output_dir")
     parser.add_argument("--expected-coverage", required=True)
+    parser.add_argument("--tool-dir", help="optional directory containing loom-link, loom-compile, and iree-benchmark-loom")
     parser.add_argument("--split-by-op", action="store_true")
     args = parser.parse_args()
+
+    if args.tool_dir:
+        os.environ["PATH"] = f"{args.tool_dir}:{os.environ.get('PATH', '')}"
 
     yaml_path = Path(args.yaml_path).resolve()
     output_dir = Path(args.output_dir).resolve()

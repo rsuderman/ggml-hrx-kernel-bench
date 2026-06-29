@@ -7,7 +7,7 @@ from typing import Any, Iterable
 
 import yaml
 
-from .family_specs import ShapeDomain, normalize_shape
+from .family_specs import ShapeDomain, normalize_shape, resolve_binding_value
 from .hrx2 import iter_routes
 from .import_mapping_registry import (
     IMPORT_MAPPING_RULES,
@@ -144,19 +144,71 @@ def _shape_from_resolved(params: list[str], values: list[int]) -> dict[str, int]
     return normalize_shape(dict(zip(params, values, strict=True)))
 
 
+def _is_power_of_two(value: int) -> bool:
+    return value > 0 and value & (value - 1) == 0
+
+
+def _shape_guard_value(family: str, guard: str, shape: dict[str, int]) -> bool:
+    if guard == "all_pot":
+        return all(_is_power_of_two(int(value)) for value in shape.values())
+    if guard == "k_pow2":
+        return _is_power_of_two(int(shape.get("k", shape.get("ncols", shape.get("cols", 0)))))
+    if guard == "pointwise_src0_row_stride_eq_ncols":
+        return int(
+            shape.get(
+                "src0_row_stride",
+                resolve_binding_value(family, "pointwise.src0_row_stride", shape) or 0,
+            )
+        ) == int(shape.get("ncols", 0))
+    if guard == "pointwise_src1_row_stride_eq_ncols":
+        return int(
+            shape.get(
+                "src1_row_stride",
+                resolve_binding_value(family, "pointwise.src1_row_stride", shape) or 0,
+            )
+        ) == int(shape.get("ncols", 0))
+    if guard == "pointwise_src1_row_stride_eq_zero":
+        return int(
+            shape.get(
+                "src1_row_stride",
+                resolve_binding_value(family, "pointwise.src1_row_stride", shape) or 0,
+            )
+        ) == 0
+    if guard == "pointwise_src1_ncols_eq_ncols":
+        return int(
+            shape.get(
+                "src1_ncols",
+                resolve_binding_value(family, "pointwise.src1_ncols", shape) or 0,
+            )
+        ) == int(shape.get("ncols", 0))
+    return True
+
+
+def _shape_guard_satisfied(family: str, guard: str, expected: Any, shape: dict[str, int]) -> bool:
+    if not isinstance(expected, bool):
+        return True
+    actual = _shape_guard_value(family, guard, shape)
+    return actual if expected else not actual
+
+
 def _route_accepts_shape(route: dict[str, Any], shape: dict[str, int]) -> bool:
     domain = route.get("shape_domain") or {}
     if not isinstance(domain, dict) or not domain:
         return True
     guards = route.get("shape_guards") or {}
+    family = str(route.get("family") or route.get("source_id") or "")
+    parsed_guards = guards if isinstance(guards, dict) else {}
     ctx = ShapeDomain(
-        family=str(route.get("family") or route.get("source_id") or ""),
+        family=family,
         route_id=str(route.get("id") or ""),
         root_symbol=str(route.get("root_symbol") or ""),
         domain=domain,
-        guards=guards if isinstance(guards, dict) else {},
+        guards=parsed_guards,
     )
-    return ctx.accepts(shape)
+    return ctx.accepts(shape) and all(
+        _shape_guard_satisfied(family, guard, expected, shape)
+        for guard, expected in parsed_guards.items()
+    )
 
 
 def _resolve_route(
@@ -172,8 +224,11 @@ def _resolve_route(
     matching = [route for route in family_routes if _route_accepts_shape(route, shape)]
     if not matching:
         return None, family_routes, UnmappedReason.NO_ROUTE_MATCH
-    if len(matching) > 1:
-        return None, matching, UnmappedReason.AMBIGUOUS_ROUTE_MATCH
+    matching.sort(key=lambda route: (-int(route.get("priority", 0) or 0), str(route.get("id") or "")))
+    best_priority = int(matching[0].get("priority", 0) or 0)
+    best_matches = [route for route in matching if int(route.get("priority", 0) or 0) == best_priority]
+    if len(best_matches) > 1:
+        return None, best_matches, UnmappedReason.AMBIGUOUS_ROUTE_MATCH
     return matching[0], matching, None
 
 
