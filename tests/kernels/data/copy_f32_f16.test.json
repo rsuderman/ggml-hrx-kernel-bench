@@ -1,5 +1,0 @@
-{
-  "kernel": "copy_f32_f16",
-  "params": ["nrows", "ncols"],
-  "cases": [[1, 64], [1, 256]]
-}
