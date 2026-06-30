@@ -41,6 +41,10 @@ def _expect_subset(actual: object, expected: object, *, context: str) -> None:
     _expect(actual == expected, f"expected {context}={expected!r}, saw {actual!r}")
 
 
+def _formatted_json(payload: object) -> str:
+    return json.dumps(payload, indent=2, sort_keys=True)
+
+
 def _validate_generated_kernel_tests(path: Path, generated_config_paths: list[str]) -> None:
     _expect(path.is_file(), "missing generated-kernel-tests.json")
     payload = _load_json(path)
@@ -127,9 +131,20 @@ def main() -> int:
     actual_coverage_path = Path(str(payload["import_coverage_path"]))
     actual_coverage = _load_json(actual_coverage_path)
     expected_coverage = _load_json(expected_coverage_path)
-    _expect_subset(actual_coverage, expected_coverage, context="coverage")
+    try:
+        _expect_subset(actual_coverage, expected_coverage, context="coverage")
+    except RuntimeError as exc:
+        print("Grouped YAML import coverage validation failed.")
+        print("")
+        print(f"Error: {exc}")
+        print("")
+        print("Actual coverage:")
+        print(_formatted_json(actual_coverage))
+        print("")
+        print("Expected coverage subset:")
+        print(_formatted_json(expected_coverage))
+        raise
 
-    print(json.dumps(actual_coverage, sort_keys=True))
     return 0
 
 

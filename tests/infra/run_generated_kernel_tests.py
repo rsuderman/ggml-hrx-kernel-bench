@@ -47,6 +47,79 @@ def _load_manifest(path: Path) -> dict:
     return payload
 
 
+def _manifest_entry_label(index: int, entry: dict, config_path: Path) -> str:
+    kernel = str(entry.get("kernel") or "")
+    route_id = str(entry.get("route_id") or "")
+    parts = [f"[{index + 1}]"]
+    if kernel:
+        parts.append(kernel)
+    if route_id:
+        parts.append(f"route={route_id}")
+    parts.append(config_path.name)
+    return " ".join(parts)
+
+
+def _print_running_case(
+    *,
+    index: int,
+    total: int,
+    entry: dict,
+    config_path: Path,
+    case_id: str,
+    case_values: list[int],
+) -> None:
+    label = _manifest_entry_label(index, entry, config_path)
+    print(
+        f"Running {index + 1}/{total}: {label} case={case_id} values={case_values}",
+        flush=True,
+    )
+
+
+def _print_runtime_blocked(*, manifest_path: Path, result: dict) -> None:
+    print("Generated kernel runtime test skipped: runtime environment unavailable.")
+    print(f"Manifest: {manifest_path}")
+    print(f"Config: {result.get('config_path')}")
+    print(f"Case: {result.get('case_id')}")
+    print(f"Results: {result.get('results_path')}")
+    print(
+        json.dumps(
+            {
+                "manifest_path": str(manifest_path),
+                "result": result,
+                "status": "skipped_runtime_unavailable",
+            },
+            indent=2,
+            sort_keys=True,
+        )
+    )
+
+
+def _print_failure(
+    *,
+    manifest_path: Path,
+    result: dict,
+    reason: str,
+) -> None:
+    print("Generated kernel runtime test failed.")
+    print(f"Reason: {reason}")
+    print(f"Manifest: {manifest_path}")
+    print(f"Config: {result.get('config_path')}")
+    print(f"Case: {result.get('case_id')}")
+    print(f"Candidate: {result.get('candidate_id')}")
+    print(f"Results: {result.get('results_path')}")
+    artifact_bundle_dir = result.get("artifact_bundle_dir")
+    if artifact_bundle_dir:
+        print(f"Artifacts: {artifact_bundle_dir}")
+    failure = result.get("failure")
+    correctness = result.get("correctness")
+    if failure:
+        print(f"Failure detail: {failure}")
+    if correctness is not None:
+        print(f"Correctness: {correctness}")
+    print("Result:")
+    print(json.dumps(result, indent=2, sort_keys=True))
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run generated kernel tests listed in a manifest.")
     parser.add_argument("manifest_path")
@@ -64,6 +137,7 @@ def main() -> int:
     output_dir = Path(args.output_dir).resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
     payload = _load_manifest(manifest_path)
+    total_entries = len(payload["entries"])
 
     results = []
     for index, entry in enumerate(payload["entries"]):
@@ -72,6 +146,14 @@ def main() -> int:
         _expect(config_path.is_file(), f"missing generated config {config_path}")
         config_data = load_config(config_path)
         current_case_id, current_case_values = select_case(config_data, args.case_selector)
+        _print_running_case(
+            index=index,
+            total=total_entries,
+            entry=entry,
+            config_path=config_path,
+            case_id=current_case_id,
+            case_values=current_case_values,
+        )
         case_output_dir = output_dir / f"{index:03d}-{_safe_name(config_path.stem)}"
         candidate, row, summary = execute_case(
             config_data=config_data,
@@ -97,20 +179,22 @@ def main() -> int:
         result["config_path"] = str(config_path)
         results.append(result)
         if _runtime_environment_blocked(result):
-            print(
-                json.dumps(
-                    {
-                        "manifest_path": str(manifest_path),
-                        "result_count": len(results),
-                        "results": results,
-                        "status": "skipped_runtime_unavailable",
-                    },
-                    sort_keys=True,
-                )
-            )
+            _print_runtime_blocked(manifest_path=manifest_path, result=result)
             return 125
-        _expect(result["status"] == "ran", f"kernel run failed: {json.dumps(result, sort_keys=True)}")
-        _expect(result["correctness_ok"], f"kernel correctness check failed: {json.dumps(result, sort_keys=True)}")
+        if result["status"] != "ran":
+            _print_failure(
+                manifest_path=manifest_path,
+                result=result,
+                reason="kernel run did not complete successfully",
+            )
+            raise RuntimeError("kernel run failed")
+        if not result["correctness_ok"]:
+            _print_failure(
+                manifest_path=manifest_path,
+                result=result,
+                reason="kernel correctness check failed",
+            )
+            raise RuntimeError("kernel correctness check failed")
 
     print(json.dumps({"manifest_path": str(manifest_path), "result_count": len(results), "results": results}, sort_keys=True))
     return 0

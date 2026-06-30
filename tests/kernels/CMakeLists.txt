@@ -13,5 +13,5 @@ add_grouped_yaml_import_validation_target(
 add_generated_kernel_runtime_tests(
   NAME grouped-yaml
   GENERATED_IMPORT_DIR ${GGML_HRX_GENERATED_IMPORT_DIR}
-  EXPECTED_COVERAGE ${GGML_HRX_EXPECTED_IMPORT_COVERAGE}
+  GROUPED_YAML ${GGML_HRX_GROUPED_YAML}
 )

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from typing import Any, Iterable, Mapping
+from typing import Any, Callable, Iterable, Mapping
 
 from .import_models import ImportedCase
 
@@ -139,16 +139,22 @@ def _pointwise_rhs_column_broadcast_shape(facts: PointwiseCaseFacts) -> dict[str
     }
 
 
+POINTWISE_LAYOUT_LOWERERS: dict[
+    str, Callable[[PointwiseCaseFacts], dict[str, int]]
+] = {
+    "contiguous": _pointwise_contiguous_shape,
+    "contiguous_or_rhs_row_broadcast": _pointwise_contiguous_shape,
+    "contiguous_src0_rhs_column_broadcast": _pointwise_rhs_column_broadcast_shape,
+}
+
+
 def _lower_pointwise_case(case: ImportedCase, route: Mapping[str, Any]) -> dict[str, int]:
     facts = _pointwise_facts(case)
     layout = _route_layout(route)
-    if layout == "contiguous":
-        return _pointwise_contiguous_shape(facts)
-    if layout == "contiguous_or_rhs_row_broadcast":
-        return _pointwise_contiguous_shape(facts)
-    if layout == "contiguous_src0_rhs_column_broadcast":
-        return _pointwise_rhs_column_broadcast_shape(facts)
-    raise ValueError(f"no pointwise lowering is implemented for layout {layout!r}")
+    lower = POINTWISE_LAYOUT_LOWERERS.get(layout)
+    if lower is None:
+        raise ValueError(f"no pointwise lowering is implemented for layout {layout!r}")
+    return lower(facts)
 
 
 def _lower_copy_case(case: ImportedCase, route: Mapping[str, Any]) -> dict[str, int]:
@@ -168,11 +174,29 @@ def _lower_copy_case(case: ImportedCase, route: Mapping[str, Any]) -> dict[str, 
     return {"nrows": 1, "ncols": math.prod(ne)}
 
 
-def lower_case_for_route(case: ImportedCase, route: Mapping[str, Any]) -> dict[str, int]:
+ROUTE_CONTRACT_LOWERERS: dict[
+    str, Callable[[ImportedCase, Mapping[str, Any]], dict[str, int]]
+] = {
+    "pointwise": _lower_pointwise_case,
+    "copy": _lower_copy_case,
+}
+
+
+def route_contract(route: Mapping[str, Any]) -> str | None:
     if _pointwise_contract(route):
-        return _lower_pointwise_case(case, route)
+        return "pointwise"
     if _copy_contract(route):
-        return _lower_copy_case(case, route)
-    raise ValueError(
-        "no raw-case lowering is implemented for this route specialization"
-    )
+        return "copy"
+    return None
+
+
+def lower_case_for_route(case: ImportedCase, route: Mapping[str, Any]) -> dict[str, int]:
+    contract = route_contract(route)
+    if contract is None:
+        raise ValueError(
+            "no raw-case lowering is implemented for this route specialization"
+        )
+    lower = ROUTE_CONTRACT_LOWERERS.get(contract)
+    if lower is None:
+        raise ValueError(f"no raw-case lowering is implemented for route contract {contract!r}")
+    return lower(case, route)

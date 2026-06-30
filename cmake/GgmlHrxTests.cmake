@@ -59,7 +59,7 @@ endfunction()
 
 function(add_generated_kernel_runtime_tests)
   set(options)
-  set(one_value_args NAME GENERATED_IMPORT_DIR EXPECTED_COVERAGE CASE_SELECTOR RUNTIME_OUTPUT_DIR)
+  set(one_value_args NAME GENERATED_IMPORT_DIR GROUPED_YAML CASE_SELECTOR RUNTIME_OUTPUT_DIR)
   cmake_parse_arguments(GGML_HRX_GKRT "${options}" "${one_value_args}" "" ${ARGN})
 
   if(NOT GGML_HRX_GKRT_NAME)
@@ -68,8 +68,8 @@ function(add_generated_kernel_runtime_tests)
   if(NOT GGML_HRX_GKRT_GENERATED_IMPORT_DIR)
     message(FATAL_ERROR "add_generated_kernel_runtime_tests requires GENERATED_IMPORT_DIR")
   endif()
-  if(NOT GGML_HRX_GKRT_EXPECTED_COVERAGE)
-    message(FATAL_ERROR "add_generated_kernel_runtime_tests requires EXPECTED_COVERAGE")
+  if(NOT GGML_HRX_GKRT_GROUPED_YAML)
+    message(FATAL_ERROR "add_generated_kernel_runtime_tests requires GROUPED_YAML")
   endif()
 
   set(kernel_case_selector 0)
@@ -88,7 +88,7 @@ function(add_generated_kernel_runtime_tests)
     ${GGML_HRX_TESTS_ROOT}/infra/generate_kernel_runtime_tests_cmake.py
     --output ${generated_tests_include}
     --name ${GGML_HRX_GKRT_NAME}
-    --expected-coverage ${GGML_HRX_GKRT_EXPECTED_COVERAGE}
+    --grouped-yaml ${GGML_HRX_GKRT_GROUPED_YAML}
     --generated-import-dir ${GGML_HRX_GKRT_GENERATED_IMPORT_DIR}
     --python-executable ${Python3_EXECUTABLE}
     --runner-script ${GGML_HRX_TESTS_ROOT}/infra/run_generated_kernel_tests.py
