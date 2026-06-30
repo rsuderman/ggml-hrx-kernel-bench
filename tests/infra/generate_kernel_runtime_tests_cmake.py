@@ -74,6 +74,7 @@ def main() -> int:
             '  COMMAND',
             '    ' + ' '.join(command_parts),
             ')',
+            f'set_tests_properties(kernel-run-{args.name}-{op_safe_name}-generated PROPERTIES SKIP_RETURN_CODE 125)',
             '',
         ])
 

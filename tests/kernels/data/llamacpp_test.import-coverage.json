@@ -274,8 +274,8 @@
     },
     {
       "op": "MUL",
-      "pass_case_count": 0,
-      "fail_case_count": 91
+      "pass_case_count": 14,
+      "fail_case_count": 77
     },
     {
       "op": "MUL_MAT",
@@ -578,6 +578,6 @@
       "fail_case_count": 1
     }
   ],
-  "total_pass_case_count": 15,
-  "total_fail_case_count": 11317
+  "total_pass_case_count": 29,
+  "total_fail_case_count": 11303
 }

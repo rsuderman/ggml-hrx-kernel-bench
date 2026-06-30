@@ -7,14 +7,8 @@ from typing import Any, Iterable
 
 import yaml
 
-from .family_specs import ShapeDomain, normalize_shape, resolve_binding_value
 from .hrx2 import iter_routes
-from .import_mapping_registry import (
-    IMPORT_MAPPING_RULES,
-    compatible_rules_for_op,
-    compatible_rules_for_op_dtype,
-    match_rules,
-)
+from .import_route_resolution import resolve_case_routes, route_family
 from .import_models import (
     ImportedCase,
     ImportedOpGroup,
@@ -132,109 +126,40 @@ def split_suite_by_op(suite: ImportedSuite) -> dict[str, ImportedSuite]:
     }
 
 
-def _routes_by_family(catalog_dir: Path) -> dict[str, list[dict[str, Any]]]:
+def _routes_by_op(catalog_dir: Path) -> dict[str, list[dict[str, Any]]]:
     grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for route in iter_routes(catalog_dir):
-        family = str(route.get("family") or route.get("source_id") or "")
-        if family:
-            grouped[family].append(route)
+        op = str(route.get("op") or "").upper()
+        if op:
+            grouped[op].append(route)
     return grouped
 
 
-def _shape_from_resolved(params: list[str], values: list[int]) -> dict[str, int]:
-    return normalize_shape(dict(zip(params, values, strict=True)))
-
-
-def _is_power_of_two(value: int) -> bool:
-    return value > 0 and value & (value - 1) == 0
-
-
-def _shape_guard_value(family: str, guard: str, shape: dict[str, int]) -> bool:
-    if guard == "all_pot":
-        return all(_is_power_of_two(int(value)) for value in shape.values())
-    if guard == "k_pow2":
-        return _is_power_of_two(int(shape.get("k", shape.get("ncols", shape.get("cols", 0)))))
-    if guard == "pointwise_src0_row_stride_eq_ncols":
-        return int(
-            shape.get(
-                "src0_row_stride",
-                resolve_binding_value(family, "pointwise.src0_row_stride", shape) or 0,
-            )
-        ) == int(shape.get("ncols", 0))
-    if guard == "pointwise_src1_row_stride_eq_ncols":
-        return int(
-            shape.get(
-                "src1_row_stride",
-                resolve_binding_value(family, "pointwise.src1_row_stride", shape) or 0,
-            )
-        ) == int(shape.get("ncols", 0))
-    if guard == "pointwise_src1_row_stride_eq_zero":
-        return int(
-            shape.get(
-                "src1_row_stride",
-                resolve_binding_value(family, "pointwise.src1_row_stride", shape) or 0,
-            )
-        ) == 0
-    if guard == "pointwise_src1_ncols_eq_ncols":
-        return int(
-            shape.get(
-                "src1_ncols",
-                resolve_binding_value(family, "pointwise.src1_ncols", shape) or 0,
-            )
-        ) == int(shape.get("ncols", 0))
-    return True
-
-
-def _shape_guard_satisfied(family: str, guard: str, expected: Any, shape: dict[str, int]) -> bool:
-    if not isinstance(expected, bool):
-        return True
-    actual = _shape_guard_value(family, guard, shape)
-    return actual if expected else not actual
-
-
-def _route_accepts_shape(route: dict[str, Any], shape: dict[str, int]) -> bool:
-    domain = route.get("shape_domain") or {}
-    if not isinstance(domain, dict) or not domain:
-        return True
-    guards = route.get("shape_guards") or {}
-    family = str(route.get("family") or route.get("source_id") or "")
-    parsed_guards = guards if isinstance(guards, dict) else {}
-    ctx = ShapeDomain(
-        family=family,
-        route_id=str(route.get("id") or ""),
-        root_symbol=str(route.get("root_symbol") or ""),
-        domain=domain,
-        guards=parsed_guards,
-    )
-    return ctx.accepts(shape) and all(
-        _shape_guard_satisfied(family, guard, expected, shape)
-        for guard, expected in parsed_guards.items()
-    )
-
-
 def _resolve_route(
-    kernel_family: str,
-    params: list[str],
-    values: list[int],
-    routes_by_family: dict[str, list[dict[str, Any]]],
-) -> tuple[dict[str, Any] | None, list[dict[str, Any]], UnmappedReason | None]:
-    family_routes = list(routes_by_family.get(kernel_family, ()))
-    if not family_routes:
-        return None, [], UnmappedReason.NO_ROUTE_MATCH
-    shape = _shape_from_resolved(params, values)
-    matching = [route for route in family_routes if _route_accepts_shape(route, shape)]
-    if not matching:
-        return None, family_routes, UnmappedReason.NO_ROUTE_MATCH
-    matching.sort(key=lambda route: (-int(route.get("priority", 0) or 0), str(route.get("id") or "")))
-    best_priority = int(matching[0].get("priority", 0) or 0)
-    best_matches = [route for route in matching if int(route.get("priority", 0) or 0) == best_priority]
-    if len(best_matches) > 1:
-        return None, best_matches, UnmappedReason.AMBIGUOUS_ROUTE_MATCH
-    return matching[0], matching, None
+    case: ImportedCase,
+    routes_by_op: dict[str, list[dict[str, Any]]],
+) -> tuple[
+    dict[str, Any] | None,
+    dict[str, int] | None,
+    list[dict[str, Any]],
+    UnmappedReason | None,
+    str | None,
+]:
+    op_routes = list(routes_by_op.get(case.op.upper(), ()))
+    resolution, candidates, reason, detail = resolve_case_routes(case, op_routes)
+    if resolution is None:
+        return None, None, candidates, reason, detail
+    return resolution.route, resolution.shape, candidates, None, None
 
 
-def _candidate_kernel_families(rules: Iterable[Any]) -> tuple[str, ...]:
-    families = sorted({str(rule.kernel_family) for rule in rules})
+def _candidate_kernel_families(routes: Iterable[dict[str, Any]]) -> tuple[str, ...]:
+    families = sorted(
+        {
+            route_family(route)
+            for route in routes
+            if route_family(route)
+        }
+    )
     return tuple(families)
 
 
@@ -258,92 +183,27 @@ def _unmapped_case(
 
 
 def resolve_imported_suite(suite: ImportedSuite, *, catalog_dir: Path) -> ImportedSuite:
-    routes_by_family = _routes_by_family(catalog_dir)
+    routes_by_op = _routes_by_op(catalog_dir)
     resolved: list[ResolvedBenchmarkCase] = []
     unmapped: list[UnmappedCase] = []
 
     for group in suite.op_groups:
         for case in group.cases:
-            strict_matches = match_rules(case, IMPORT_MAPPING_RULES)
-            if not strict_matches:
-                dtype_matches = compatible_rules_for_op_dtype(case, IMPORT_MAPPING_RULES)
-                if dtype_matches:
-                    unmapped.append(
-                        _unmapped_case(
-                            case,
-                            status=MappingStatus.UNMAPPED,
-                            reason=UnmappedReason.SHAPE_LOWERING_NOT_IMPLEMENTED,
-                            detail=(
-                                "matching op/dtype rule exists, but this case does not satisfy "
-                                "its supported layout constraints"
-                            ),
-                            candidate_kernel_families=_candidate_kernel_families(
-                                dtype_matches
-                            ),
-                        )
-                    )
-                    continue
-                op_matches = compatible_rules_for_op(case, IMPORT_MAPPING_RULES)
-                if op_matches:
-                    unmapped.append(
-                        _unmapped_case(
-                            case,
-                            status=MappingStatus.UNMAPPED,
-                            reason=UnmappedReason.NO_DTYPE_MAPPING,
-                            detail=(
-                                "matching op mapping exists, but not for this dtype "
-                                "combination"
-                            ),
-                            candidate_kernel_families=_candidate_kernel_families(
-                                op_matches
-                            ),
-                        )
-                    )
-                    continue
+            op_routes = list(routes_by_op.get(case.op.upper(), ()))
+            if not op_routes:
                 unmapped.append(
                     _unmapped_case(
                         case,
                         status=MappingStatus.UNMAPPED,
                         reason=UnmappedReason.NO_KERNEL_FAMILY_MAPPING,
-                        detail="no import mapping rule exists for this op",
+                        detail="no catalog route exists for this op",
                     )
                 )
                 continue
 
-            if len(strict_matches) > 1:
-                unmapped.append(
-                    _unmapped_case(
-                        case,
-                        status=MappingStatus.AMBIGUOUS,
-                        reason=UnmappedReason.AMBIGUOUS_ROUTE_MATCH,
-                        detail="multiple import mapping rules matched this case",
-                        candidate_kernel_families=_candidate_kernel_families(
-                            match.rule for match in strict_matches
-                        ),
-                    )
-                )
-                continue
-
-            match = strict_matches[0]
-            try:
-                params, values = match.rule.lowering(case)
-            except (NotImplementedError, ValueError) as exc:
-                unmapped.append(
-                    _unmapped_case(
-                        case,
-                        status=MappingStatus.UNMAPPED,
-                        reason=UnmappedReason.SHAPE_LOWERING_NOT_IMPLEMENTED,
-                        detail=str(exc),
-                        candidate_kernel_families=(match.rule.kernel_family,),
-                    )
-                )
-                continue
-
-            route, route_candidates, route_reason = _resolve_route(
-                match.rule.kernel_family,
-                params,
-                values,
-                routes_by_family,
+            route, shape, route_candidates, route_reason, route_detail = _resolve_route(
+                case,
+                routes_by_op,
             )
             if route_reason is not None:
                 status = (
@@ -356,11 +216,8 @@ def resolve_imported_suite(suite: ImportedSuite, *, catalog_dir: Path) -> Import
                         case,
                         status=status,
                         reason=route_reason,
-                        detail=(
-                            f"could not resolve a unique route for kernel family "
-                            f"{match.rule.kernel_family}"
-                        ),
-                        candidate_kernel_families=(match.rule.kernel_family,),
+                        detail=route_detail or f"could not resolve a unique route for op {case.op}",
+                        candidate_kernel_families=_candidate_kernel_families(route_candidates or op_routes),
                         candidate_route_ids=tuple(
                             str(candidate.get("id") or "")
                             for candidate in route_candidates
@@ -370,10 +227,14 @@ def resolve_imported_suite(suite: ImportedSuite, *, catalog_dir: Path) -> Import
                 )
                 continue
 
+            if shape is None:
+                raise RuntimeError("resolved route is missing canonical shape")
+            params = list(shape.keys())
+            values = [int(shape[param]) for param in params]
             resolved.append(
                 ResolvedBenchmarkCase(
                     imported=case,
-                    kernel_family=match.rule.kernel_family,
+                    kernel_family=route_family(route),
                     route_id=str(route.get("id") or ""),
                     params=list(params),
                     values=list(values),

@@ -25,7 +25,10 @@ def validate_case(case: object, *, context: str, param_count: int) -> None:
     expect(isinstance(case, list), f"{context} must be an array")
     expect(len(case) == param_count, f"{context} must have exactly {param_count} value(s)")
     for index, value in enumerate(case):
-        expect(isinstance(value, int) and value > 0, f"{context}[{index}] must be a positive integer")
+        expect(
+            isinstance(value, int) and value >= 0,
+            f"{context}[{index}] must be a non-negative integer",
+        )
 
 
 def validate_config(data: object) -> None:

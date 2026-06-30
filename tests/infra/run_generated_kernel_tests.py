@@ -20,6 +20,25 @@ def _safe_name(value: str) -> str:
     return ''.join(ch.lower() if ch.isalnum() else '-' for ch in value).strip('-') or 'generated'
 
 
+def _runtime_environment_blocked(result: dict) -> bool:
+    if result.get("status") != "run_failed":
+        return False
+    results_path = result.get("results_path")
+    if not isinstance(results_path, str) or not results_path:
+        return False
+    run_dir = Path(results_path).resolve().parent
+    stderr_path = run_dir / "benchmark.stderr.txt"
+    if not stderr_path.is_file():
+        return False
+    stderr = stderr_path.read_text(encoding="utf-8", errors="replace")
+    markers = (
+        "HSA_STATUS_ERROR_OUT_OF_RESOURCES",
+        "creating driver for device 'amdgpu'",
+        "/dev/kfd",
+    )
+    return any(marker in stderr for marker in markers)
+
+
 def _load_manifest(path: Path) -> dict:
     payload = json.loads(path.read_text(encoding="utf-8"))
     _expect(isinstance(payload, dict), "manifest must be a JSON object")
@@ -77,6 +96,19 @@ def main() -> int:
         )
         result["config_path"] = str(config_path)
         results.append(result)
+        if _runtime_environment_blocked(result):
+            print(
+                json.dumps(
+                    {
+                        "manifest_path": str(manifest_path),
+                        "result_count": len(results),
+                        "results": results,
+                        "status": "skipped_runtime_unavailable",
+                    },
+                    sort_keys=True,
+                )
+            )
+            return 125
         _expect(result["status"] == "ran", f"kernel run failed: {json.dumps(result, sort_keys=True)}")
         _expect(result["correctness_ok"], f"kernel correctness check failed: {json.dumps(result, sort_keys=True)}")
 

@@ -2,59 +2,30 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from typing import Any, Callable, Mapping
+from typing import Any, Iterable, Mapping
 
 from .import_models import ImportedCase
 
 
-CasePredicate = Callable[[ImportedCase], bool]
-LoweringFn = Callable[[ImportedCase], tuple[list[str], list[int]]]
+POINTWISE_ROUTE_SOURCES = frozenset(
+    {
+        "shape.ncols",
+        "shape.nrows",
+        "shape.pointwise.src0_row_stride",
+        "shape.pointwise.src1_row_stride",
+        "shape.pointwise.src1_ncols",
+    }
+)
+
+COPY_ROUTE_SOURCES = frozenset({"shape.copy.n"})
 
 
-@dataclass(frozen=True)
-class ImportMappingRule:
-    op: str
-    dtype_filters: Mapping[str, str]
-    kernel_family: str
-    predicate: CasePredicate
-    lowering: LoweringFn
-    notes: str | None = None
-
-
-@dataclass(frozen=True)
-class MappingCandidate:
-    rule: ImportMappingRule
-    score: int = 0
-
-
-def _dtype_matches(dtype: Mapping[str, Any], filters: Mapping[str, str]) -> bool:
-    for key, expected in filters.items():
-        actual = dtype.get(key)
-        if str(actual).lower() != expected.lower():
-            return False
-    return True
-
-
-def compatible_rules_for_op(case: ImportedCase, rules: list[ImportMappingRule]) -> list[ImportMappingRule]:
-    op = case.op.upper()
-    return [rule for rule in rules if rule.op.upper() == op]
-
-
-def compatible_rules_for_op_dtype(case: ImportedCase, rules: list[ImportMappingRule]) -> list[ImportMappingRule]:
-    return [rule for rule in compatible_rules_for_op(case, rules) if _dtype_matches(case.dtype, rule.dtype_filters)]
-
-
-def match_rules(case: ImportedCase, rules: list[ImportMappingRule]) -> list[MappingCandidate]:
-    candidates: list[MappingCandidate] = []
-    for rule in compatible_rules_for_op_dtype(case, rules):
-        if not rule.predicate(case):
-            continue
-        candidates.append(MappingCandidate(rule=rule))
-    return candidates
+def _params(case: ImportedCase) -> Mapping[str, Any]:
+    return case.normalized_params
 
 
 def _int_list(case: ImportedCase, key: str) -> list[int]:
-    raw = case.normalized_params.get(key)
+    raw = _params(case).get(key)
     if not isinstance(raw, list) or not raw:
         raise ValueError(f"expected a non-empty list for {key}")
     values: list[int] = []
@@ -65,73 +36,143 @@ def _int_list(case: ImportedCase, key: str) -> list[int]:
     return values
 
 
-def _all_zero(values: list[int]) -> bool:
-    return all(value == 0 for value in values)
+def _int_value(case: ImportedCase, key: str, *, default: int = 0) -> int:
+    raw = _params(case).get(key, default)
+    if not isinstance(raw, int):
+        raise ValueError(f"{key} must be an integer")
+    return raw
 
 
-def _all_one(values: list[int]) -> bool:
-    return all(value == 1 for value in values)
+def _all_equal(values: Iterable[int], expected: int) -> bool:
+    return all(value == expected for value in values)
 
 
-def copy_f32_f16_contiguous(case: ImportedCase) -> bool:
-    params = case.normalized_params
-    if int(params.get("_src_transpose", 0)) != 0:
-        return False
-    try:
-        permute_src = _int_list(case, "permute_src")
-        permute_dst = _int_list(case, "permute_dst")
-        ne = _int_list(case, "ne")
-    except ValueError:
-        return False
-    return len(ne) == 4 and _all_zero(permute_src) and _all_zero(permute_dst)
+def _binding_sources(route: Mapping[str, Any]) -> frozenset[str]:
+    bindings = (route.get("specialization") or {}).get("bindings") or ()
+    sources = {
+        str(binding["source"])
+        for binding in bindings
+        if isinstance(binding, dict) and "source" in binding
+    }
+    return frozenset(sources)
 
 
-def lower_copy_f32_f16_contiguous(case: ImportedCase) -> tuple[list[str], list[int]]:
+def _route_layout(route: Mapping[str, Any]) -> str:
+    supports = route.get("supports") or {}
+    if not isinstance(supports, dict):
+        return ""
+    return str(supports.get("layout") or "")
+
+
+def _identity_permutation(case: ImportedCase, key: str) -> bool:
+    return _all_equal(_int_list(case, key), 0)
+
+
+def _pointwise_contract(route: Mapping[str, Any]) -> bool:
+    sources = _binding_sources(route)
+    return bool(sources) and sources.issubset(POINTWISE_ROUTE_SOURCES)
+
+
+def _copy_contract(route: Mapping[str, Any]) -> bool:
+    return _binding_sources(route) == COPY_ROUTE_SOURCES
+
+
+@dataclass(frozen=True)
+class PointwiseCaseFacts:
+    ne: tuple[int, int, int, int]
+    nr: tuple[int, int, int, int]
+    nf: int
+    perm1: int
+
+    @property
+    def ncols(self) -> int:
+        return self.ne[0]
+
+    @property
+    def nrows(self) -> int:
+        return math.prod(self.ne[1:])
+
+
+def _pointwise_facts(case: ImportedCase) -> PointwiseCaseFacts:
     ne = _int_list(case, "ne")
-    return ["nrows", "ncols"], [1, math.prod(ne)]
-
-
-def add_f32_dense_same_shape(case: ImportedCase) -> bool:
-    params = case.normalized_params
-    try:
-        ne = _int_list(case, "ne")
-        nr = _int_list(case, "nr")
-    except ValueError:
-        return False
-    return (
-        len(ne) == 4
-        and len(nr) == 4
-        and int(params.get("nf", 0)) == 1
-        and int(params.get("perm1", 0)) == 0
-        and _all_one(nr)
+    nr = _int_list(case, "nr")
+    nf = _int_value(case, "nf", default=0)
+    perm1 = _int_value(case, "perm1", default=0)
+    if len(ne) != 4 or len(nr) != 4:
+        raise ValueError("pointwise lowering requires 4-D extents")
+    return PointwiseCaseFacts(
+        ne=(ne[0], ne[1], ne[2], ne[3]),
+        nr=(nr[0], nr[1], nr[2], nr[3]),
+        nf=nf,
+        perm1=perm1,
     )
 
 
-def lower_add_f32_dense_same_shape(case: ImportedCase) -> tuple[list[str], list[int]]:
+def _pointwise_contiguous_shape(facts: PointwiseCaseFacts) -> dict[str, int]:
+    if facts.nf != 1:
+        raise ValueError("pointwise contiguous layout requires nf=1")
+    if facts.perm1 != 0:
+        raise ValueError("pointwise contiguous layout requires perm1=0")
+    if not _all_equal(facts.nr, 1):
+        raise ValueError("pointwise contiguous layout requires same-shape inputs")
+    return {"ncols": facts.ncols, "nrows": facts.nrows}
+
+
+def _pointwise_rhs_column_broadcast_shape(facts: PointwiseCaseFacts) -> dict[str, int]:
+    if facts.nf != 1:
+        raise ValueError("pointwise rhs column broadcast requires nf=1")
+    if facts.perm1 != 0:
+        raise ValueError("pointwise rhs column broadcast requires perm1=0")
+    if facts.ne[0] != 1 or facts.nr[0] <= 1:
+        raise ValueError(
+            "pointwise rhs column broadcast requires a single-column rhs source"
+        )
+    if not _all_equal(facts.nr[1:], 1):
+        raise ValueError(
+            "pointwise rhs column broadcast requires column-only repetition"
+        )
+    return {
+        "ncols": facts.nr[0],
+        "nrows": facts.nrows,
+        "src1_row_stride": 1,
+        "src1_ncols": 1,
+    }
+
+
+def _lower_pointwise_case(case: ImportedCase, route: Mapping[str, Any]) -> dict[str, int]:
+    facts = _pointwise_facts(case)
+    layout = _route_layout(route)
+    if layout == "contiguous":
+        return _pointwise_contiguous_shape(facts)
+    if layout == "contiguous_or_rhs_row_broadcast":
+        return _pointwise_contiguous_shape(facts)
+    if layout == "contiguous_src0_rhs_column_broadcast":
+        return _pointwise_rhs_column_broadcast_shape(facts)
+    raise ValueError(f"no pointwise lowering is implemented for layout {layout!r}")
+
+
+def _lower_copy_case(case: ImportedCase, route: Mapping[str, Any]) -> dict[str, int]:
+    layout = _route_layout(route)
+    if layout != "contiguous_src_to_contiguous_dst":
+        raise ValueError(f"no copy lowering is implemented for layout {layout!r}")
     ne = _int_list(case, "ne")
-    ncols = ne[0]
-    nrows = math.prod(ne[1:])
-    return (
-        ["ncols", "nrows", "src0_row_stride", "src1_row_stride", "src1_ncols"],
-        [ncols, nrows, ncols, ncols, ncols],
-    )
+    src_transpose = _int_value(case, "_src_transpose", default=0)
+    if len(ne) != 4:
+        raise ValueError("copy lowering requires 4-D extents")
+    if src_transpose != 0:
+        raise ValueError("copy lowering requires non-transposed inputs")
+    if not _identity_permutation(case, "permute_src"):
+        raise ValueError("copy lowering requires identity source permutation")
+    if not _identity_permutation(case, "permute_dst"):
+        raise ValueError("copy lowering requires identity destination permutation")
+    return {"nrows": 1, "ncols": math.prod(ne)}
 
 
-IMPORT_MAPPING_RULES: list[ImportMappingRule] = [
-    ImportMappingRule(
-        op="ADD",
-        dtype_filters={"type": "f32"},
-        kernel_family="add_f32",
-        predicate=add_f32_dense_same_shape,
-        lowering=lower_add_f32_dense_same_shape,
-        notes="maps dense same-shape F32 adds into the existing pointwise add family",
-    ),
-    ImportMappingRule(
-        op="CPY",
-        dtype_filters={"type_src": "f32", "type_dst": "f16"},
-        kernel_family="copy_f32_f16",
-        predicate=copy_f32_f16_contiguous,
-        lowering=lower_copy_f32_f16_contiguous,
-        notes="maps contiguous F32->F16 copies into the generic flattened copy kernel",
+def lower_case_for_route(case: ImportedCase, route: Mapping[str, Any]) -> dict[str, int]:
+    if _pointwise_contract(route):
+        return _lower_pointwise_case(case, route)
+    if _copy_contract(route):
+        return _lower_copy_case(case, route)
+    raise ValueError(
+        "no raw-case lowering is implemented for this route specialization"
     )
-]
