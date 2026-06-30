@@ -85,6 +85,13 @@ def f32_pattern(np: Any, shape: tuple[int, ...], *, seed: int, scale: float = 1.
     return (values * np.float32(scale)).astype(np.float32)
 
 
+def positive_f32_pattern(np: Any, shape: tuple[int, ...], *, seed: int, scale: float = 0.25):
+    raw = f32_pattern(np, shape, seed=seed, scale=scale)
+    # DIV fixtures need a stable non-zero divisor surface. Generate that
+    # directly instead of shifting an arbitrary random pattern by a constant.
+    return np.exp(raw).astype(np.float32)
+
+
 def normalized_f32_rows(np: Any, shape: tuple[int, int], *, seed: int, l2_norm: float = 1.0):
     values = f32_pattern(np, shape, seed=seed)
     # Keep every RHS row at a fixed energy. This makes the dot-product error
@@ -338,6 +345,32 @@ def _dims(candidate: Candidate) -> tuple[int, int, int]:
     return ncols, nrows, ncols * nrows
 
 
+def _pointwise_src1_view(np: Any, candidate: Candidate, src1_buffer: Any) -> Any:
+    ncols, nrows, elems = _dims(candidate)
+    src1_row_stride = int(
+        candidate.values.get(
+            "shape.pointwise.src1_row_stride",
+            candidate.shape.get("src1_row_stride", ncols),
+        )
+    )
+    src1_ncols = int(
+        candidate.values.get(
+            "shape.pointwise.src1_ncols",
+            candidate.shape.get("src1_ncols", ncols),
+        )
+    )
+    row_ids = np.arange(nrows, dtype=np.int64).reshape(nrows, 1)
+    col_ids = np.arange(ncols, dtype=np.int64).reshape(1, ncols)
+    src1_indices = row_ids * np.int64(src1_row_stride) + (col_ids % np.int64(src1_ncols))
+    return src1_buffer[src1_indices]
+
+
+def _pointwise_src1_values(np: Any, candidate: Candidate, seed: int) -> tuple[Any, Any]:
+    _, _, elems = _dims(candidate)
+    src1_buffer = f32_pattern(np, (elems,), seed=seed)
+    return src1_buffer, _pointwise_src1_view(np, candidate, src1_buffer)
+
+
 def _matmul_dims(candidate: Candidate) -> tuple[int, int, int]:
     k = int(candidate.shape.get("k", candidate.shape.get("ncols", candidate.shape.get("cols", 256))))
     rows = int(candidate.shape.get("rows", candidate.shape.get("nrows", 1)))
@@ -414,12 +447,12 @@ def _binary_arrays(op: Callable[[Any, Any], Any]) -> Callable[[Any, Candidate, i
     def build(np: Any, candidate: Candidate, seed: int) -> dict[str, Any]:
         ncols, nrows, elems = _dims(candidate)
         src0 = f32_pattern(np, (nrows, ncols), seed=seed)
-        src1 = f32_pattern(np, (nrows, ncols), seed=seed + 1)
+        src1_buffer, src1 = _pointwise_src1_values(np, candidate, seed + 1)
         expected = op(src0, src1).astype(np.float32)
         return {
             "arrays": {
                 "src0": src0.reshape(elems),
-                "src1": src1.reshape(elems),
+                "src1": src1_buffer.reshape(elems),
                 "dst_init": f32_pattern(np, (elems,), seed=seed + 2, scale=0.25),
                 "expected": expected.reshape(elems),
             }
@@ -431,12 +464,13 @@ def _binary_arrays(op: Callable[[Any, Any], Any]) -> Callable[[Any, Candidate, i
 def _div_arrays(np: Any, candidate: Candidate, seed: int) -> dict[str, Any]:
     ncols, nrows, elems = _dims(candidate)
     src0 = f32_pattern(np, (nrows, ncols), seed=seed)
-    src1 = f32_pattern(np, (nrows, ncols), seed=seed + 1) + np.float32(2.0)
+    src1_buffer = positive_f32_pattern(np, (elems,), seed=seed + 1)
+    src1 = _pointwise_src1_view(np, candidate, src1_buffer)
     expected = (src0 / src1).astype(np.float32)
     return {
         "arrays": {
             "src0": src0.reshape(elems),
-            "src1": src1.reshape(elems),
+            "src1": src1_buffer.reshape(elems),
             "dst_init": f32_pattern(np, (elems,), seed=seed + 2, scale=0.25),
             "expected": expected.reshape(elems),
         }

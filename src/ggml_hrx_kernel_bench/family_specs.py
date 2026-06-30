@@ -157,9 +157,9 @@ COMMON_SPEC = FamilySpec(
 POINTWISE_SPEC = FamilySpec(
     family_ids=("add_f32", "mul_f32", "div_f32", "clamp_f32", "scale_f32"),
     bindings={
-        "pointwise.src0_row_stride": N_COLS,
-        "pointwise.src1_row_stride": N_COLS,
-        "pointwise.src1_ncols": N_COLS,
+        "pointwise.src0_row_stride": ShapeValue(("src0_row_stride", "ncols", "cols"), default=1),
+        "pointwise.src1_row_stride": ShapeValue(("src1_row_stride", "ncols", "cols"), default=1),
+        "pointwise.src1_ncols": ShapeValue(("src1_ncols", "ncols", "cols"), default=1),
     },
 )
 

@@ -76,6 +76,7 @@
   "scale_f32_generic_wg256",
   "add_f32_n3072_r1_wg256",
   "add_f32_n3072_r16_wg256",
+  "add_f32_row_strided_rhs_wg256",
   "mul_f32_n3072_r1_wg256",
   "mul_f32_n3072_r16_wg256",
   "scale_f32_n128_r24_wg256",

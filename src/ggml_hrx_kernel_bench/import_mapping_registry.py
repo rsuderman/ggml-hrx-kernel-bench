@@ -85,12 +85,28 @@ class PointwiseCaseFacts:
     perm1: int
 
     @property
-    def ncols(self) -> int:
+    def src1_ncols(self) -> int:
         return self.ne[0]
 
     @property
-    def nrows(self) -> int:
+    def src1_nrows(self) -> int:
         return math.prod(self.ne[1:])
+
+    @property
+    def src0_shape(self) -> tuple[int, int, int, int]:
+        return tuple(self.ne[index] * self.nr[index] for index in range(4))
+
+    @property
+    def ncols(self) -> int:
+        return self.src0_shape[0]
+
+    @property
+    def nrows(self) -> int:
+        return math.prod(self.src0_shape[1:])
+
+    @property
+    def src1_elements(self) -> int:
+        return math.prod(self.ne)
 
 
 def _pointwise_facts(case: ImportedCase) -> PointwiseCaseFacts:
@@ -118,43 +134,128 @@ def _pointwise_contiguous_shape(facts: PointwiseCaseFacts) -> dict[str, int]:
     return {"ncols": facts.ncols, "nrows": facts.nrows}
 
 
+def _pointwise_rhs_row_broadcast_shape(facts: PointwiseCaseFacts) -> dict[str, int]:
+    if facts.nf != 1:
+        raise ValueError("pointwise rhs row broadcast requires nf=1")
+    if facts.perm1 != 0:
+        raise ValueError("pointwise rhs row broadcast requires perm1=0")
+    if facts.src1_nrows != 1:
+        raise ValueError("pointwise rhs row broadcast requires a single rhs row")
+    if facts.src1_ncols != facts.ncols:
+        raise ValueError("pointwise rhs row broadcast requires rhs ncols to match dst")
+    return {
+        "ncols": facts.ncols,
+        "nrows": facts.nrows,
+        "src1_row_stride": 0,
+        "src1_ncols": facts.ncols,
+    }
+
+
+def _pointwise_scalar_broadcast_shape(facts: PointwiseCaseFacts) -> dict[str, int]:
+    if facts.nf != 1:
+        raise ValueError("pointwise scalar broadcast requires nf=1")
+    if facts.src1_elements != 1:
+        raise ValueError("pointwise scalar broadcast requires a scalar rhs source")
+    return {
+        "ncols": facts.ncols,
+        "nrows": facts.nrows,
+        "src1_row_stride": 0,
+        "src1_ncols": 1,
+    }
+
 def _pointwise_rhs_column_broadcast_shape(facts: PointwiseCaseFacts) -> dict[str, int]:
     if facts.nf != 1:
         raise ValueError("pointwise rhs column broadcast requires nf=1")
     if facts.perm1 != 0:
         raise ValueError("pointwise rhs column broadcast requires perm1=0")
-    if facts.ne[0] != 1 or facts.nr[0] <= 1:
+    if facts.ne[0] != 1 or facts.ne[1] != 1:
         raise ValueError(
-            "pointwise rhs column broadcast requires a single-column rhs source"
+            "pointwise rhs column broadcast requires singleton leading rhs dims"
         )
-    if not _all_equal(facts.nr[1:], 1):
+    if facts.nr[0] * facts.nr[1] <= 1:
         raise ValueError(
-            "pointwise rhs column broadcast requires column-only repetition"
+            "pointwise rhs column broadcast requires repetition across leading dst dims"
+        )
+    if not _all_equal(facts.nr[2:], 1):
+        raise ValueError(
+            "pointwise rhs column broadcast requires repetition only across leading dst dims"
         )
     return {
-        "ncols": facts.nr[0],
-        "nrows": facts.nrows,
+        "ncols": facts.nr[0] * facts.nr[1],
+        "nrows": facts.ne[2] * facts.ne[3],
         "src1_row_stride": 1,
         "src1_ncols": 1,
     }
 
 
+def _pointwise_rhs_intra_row_repeat_shape(
+    facts: PointwiseCaseFacts,
+) -> dict[str, int]:
+    if facts.nf != 1:
+        raise ValueError("pointwise rhs intra-row repeat requires nf=1")
+    if facts.perm1 != 0:
+        raise ValueError("pointwise rhs intra-row repeat requires perm1=0")
+    if facts.ne[0] <= 1:
+        raise ValueError(
+            "pointwise rhs intra-row repeat requires more than one rhs column"
+        )
+    if facts.nr[0] <= 1:
+        raise ValueError(
+            "pointwise rhs intra-row repeat requires repetition across dst columns"
+        )
+    if not _all_equal(facts.nr[1:], 1):
+        raise ValueError(
+            "pointwise rhs intra-row repeat requires repetition only across dst columns"
+        )
+    return {
+        "ncols": facts.ne[0] * facts.nr[0],
+        "nrows": facts.src1_nrows,
+        "src1_row_stride": facts.ne[0],
+        "src1_ncols": facts.ne[0],
+    }
+
+
 POINTWISE_LAYOUT_LOWERERS: dict[
-    str, Callable[[PointwiseCaseFacts], dict[str, int]]
+    str, tuple[Callable[[PointwiseCaseFacts], dict[str, int]], ...]
 ] = {
-    "contiguous": _pointwise_contiguous_shape,
-    "contiguous_or_rhs_row_broadcast": _pointwise_contiguous_shape,
-    "contiguous_src0_rhs_column_broadcast": _pointwise_rhs_column_broadcast_shape,
+    "contiguous": (_pointwise_contiguous_shape,),
+    "contiguous_or_rhs_row_broadcast": (
+        _pointwise_contiguous_shape,
+        _pointwise_rhs_row_broadcast_shape,
+        _pointwise_scalar_broadcast_shape,
+        _pointwise_rhs_column_broadcast_shape,
+    ),
+    "contiguous_src0_rhs_row_broadcast": (_pointwise_rhs_row_broadcast_shape,),
+    "contiguous_or_row_strided_rhs": (
+        _pointwise_contiguous_shape,
+        _pointwise_rhs_row_broadcast_shape,
+        _pointwise_scalar_broadcast_shape,
+        _pointwise_rhs_column_broadcast_shape,
+        _pointwise_rhs_intra_row_repeat_shape,
+    ),
+    "row_strided_sources_contiguous_dst": (
+        _pointwise_contiguous_shape,
+        _pointwise_rhs_row_broadcast_shape,
+        _pointwise_scalar_broadcast_shape,
+        _pointwise_rhs_column_broadcast_shape,
+    ),
+    "contiguous_src0_rhs_column_broadcast": (_pointwise_rhs_column_broadcast_shape,),
 }
 
 
 def _lower_pointwise_case(case: ImportedCase, route: Mapping[str, Any]) -> dict[str, int]:
     facts = _pointwise_facts(case)
     layout = _route_layout(route)
-    lower = POINTWISE_LAYOUT_LOWERERS.get(layout)
-    if lower is None:
+    lowers = POINTWISE_LAYOUT_LOWERERS.get(layout)
+    if lowers is None:
         raise ValueError(f"no pointwise lowering is implemented for layout {layout!r}")
-    return lower(facts)
+    errors: list[str] = []
+    for lower in lowers:
+        try:
+            return lower(facts)
+        except ValueError as exc:
+            errors.append(str(exc))
+    raise ValueError(errors[0] if errors else f"no pointwise lowering is implemented for layout {layout!r}")
 
 
 def _lower_copy_case(case: ImportedCase, route: Mapping[str, Any]) -> dict[str, int]:

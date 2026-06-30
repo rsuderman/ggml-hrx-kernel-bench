@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 
-VALIDATED_IMPORT_OPS = frozenset({"ADD", "CPY", "MUL"})
+VALIDATED_IMPORT_OPS = frozenset({"ADD", "CPY", "DIV", "MUL"})
 
 
 def validated_import_ops() -> frozenset[str]:
