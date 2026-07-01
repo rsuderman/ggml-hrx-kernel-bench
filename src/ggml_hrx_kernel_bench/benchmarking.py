@@ -6,7 +6,7 @@ from statistics import mean
 from typing import Any, Iterable
 
 from .kernel_test_config import expect, load_config, validate_config
-from .kernel_test_config_runtime import case_result, execute_case, select_cases
+from .routing.api import RuntimeCaseRequest, create_router
 
 
 RESULT_SCHEMA = "ggml_hrx_kernel_bench.kernel_benchmark_results.v1"
@@ -102,32 +102,32 @@ def benchmark_config_payload(
     config_data = load_config(config_path)
     validate_config(config_data)
     artifact_dir.mkdir(parents=True, exist_ok=True)
+    router = create_router()
 
     raw_results: list[dict[str, Any]] = []
-    for current_case_id, current_case_values in select_cases(config_data, case_selectors):
+    for current_case_id, current_case_values in router.select_cases(
+        config_data, case_selectors
+    ):
         case_output_dir = artifact_dir / current_case_id
         try:
-            candidate, row, summary = execute_case(
-                config_data=config_data,
-                current_case_id=current_case_id,
-                current_case_values=current_case_values,
-                tool_dir=tool_dir,
-                target=target,
-                rocm_path=rocm_path,
-                iterations=iterations,
-                warmup_iterations=warmup_iterations,
-                max_batches=max_batches,
-                output_dir=case_output_dir,
-                require_tool=require_tool,
+            execution = router.execute_case(
+                RuntimeCaseRequest(
+                    kernel_dir=None,
+                    routing_dir=None,
+                    config_data=config_data,
+                    current_case_id=current_case_id,
+                    current_case_values=current_case_values,
+                    tool_dir=tool_dir,
+                    target=target,
+                    rocm_path=rocm_path,
+                    iterations=iterations,
+                    warmup_iterations=warmup_iterations,
+                    max_batches=max_batches,
+                    output_dir=case_output_dir,
+                    require_tool=require_tool,
+                )
             )
-            result = case_result(
-                candidate=candidate,
-                current_case_id=current_case_id,
-                current_case_values=current_case_values,
-                row=row,
-                summary=summary,
-                output_dir=case_output_dir,
-            )
+            result = router.case_result(execution)
         except Exception as exc:
             result = {
                 "case_id": current_case_id,

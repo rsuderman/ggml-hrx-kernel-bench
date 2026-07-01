@@ -4,10 +4,13 @@ import argparse
 from pathlib import Path
 from typing import Any
 
-from .cli import run_candidate_row
-from .config import BenchConfig, ToolPaths
-from .family_specs import normalize_shape
-from .hrx2 import (
+from ...cli import run_candidate_row
+from ...config import BenchConfig, ToolPaths
+from ...family_specs import normalize_shape
+from ...kernel_test_config import expect, load_config
+from ...reporting import correctness_ok
+from ..case_selection import select_case, select_cases
+from .routes import (
     Candidate,
     PROJECT_ROOT,
     build_config,
@@ -16,40 +19,9 @@ from .hrx2 import (
     route_launch,
     stable_id,
 )
-from .kernel_test_config import expect, load_config
-from .reporting import correctness_ok
 
 
 ROOT = PROJECT_ROOT
-
-
-def case_id(params: list[str], values: list[int]) -> str:
-    return "_".join(f"{name}{value}" for name, value in zip(params, values, strict=True))
-
-
-def list_cases(config: dict[str, Any]) -> list[tuple[str, list[int]]]:
-    params = list(config["params"])
-    return [(case_id(params, list(values)), list(values)) for values in config["cases"]]
-
-
-def select_case(config: dict[str, Any], selector: str) -> tuple[str, list[int]]:
-    cases = list_cases(config)
-    if selector.isdigit():
-        index = int(selector)
-        expect(0 <= index < len(cases), f"case index out of range: {index}")
-        return cases[index]
-    for current_case_id, values in cases:
-        if current_case_id == selector:
-            return current_case_id, values
-    raise RuntimeError(f"case not found in config: {selector}")
-
-
-def select_cases(
-    config: dict[str, Any], selectors: list[str] | None
-) -> list[tuple[str, list[int]]]:
-    if not selectors:
-        return list_cases(config)
-    return [select_case(config, selector) for selector in selectors]
 
 
 def select_route(
@@ -88,18 +60,19 @@ def shape_for_case(config: dict[str, Any], values: list[int]) -> dict[str, int]:
 
 
 def build_candidate(
+    *,
+    kernel_dir: Path,
+    routing_dir: Path,
     config_data: dict[str, Any],
     current_case_id: str,
     current_case_values: list[int],
 ) -> Candidate:
     family = str(config_data["kernel"])
-    catalog_dir = ROOT / "catalog" / "hrx2"
-    kernel_dir = ROOT / "kernels" / "hrx2"
-    route = select_route(catalog_dir, family=family, route_id=config_data.get("route_id"))
+    route = select_route(routing_dir, family=family, route_id=config_data.get("route_id"))
     shape = shape_for_case(config_data, current_case_values)
     config_bindings, values, missing = build_config(route, shape)
     expect(not missing, f"missing shape/config bindings: {missing}")
-    sources = load_sources_by_id(kernel_dir, catalog_dir)
+    sources = load_sources_by_id(kernel_dir, routing_dir)
     source_id = str(route.get("source_id") or family)
     source = sources.get(source_id)
     expect(source is not None, f"kernel source is not available for source_id={source_id}")
@@ -167,6 +140,8 @@ def build_run_args(
 
 def execute_case(
     *,
+    kernel_dir: Path | None,
+    routing_dir: Path | None,
     config_data: dict[str, Any],
     current_case_id: str,
     current_case_values: list[int],
@@ -179,7 +154,15 @@ def execute_case(
     output_dir: Path,
     require_tool: Any,
 ) -> tuple[Candidate, dict[str, Any], dict[str, Any]]:
-    candidate = build_candidate(config_data, current_case_id, current_case_values)
+    resolved_kernel_dir = kernel_dir or (ROOT / "kernels" / "hrx2")
+    resolved_routing_dir = routing_dir or (ROOT / "catalog" / "hrx2")
+    candidate = build_candidate(
+        kernel_dir=resolved_kernel_dir,
+        routing_dir=resolved_routing_dir,
+        config_data=config_data,
+        current_case_id=current_case_id,
+        current_case_values=current_case_values,
+    )
     output_dir.mkdir(parents=True, exist_ok=True)
     bench_config = build_bench_config(
         tool_dir=tool_dir,

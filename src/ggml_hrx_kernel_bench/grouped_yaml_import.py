@@ -7,16 +7,13 @@ from typing import Any, Iterable
 
 import yaml
 
-from .hrx2 import iter_routes
-from .import_route_resolution import resolve_case_routes, route_family
+from .routing.api import create_router
 from .import_models import (
     ImportedCase,
     ImportedOpGroup,
     ImportedSuite,
     MappingStatus,
     ResolvedBenchmarkCase,
-    UnmappedCase,
-    UnmappedReason,
 )
 
 
@@ -126,124 +123,13 @@ def split_suite_by_op(suite: ImportedSuite) -> dict[str, ImportedSuite]:
     }
 
 
-def _routes_by_op(catalog_dir: Path) -> dict[str, list[dict[str, Any]]]:
-    grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
-    for route in iter_routes(catalog_dir):
-        op = str(route.get("op") or "").upper()
-        if op:
-            grouped[op].append(route)
-    return grouped
-
-
-def _resolve_route(
-    case: ImportedCase,
-    routes_by_op: dict[str, list[dict[str, Any]]],
-) -> tuple[
-    dict[str, Any] | None,
-    dict[str, int] | None,
-    list[dict[str, Any]],
-    UnmappedReason | None,
-    str | None,
-]:
-    op_routes = list(routes_by_op.get(case.op.upper(), ()))
-    resolution, candidates, reason, detail = resolve_case_routes(case, op_routes)
-    if resolution is None:
-        return None, None, candidates, reason, detail
-    return resolution.route, resolution.shape, candidates, None, None
-
-
-def _candidate_kernel_families(routes: Iterable[dict[str, Any]]) -> tuple[str, ...]:
-    families = sorted(
-        {
-            route_family(route)
-            for route in routes
-            if route_family(route)
-        }
-    )
-    return tuple(families)
-
-
-def _unmapped_case(
-    case: ImportedCase,
+def resolve_imported_suite(
+    suite: ImportedSuite,
     *,
-    status: MappingStatus,
-    reason: UnmappedReason,
-    detail: str | None = None,
-    candidate_kernel_families: tuple[str, ...] = (),
-    candidate_route_ids: tuple[str, ...] = (),
-) -> UnmappedCase:
-    return UnmappedCase(
-        imported=case,
-        mapping_status=status,
-        reason=reason,
-        detail=detail,
-        candidate_kernel_families=candidate_kernel_families,
-        candidate_route_ids=candidate_route_ids,
-    )
-
-
-def resolve_imported_suite(suite: ImportedSuite, *, catalog_dir: Path) -> ImportedSuite:
-    routes_by_op = _routes_by_op(catalog_dir)
-    resolved: list[ResolvedBenchmarkCase] = []
-    unmapped: list[UnmappedCase] = []
-
-    for group in suite.op_groups:
-        for case in group.cases:
-            op_routes = list(routes_by_op.get(case.op.upper(), ()))
-            if not op_routes:
-                unmapped.append(
-                    _unmapped_case(
-                        case,
-                        status=MappingStatus.UNMAPPED,
-                        reason=UnmappedReason.NO_KERNEL_FAMILY_MAPPING,
-                        detail="no catalog route exists for this op",
-                    )
-                )
-                continue
-
-            route, shape, route_candidates, route_reason, route_detail = _resolve_route(
-                case,
-                routes_by_op,
-            )
-            if route_reason is not None:
-                status = (
-                    MappingStatus.AMBIGUOUS
-                    if route_reason == UnmappedReason.AMBIGUOUS_ROUTE_MATCH
-                    else MappingStatus.UNMAPPED
-                )
-                unmapped.append(
-                    _unmapped_case(
-                        case,
-                        status=status,
-                        reason=route_reason,
-                        detail=route_detail or f"could not resolve a unique route for op {case.op}",
-                        candidate_kernel_families=_candidate_kernel_families(route_candidates or op_routes),
-                        candidate_route_ids=tuple(
-                            str(candidate.get("id") or "")
-                            for candidate in route_candidates
-                            if candidate.get("id")
-                        ),
-                    )
-                )
-                continue
-
-            if shape is None:
-                raise RuntimeError("resolved route is missing canonical shape")
-            params = list(shape.keys())
-            values = [int(shape[param]) for param in params]
-            resolved.append(
-                ResolvedBenchmarkCase(
-                    imported=case,
-                    kernel_family=route_family(route),
-                    route_id=str(route.get("id") or ""),
-                    params=list(params),
-                    values=list(values),
-                )
-            )
-
-    suite.resolved = resolved
-    suite.unmapped = unmapped
-    return suite
+    routing_version: str,
+    routing_dir: Path,
+) -> ImportedSuite:
+    return create_router(version=routing_version, routing_dir=routing_dir).resolve_imported_suite(suite)
 
 
 def emit_compact_configs(suite: ImportedSuite, output_dir: Path) -> list[Path]:
@@ -482,11 +368,12 @@ def materialize_suite_bundle(
     suite: ImportedSuite,
     *,
     output_dir: Path,
-    catalog_dir: Path,
+    routing_version: str,
+    routing_dir: Path,
     op_name: str | None = None,
 ) -> dict[str, Any]:
     config_dir = output_dir / "generated-import-configs"
-    resolve_imported_suite(suite, catalog_dir=catalog_dir)
+    resolve_imported_suite(suite, routing_version=routing_version, routing_dir=routing_dir)
     config_paths = emit_compact_configs(suite, config_dir)
     import_coverage_path = output_dir / "import-coverage.json"
     imported_workload_path = output_dir / "imported-workload.json"
@@ -519,12 +406,18 @@ def materialize_grouped_yaml(
     yaml_path: Path,
     *,
     output_dir: Path,
-    catalog_dir: Path,
+    routing_version: str,
+    routing_dir: Path,
     split_by_op: bool,
 ) -> dict[str, Any]:
     suite = load_grouped_yaml_suite(yaml_path)
     if not split_by_op:
-        return materialize_suite_bundle(suite, output_dir=output_dir, catalog_dir=catalog_dir)
+        return materialize_suite_bundle(
+            suite,
+            output_dir=output_dir,
+            routing_version=routing_version,
+            routing_dir=routing_dir,
+        )
 
     operations_dir = output_dir / "ops"
     operations_dir.mkdir(parents=True, exist_ok=True)
@@ -534,7 +427,8 @@ def materialize_grouped_yaml(
         operation_payloads[op_name] = materialize_suite_bundle(
             op_suite,
             output_dir=op_output_dir,
-            catalog_dir=catalog_dir,
+            routing_version=routing_version,
+            routing_dir=routing_dir,
             op_name=op_name,
         )
 

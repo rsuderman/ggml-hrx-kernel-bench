@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from ggml_hrx_kernel_bench.route_schedules import (
+from ggml_hrx_kernel_bench.routing.v1.export import _test_schedule_for_family
+from ggml_hrx_kernel_bench.routing.v1.schedules import (
     concrete_shapes_for_route,
     schedule_points_for_route,
     select_test_route,
 )
-from ggml_hrx_kernel_bench.llama_catalog import _test_schedule_for_family
 
 
 def test_edge_schedule_is_bounded_and_annotated() -> None:

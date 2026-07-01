@@ -7,15 +7,17 @@ from typing import Any
 
 from .config import BenchConfig, ToolPaths
 from .fusion_profitability import analyze_fusion_profitability
-from .hrx2 import (
-    DEFAULT_HRX2_CATALOG_DIR,
-    DEFAULT_HRX2_KERNEL_DIR,
+from .routing.api import (
     Candidate,
-    all_candidates,
-    build_manifest,
+    CandidateQuery,
+    DEFAULT_KERNEL_DIR,
+    DEFAULT_ROUTING_VERSION,
+    ExportRequest,
+    create_router,
+    default_routing_dir,
+    supported_routing_versions,
 )
 from .ledger import LedgerWriter, utc_run_id
-from .llama_catalog import export_llama_catalog
 from .observed_shapes import load_observed_shapes, read_observations_jsonl, save_observed_shapes
 from .oracles import generate_oracle, write_workbench
 from .reporting import ReportOptions, write_markdown_report
@@ -60,9 +62,16 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--loom-compile", type=Path)
     parser.add_argument("--iree-benchmark-loom", type=Path)
     parser.add_argument("--values", type=Path, help="JSON object containing concrete parameter values for --spec mode")
-    parser.add_argument("--hrx2-kernel-dir", type=Path, default=DEFAULT_HRX2_KERNEL_DIR)
-    parser.add_argument("--hrx2-catalog-dir", type=Path, default=DEFAULT_HRX2_CATALOG_DIR)
-    parser.add_argument("--observed-shapes", type=Path, help="observed shape metadata JSON; defaults to <catalog>/observed_shapes.json")
+    parser.add_argument(
+        "--routing-version",
+        choices=supported_routing_versions(),
+        default=DEFAULT_ROUTING_VERSION,
+    )
+    parser.add_argument("--kernel-dir", type=Path, default=DEFAULT_KERNEL_DIR)
+    parser.add_argument("--hrx2-kernel-dir", type=Path, dest="kernel_dir", help=argparse.SUPPRESS)
+    parser.add_argument("--routing-dir", type=Path)
+    parser.add_argument("--hrx2-catalog-dir", type=Path, dest="routing_dir", help=argparse.SUPPRESS)
+    parser.add_argument("--observed-shapes", type=Path, help="observed shape metadata JSON; defaults to <routing-dir>/observed_shapes.json")
     parser.add_argument("--shape-trace", type=Path, action="append", default=[], help="JSONL observed-shape trace to merge with accumulate-shapes")
     parser.add_argument("--original-hrx2-root", type=Path, help="optional original HRX2 root for import hash comparison")
     parser.add_argument("--family", action="append", default=[], help="family/source/route filter; may be repeated or comma separated")
@@ -100,6 +109,8 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+    if args.routing_dir is None:
+        args.routing_dir = default_routing_dir(args.routing_version)
     args.output_dir.mkdir(parents=True, exist_ok=True)
     ledger = LedgerWriter(args.output_dir / "ledger.jsonl")
     config = BenchConfig(
@@ -142,7 +153,12 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def command_import(args: argparse.Namespace, ledger: LedgerWriter) -> int:
-    manifest = build_manifest(args.hrx2_kernel_dir, args.hrx2_catalog_dir, original_root=args.original_hrx2_root)
+    router = create_router(
+        version=args.routing_version,
+        kernel_dir=args.kernel_dir,
+        routing_dir=args.routing_dir,
+    )
+    manifest = router.manifest(original_root=args.original_hrx2_root)
     manifest_path = args.output_dir / "hrx2_manifest.json"
     manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     row = {
@@ -151,8 +167,9 @@ def command_import(args: argparse.Namespace, ledger: LedgerWriter) -> int:
         "action": "import-hrx2",
         "status": "ok",
         "manifest_path": str(manifest_path),
-        "kernel_dir": str(args.hrx2_kernel_dir),
-        "catalog_dir": str(args.hrx2_catalog_dir),
+        "routing_version": args.routing_version,
+        "kernel_dir": str(args.kernel_dir),
+        "routing_dir": str(args.routing_dir),
         "summary": {
             "kernel_count": manifest["kernel_count"],
             "catalog_source_count": manifest["catalog_source_count"],
@@ -333,14 +350,19 @@ def command_report(args: argparse.Namespace, ledger: LedgerWriter) -> int:
 def command_export_llama(args: argparse.Namespace, ledger: LedgerWriter) -> int:
     if args.llama_catalog_dir is None:
         raise ValueError("export-llama requires --llama-catalog-dir")
-    result = export_llama_catalog(
-        output_dir=args.llama_catalog_dir,
-        kernel_dir=args.hrx2_kernel_dir,
-        catalog_dir=args.hrx2_catalog_dir,
-        target_key=args.target,
-        families=filter_set(args.family),
-        catalog_id=args.llama_catalog_id,
-        sweep=args.sweep,
+    router = create_router(
+        version=args.routing_version,
+        kernel_dir=args.kernel_dir,
+        routing_dir=args.routing_dir,
+    )
+    result = router.export(
+        ExportRequest(
+            output_dir=args.llama_catalog_dir,
+            target_key=args.target,
+            families=filter_set(args.family),
+            routing_id=args.llama_catalog_id,
+            sweep=args.sweep,
+        )
     )
     ledger.append(
         {
@@ -389,19 +411,24 @@ def report_ledger_paths(args: argparse.Namespace) -> list[Path]:
 def selected_candidates(args: argparse.Namespace) -> list[Candidate]:
     families = filter_set(args.family)
     observed = load_observed_shapes(observed_shapes_path(args)) if args.sweep == "observed" else None
-    return all_candidates(
-        args.hrx2_kernel_dir,
-        args.hrx2_catalog_dir,
-        families=families,
-        limit=args.limit,
-        sweep=args.sweep,
+    router = create_router(
+        version=args.routing_version,
+        kernel_dir=args.kernel_dir,
+        routing_dir=args.routing_dir,
         observed_shapes=observed,
-        include_source_only=args.include_source_only,
+    )
+    return router.candidates(
+        CandidateQuery(
+            families=families,
+            limit=args.limit,
+            sweep=args.sweep,
+            include_source_only=args.include_source_only,
+        )
     )
 
 
 def observed_shapes_path(args: argparse.Namespace) -> Path:
-    return args.observed_shapes or (args.hrx2_catalog_dir / "observed_shapes.json")
+    return args.observed_shapes or (args.routing_dir / "observed_shapes.json")
 
 
 def filter_set(values: list[str]) -> set[str] | None:

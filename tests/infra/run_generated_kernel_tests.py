@@ -7,7 +7,7 @@ from pathlib import Path
 import bootstrap  # noqa: F401
 
 from ggml_hrx_kernel_bench.kernel_test_config import load_config
-from ggml_hrx_kernel_bench.kernel_test_config_runtime import case_result, execute_case, select_case
+from ggml_hrx_kernel_bench.routing.api import DEFAULT_KERNEL_DIR, RuntimeCaseRequest, create_router, default_routing_dir, supported_routing_versions
 from ggml_hrx_kernel_bench.required_tools import require_tool
 
 
@@ -131,13 +131,27 @@ def main() -> int:
     parser.add_argument("--iterations", type=int, default=1)
     parser.add_argument("--warmup-iterations", type=int, default=0)
     parser.add_argument("--max-batches", type=int, default=1)
+    parser.add_argument(
+        "--routing-version",
+        choices=supported_routing_versions(),
+        default="v1",
+    )
+    parser.add_argument("--routing-dir", type=Path)
+    parser.add_argument("--kernel-dir", type=Path, default=DEFAULT_KERNEL_DIR)
     args = parser.parse_args()
+    if args.routing_dir is None:
+        args.routing_dir = default_routing_dir(args.routing_version)
 
     manifest_path = Path(args.manifest_path).resolve()
     output_dir = Path(args.output_dir).resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
     payload = _load_manifest(manifest_path)
     total_entries = len(payload["entries"])
+    router = create_router(
+        version=args.routing_version,
+        kernel_dir=args.kernel_dir.resolve(),
+        routing_dir=args.routing_dir.resolve(),
+    )
 
     results = []
     for index, entry in enumerate(payload["entries"]):
@@ -145,7 +159,9 @@ def main() -> int:
         config_path = Path(str(entry.get("config_path") or "")).resolve()
         _expect(config_path.is_file(), f"missing generated config {config_path}")
         config_data = load_config(config_path)
-        current_case_id, current_case_values = select_case(config_data, args.case_selector)
+        current_case_id, current_case_values = router.select_case(
+            config_data, args.case_selector
+        )
         _print_running_case(
             index=index,
             total=total_entries,
@@ -155,27 +171,24 @@ def main() -> int:
             case_values=current_case_values,
         )
         case_output_dir = output_dir / f"{index:03d}-{_safe_name(config_path.stem)}"
-        candidate, row, summary = execute_case(
-            config_data=config_data,
-            current_case_id=current_case_id,
-            current_case_values=current_case_values,
-            tool_dir=args.tool_dir,
-            target=args.target,
-            rocm_path=args.rocm_path,
-            iterations=args.iterations,
-            warmup_iterations=args.warmup_iterations,
-            max_batches=args.max_batches,
-            output_dir=case_output_dir,
-            require_tool=require_tool,
+        execution = router.execute_case(
+            RuntimeCaseRequest(
+                kernel_dir=args.kernel_dir.resolve(),
+                routing_dir=args.routing_dir.resolve(),
+                config_data=config_data,
+                current_case_id=current_case_id,
+                current_case_values=current_case_values,
+                tool_dir=args.tool_dir,
+                target=args.target,
+                rocm_path=args.rocm_path,
+                iterations=args.iterations,
+                warmup_iterations=args.warmup_iterations,
+                max_batches=args.max_batches,
+                output_dir=case_output_dir,
+                require_tool=require_tool,
+            )
         )
-        result = case_result(
-            candidate=candidate,
-            current_case_id=current_case_id,
-            current_case_values=current_case_values,
-            row=row,
-            summary=summary,
-            output_dir=case_output_dir,
-        )
+        result = router.case_result(execution)
         result["config_path"] = str(config_path)
         results.append(result)
         if _runtime_environment_blocked(result):

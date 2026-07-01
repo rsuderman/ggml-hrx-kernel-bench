@@ -9,6 +9,7 @@ from pathlib import Path
 from bootstrap import CATALOG_DIR
 
 from ggml_hrx_kernel_bench.grouped_yaml_import import materialize_grouped_yaml
+from ggml_hrx_kernel_bench.routing.api import supported_routing_versions
 
 
 def _expect(condition: bool, message: str) -> None:
@@ -90,6 +91,12 @@ def main() -> int:
     parser.add_argument("--expected-coverage", required=True)
     parser.add_argument("--tool-dir", help="optional directory containing loom-link, loom-compile, and iree-benchmark-loom")
     parser.add_argument("--split-by-op", action="store_true")
+    parser.add_argument(
+        "--routing-version",
+        choices=supported_routing_versions(),
+        default="v1",
+    )
+    parser.add_argument("--routing-dir", type=Path, default=CATALOG_DIR)
     args = parser.parse_args()
 
     if args.tool_dir:
@@ -104,7 +111,8 @@ def main() -> int:
     payload = materialize_grouped_yaml(
         yaml_path,
         output_dir=output_dir,
-        catalog_dir=CATALOG_DIR,
+        routing_version=args.routing_version,
+        routing_dir=args.routing_dir.resolve(),
         split_by_op=args.split_by_op,
     )
 
