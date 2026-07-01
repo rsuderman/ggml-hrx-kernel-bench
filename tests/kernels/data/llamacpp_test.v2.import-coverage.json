@@ -1,6 +1,9 @@
 {
   "schema": "ggml_hrx_kernel_bench.import_test_coverage.v1",
+  "source_path": "/home/rsuderman/repos/ggml-hrx-kernel-bench/tests/kernels/data/llamacpp_test.yaml",
   "operation_count": 115,
+  "total_pass_case_count": 8,
+  "total_fail_case_count": 11324,
   "operations": [
     {
       "op": "ABS",
@@ -14,8 +17,8 @@
     },
     {
       "op": "ADD",
-      "pass_case_count": 0,
-      "fail_case_count": 98
+      "pass_case_count": 8,
+      "fail_case_count": 90
     },
     {
       "op": "ADD1",
@@ -577,7 +580,5 @@
       "pass_case_count": 0,
       "fail_case_count": 1
     }
-  ],
-  "total_pass_case_count": 0,
-  "total_fail_case_count": 11332
+  ]
 }

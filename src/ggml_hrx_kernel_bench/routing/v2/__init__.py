@@ -1,1 +1,1 @@
-"""Placeholder package for the next routing backend version."""
+"""Version 2 routing backend."""

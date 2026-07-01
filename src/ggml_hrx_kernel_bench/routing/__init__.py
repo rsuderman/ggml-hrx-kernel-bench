@@ -3,8 +3,6 @@
 from .api import (
     Candidate,
     CandidateQuery,
-    DEFAULT_KERNEL_DIR,
-    DEFAULT_ROUTING_DIRS,
     DEFAULT_ROUTING_VERSION,
     ExecutedCase,
     ExportRequest,
@@ -13,15 +11,12 @@ from .api import (
     RoutingExportResult,
     RuntimeCaseRequest,
     create_router,
-    default_routing_dir,
     supported_routing_versions,
 )
 
 __all__ = [
     "Candidate",
     "CandidateQuery",
-    "DEFAULT_KERNEL_DIR",
-    "DEFAULT_ROUTING_DIRS",
     "DEFAULT_ROUTING_VERSION",
     "ExecutedCase",
     "ExportRequest",
@@ -30,6 +25,5 @@ __all__ = [
     "RoutingExportResult",
     "RuntimeCaseRequest",
     "create_router",
-    "default_routing_dir",
     "supported_routing_versions",
 ]

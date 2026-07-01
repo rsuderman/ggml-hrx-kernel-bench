@@ -7,7 +7,7 @@ from pathlib import Path
 import bootstrap  # noqa: F401
 
 from ggml_hrx_kernel_bench.kernel_test_config import load_config
-from ggml_hrx_kernel_bench.routing.api import DEFAULT_KERNEL_DIR, RuntimeCaseRequest, create_router, default_routing_dir, supported_routing_versions
+from ggml_hrx_kernel_bench.routing.api import RuntimeCaseRequest, create_router, supported_routing_versions
 from ggml_hrx_kernel_bench.required_tools import require_tool
 
 
@@ -137,10 +137,8 @@ def main() -> int:
         default="v1",
     )
     parser.add_argument("--routing-dir", type=Path)
-    parser.add_argument("--kernel-dir", type=Path, default=DEFAULT_KERNEL_DIR)
+    parser.add_argument("--kernel-dir", type=Path)
     args = parser.parse_args()
-    if args.routing_dir is None:
-        args.routing_dir = default_routing_dir(args.routing_version)
 
     manifest_path = Path(args.manifest_path).resolve()
     output_dir = Path(args.output_dir).resolve()
@@ -149,11 +147,10 @@ def main() -> int:
     total_entries = len(payload["entries"])
     router = create_router(
         version=args.routing_version,
-        kernel_dir=args.kernel_dir.resolve(),
-        routing_dir=args.routing_dir.resolve(),
+        kernel_dir=args.kernel_dir.resolve() if args.kernel_dir else None,
+        routing_dir=args.routing_dir.resolve() if args.routing_dir else None,
     )
 
-    results = []
     for index, entry in enumerate(payload["entries"]):
         _expect(isinstance(entry, dict), f"entries[{index}] must be an object")
         config_path = Path(str(entry.get("config_path") or "")).resolve()
@@ -173,8 +170,8 @@ def main() -> int:
         case_output_dir = output_dir / f"{index:03d}-{_safe_name(config_path.stem)}"
         execution = router.execute_case(
             RuntimeCaseRequest(
-                kernel_dir=args.kernel_dir.resolve(),
-                routing_dir=args.routing_dir.resolve(),
+                kernel_dir=router.context.kernel_dir,
+                routing_dir=router.context.routing_dir,
                 config_data=config_data,
                 current_case_id=current_case_id,
                 current_case_values=current_case_values,
@@ -190,7 +187,6 @@ def main() -> int:
         )
         result = router.case_result(execution)
         result["config_path"] = str(config_path)
-        results.append(result)
         if _runtime_environment_blocked(result):
             _print_runtime_blocked(manifest_path=manifest_path, result=result)
             return 125
@@ -209,7 +205,6 @@ def main() -> int:
             )
             raise RuntimeError("kernel correctness check failed")
 
-    print(json.dumps({"manifest_path": str(manifest_path), "result_count": len(results), "results": results}, sort_keys=True))
     return 0
 
 

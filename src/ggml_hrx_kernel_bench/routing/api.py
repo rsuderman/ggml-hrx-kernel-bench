@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Protocol
 
+from ._config import DEFAULT_ROUTING_VERSION, build_routing_context, supported_routing_versions
 from .models import (
     Candidate,
     CandidateQuery,
@@ -13,25 +14,6 @@ from .models import (
     RoutingExportResult,
     RuntimeCaseRequest,
 )
-from .v1.routes import DEFAULT_V1_KERNEL_DIR, DEFAULT_V1_ROUTING_DIR
-
-DEFAULT_ROUTING_VERSION = "v1"
-DEFAULT_KERNEL_DIR = DEFAULT_V1_KERNEL_DIR
-DEFAULT_ROUTING_DIRS: dict[str, Path] = {
-    "v1": DEFAULT_V1_ROUTING_DIR,
-    "v2": DEFAULT_V1_ROUTING_DIR.parent / "v2",
-}
-
-
-def default_routing_dir(version: str) -> Path:
-    try:
-        return DEFAULT_ROUTING_DIRS[version]
-    except KeyError as exc:
-        raise ValueError(f"unsupported routing version: {version}") from exc
-
-
-def supported_routing_versions() -> tuple[str, ...]:
-    return ("v1", "v2")
 
 
 class RoutingBackend(Protocol):
@@ -61,7 +43,7 @@ class RoutingBackend(Protocol):
 def create_router(
     *,
     version: str = DEFAULT_ROUTING_VERSION,
-    kernel_dir: Path = DEFAULT_KERNEL_DIR,
+    kernel_dir: Path | None = None,
     routing_dir: Path | None = None,
     observed_shapes=None,
 ) -> RoutingBackend:
@@ -69,9 +51,10 @@ def create_router(
         from .v1.backend import V1RoutingBackend
 
         return V1RoutingBackend(
-            RoutingContext(
+            build_routing_context(
+                version=version,
                 kernel_dir=kernel_dir,
-                routing_dir=routing_dir or default_routing_dir(version),
+                routing_dir=routing_dir,
                 observed_shapes=observed_shapes,
             )
         )
@@ -79,9 +62,10 @@ def create_router(
         from .v2.backend import V2RoutingBackend
 
         return V2RoutingBackend(
-            RoutingContext(
+            build_routing_context(
+                version=version,
                 kernel_dir=kernel_dir,
-                routing_dir=routing_dir or default_routing_dir(version),
+                routing_dir=routing_dir,
                 observed_shapes=observed_shapes,
             )
         )
@@ -91,8 +75,6 @@ def create_router(
 __all__ = [
     "Candidate",
     "CandidateQuery",
-    "DEFAULT_KERNEL_DIR",
-    "DEFAULT_ROUTING_DIRS",
     "DEFAULT_ROUTING_VERSION",
     "ExecutedCase",
     "ExportRequest",
@@ -101,6 +83,5 @@ __all__ = [
     "RoutingExportResult",
     "RuntimeCaseRequest",
     "create_router",
-    "default_routing_dir",
     "supported_routing_versions",
 ]

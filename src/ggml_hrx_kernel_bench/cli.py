@@ -10,11 +10,9 @@ from .fusion_profitability import analyze_fusion_profitability
 from .routing.api import (
     Candidate,
     CandidateQuery,
-    DEFAULT_KERNEL_DIR,
     DEFAULT_ROUTING_VERSION,
     ExportRequest,
     create_router,
-    default_routing_dir,
     supported_routing_versions,
 )
 from .ledger import LedgerWriter, utc_run_id
@@ -67,7 +65,7 @@ def build_parser() -> argparse.ArgumentParser:
         choices=supported_routing_versions(),
         default=DEFAULT_ROUTING_VERSION,
     )
-    parser.add_argument("--kernel-dir", type=Path, default=DEFAULT_KERNEL_DIR)
+    parser.add_argument("--kernel-dir", type=Path)
     parser.add_argument("--hrx2-kernel-dir", type=Path, dest="kernel_dir", help=argparse.SUPPRESS)
     parser.add_argument("--routing-dir", type=Path)
     parser.add_argument("--hrx2-catalog-dir", type=Path, dest="routing_dir", help=argparse.SUPPRESS)
@@ -109,8 +107,6 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
-    if args.routing_dir is None:
-        args.routing_dir = default_routing_dir(args.routing_version)
     args.output_dir.mkdir(parents=True, exist_ok=True)
     ledger = LedgerWriter(args.output_dir / "ledger.jsonl")
     config = BenchConfig(
@@ -168,8 +164,8 @@ def command_import(args: argparse.Namespace, ledger: LedgerWriter) -> int:
         "status": "ok",
         "manifest_path": str(manifest_path),
         "routing_version": args.routing_version,
-        "kernel_dir": str(args.kernel_dir),
-        "routing_dir": str(args.routing_dir),
+        "kernel_dir": str(router.context.kernel_dir),
+        "routing_dir": str(router.context.routing_dir),
         "summary": {
             "kernel_count": manifest["kernel_count"],
             "catalog_source_count": manifest["catalog_source_count"],
@@ -428,7 +424,13 @@ def selected_candidates(args: argparse.Namespace) -> list[Candidate]:
 
 
 def observed_shapes_path(args: argparse.Namespace) -> Path:
-    return args.observed_shapes or (args.routing_dir / "observed_shapes.json")
+    if args.observed_shapes is not None:
+        return args.observed_shapes
+    return create_router(
+        version=args.routing_version,
+        kernel_dir=args.kernel_dir,
+        routing_dir=args.routing_dir,
+    ).context.routing_dir / "observed_shapes.json"
 
 
 def filter_set(values: list[str]) -> set[str] | None:

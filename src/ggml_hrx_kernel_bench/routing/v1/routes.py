@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable
 
-from ...family_specs import concrete_shapes_for_route, resolve_binding_value
+from .family_specs import concrete_shapes_for_route, resolve_binding_value
 from ...observed_shapes import ObservedShapeCatalog
 from ...specs import file_sha256
 from .schedules import schedule_for_shape

@@ -6,7 +6,7 @@ from typing import Any
 
 from ...cli import run_candidate_row
 from ...config import BenchConfig, ToolPaths
-from ...family_specs import normalize_shape
+from .family_specs import normalize_shape
 from ...kernel_test_config import expect, load_config
 from ...reporting import correctness_ok
 from ..case_selection import select_case, select_cases
