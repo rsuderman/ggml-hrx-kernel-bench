@@ -22,47 +22,73 @@ def _write_v2_descriptor(routing_dir: Path) -> None:
         json.dumps(
             {
                 "schema": "ggml_hrx_kernel_bench.routing_descriptors.v2",
-                "routes": [
-                    {
-                        "id": "add_f32_contiguous_2d",
-                        "family": "add_f32",
-                        "op": "ADD",
-                        "layout": "contiguous",
-                        "kernel": {
-                            "source_id": "add_pointwise_f32",
-                            "path": "add_pointwise_f32.loom",
-                            "root_symbol": "@hrx2_add_f32_contiguous_2d",
-                            "export_name": "hrx2_add_f32_contiguous_2d",
-                        },
-                        "types": {"src0": "F32", "src1": "F32", "dst": "F32"},
-                        "match": {
-                            "kind": "pointwise_contiguous_2d",
-                            "ncols": {"min": 1, "max": 65536},
-                            "nrows": {"min": 64, "max": 1048576},
-                        },
-                        "launch": {
-                            "workgroup_size": [256, 1, 1],
-                            "rows_per_workgroup": 1,
-                            "cols_per_workgroup": 256,
-                        },
-                        "config": {
-                            "bindings": [
-                                {
-                                    "key": "@hrx2.shape.pointwise.ncols",
-                                    "source": "shape.ncols",
-                                },
-                                {
-                                    "key": "@hrx2.shape.pointwise.nrows",
-                                    "source": "shape.nrows",
-                                },
-                                {
-                                    "key": "@hrx2.tuning.pointwise.workgroup_size",
-                                    "value": "256",
-                                },
-                            ]
-                        },
-                    }
+                "routes": {"ADD": ["add_f32.json"]},
+            },
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (routing_dir / "add_f32.json").write_text(
+        json.dumps(
+            {
+                "id": "add_f32_contiguous_2d",
+                "family": "add_f32",
+                "kernel": {
+                    "source_id": "add_pointwise_f32",
+                    "path": "add_pointwise_f32.loom",
+                    "root_symbol": "@hrx2_add_f32_contiguous_2d",
+                    "export_name": "hrx2_add_f32_contiguous_2d",
+                },
+                "tensors": {
+                    "src0": {
+                        "dtype": "F32",
+                        "dimensions": ["ncols", "nrows"],
+                        "strides": ["src0_stride_ncols", "src0_stride_nrows"],
+                    },
+                    "src1": {
+                        "dtype": "F32",
+                        "dimensions": ["ncols", "nrows"],
+                        "strides": ["src1_stride_ncols", "src1_stride_nrows"],
+                    },
+                    "dst": {
+                        "dtype": "F32",
+                        "dimensions": ["ncols", "nrows"],
+                        "strides": ["dst_stride_ncols", "dst_stride_nrows"],
+                    },
+                },
+                "constraints": [
+                    {"name": "ncols", "min": 1, "max": 65536},
+                    {"name": "nrows", "min": 64, "max": 1048576},
+                    {"name": "src0_stride_ncols", "value": 1},
+                    {"name": "src0_stride_nrows", "dimension": "ncols"},
+                    {"name": "src1_stride_ncols", "value": 1},
+                    {"name": "src1_stride_nrows", "dimension": "ncols"},
+                    {"name": "dst_stride_ncols", "value": 1},
+                    {"name": "dst_stride_nrows", "dimension": "ncols"},
                 ],
+                "launch": {
+                    "workgroup_size": [256, 1, 1],
+                    "rows_per_workgroup": 1,
+                    "cols_per_workgroup": 256,
+                },
+                "config": {
+                    "bindings": [
+                        {
+                            "key": "@hrx2.shape.pointwise.ncols",
+                            "source": "tensor.dst.dimensions.ncols.size",
+                        },
+                        {
+                            "key": "@hrx2.shape.pointwise.nrows",
+                            "source": "tensor.dst.dimensions.nrows.size",
+                        },
+                        {
+                            "key": "@hrx2.tuning.pointwise.workgroup_size",
+                            "value": "256",
+                        },
+                    ]
+                },
             },
             indent=2,
             sort_keys=True,

@@ -29,17 +29,25 @@ from ..models import (
     RuntimeCaseRequest,
 )
 from .descriptors import (
+    ConcreteTensor,
+    ConcreteTensorDimension,
     V2Route,
     build_manifest,
     default_shape_for_route,
     iter_routes,
     load_routes,
+    load_routes_for_op,
+    materialize_route_tensors,
     route_accepts_dtype,
-    route_accepts_shape,
+    route_accepts_tensors,
     route_dispatch,
     route_supports,
+    shape_from_tensors,
     source_path_for_route,
     stable_id,
+    tensor_constraints_json,
+    tensor_descriptors_json,
+    value_from_tensor_source,
 )
 
 
@@ -78,7 +86,9 @@ def _resolve_shape_source(source: str, shape: dict[str, int]) -> int | None:
 
 
 def _build_config(
-    route: V2Route, shape: dict[str, int]
+    route: V2Route,
+    shape: dict[str, int],
+    tensors: dict[str, ConcreteTensor],
 ) -> tuple[dict[str, str], dict[str, int | str], list[str]]:
     config: dict[str, str] = {}
     values: dict[str, int | str] = dict(shape)
@@ -87,7 +97,9 @@ def _build_config(
         key = str(binding["key"])
         if "source" in binding:
             source = str(binding["source"])
-            value = _resolve_shape_source(source, shape)
+            value = value_from_tensor_source(source, tensors)
+            if value is None:
+                value = _resolve_shape_source(source, shape)
             if value is None:
                 missing.append(source)
                 continue
@@ -118,7 +130,9 @@ def _candidate_from_shape(
     status: str = "planned",
     message: str | None = None,
 ) -> Candidate:
-    config, values, missing = _build_config(route, shape)
+    tensors = materialize_route_tensors(route, shape)
+    shape = shape_from_tensors(tensors)
+    config, values, missing = _build_config(route, shape, tensors)
     if missing:
         status = "missing_config"
         message = "missing shape/config values: " + ", ".join(missing)
@@ -139,8 +153,8 @@ def _candidate_from_shape(
             "source_id": route.source_id,
             "root_symbol": route.root_symbol,
             "export_name": route.export_name,
-            "layout": route.layout,
-            "match": dict(route.match),
+            "tensors": tensor_descriptors_json(route),
+            "constraints": tensor_constraints_json(route),
             "launch": dict(route.launch),
         },
         shape=shape,
@@ -197,6 +211,24 @@ def _lower_contiguous_pointwise_shape(case: ImportedCase) -> dict[str, int]:
     return _normalize_shape(shape)
 
 
+def _lower_contiguous_pointwise_tensors(
+    case: ImportedCase,
+) -> tuple[dict[str, ConcreteTensor], dict[str, int]]:
+    shape = _lower_contiguous_pointwise_shape(case)
+    dtype = str(case.dtype.get("type", "")).upper()
+    ncols = int(shape["ncols"])
+    nrows = int(shape["nrows"])
+    dimensions = (
+        ConcreteTensorDimension(name="ncols", size=ncols, stride=1),
+        ConcreteTensorDimension(name="nrows", size=nrows, stride=ncols),
+    )
+    tensors = {
+        tensor_name: ConcreteTensor(dtype=dtype, dimensions=dimensions)
+        for tensor_name in ("src0", "src1", "dst")
+    }
+    return tensors, shape
+
+
 def _resolve_route_for_case(
     case: ImportedCase,
     routes: list[V2Route],
@@ -210,53 +242,28 @@ def _resolve_route_for_case(
             "matching v2 op mapping exists, but not for this dtype combination",
         )
 
-    lowered: list[tuple[V2Route, dict[str, int]]] = []
-    lowering_errors: list[str] = []
-    for route in dtype_matching:
-        try:
-            shape = _lower_contiguous_pointwise_shape(case)
-        except ValueError as exc:
-            lowering_errors.append(str(exc))
-            continue
-        lowered.append((route, shape))
+    try:
+        tensors, shape = _lower_contiguous_pointwise_tensors(case)
+    except ValueError as exc:
+        return None, None, UnmappedReason.SHAPE_LOWERING_NOT_IMPLEMENTED, str(exc)
 
-    matching = [
-        (route, shape)
-        for route, shape in lowered
-        if route_accepts_shape(route, shape)
-    ]
+    matching = [route for route in dtype_matching if route_accepts_tensors(route, tensors)]
     if not matching:
-        if lowered:
-            return (
-                None,
-                None,
-                UnmappedReason.NO_ROUTE_MATCH,
-                "lowered shape did not satisfy any v2 route",
-            )
-        detail = lowering_errors[0] if lowering_errors else (
-            "matching v2 op mapping exists, but no raw-case lowering is implemented"
+        return (
+            None,
+            None,
+            UnmappedReason.NO_ROUTE_MATCH,
+            "lowered tensor descriptors did not satisfy any v2 route",
         )
-        return None, None, UnmappedReason.SHAPE_LOWERING_NOT_IMPLEMENTED, detail
     if len(matching) > 1:
         return None, None, UnmappedReason.AMBIGUOUS_ROUTE_MATCH, None
-    route, shape = matching[0]
-    return route, shape, None, None
-
-
-def _routes_by_op(routing_dir: Path) -> dict[str, list[V2Route]]:
-    grouped: dict[str, list[V2Route]] = {}
-    for route in iter_routes(routing_dir):
-        grouped.setdefault(route.op.upper(), []).append(route)
-    return grouped
-
-
+    return matching[0], shape, None, None
 def _resolve_imported_suite(suite: ImportedSuite, *, routing_dir: Path) -> ImportedSuite:
-    routes_by_op = _routes_by_op(routing_dir)
     suite.resolved = []
     suite.unmapped = []
     for group in suite.op_groups:
+        op_routes = load_routes_for_op(routing_dir, group.op)
         for case in group.cases:
-            op_routes = list(routes_by_op.get(case.op.upper(), ()))
             if not op_routes:
                 suite.unmapped.append(
                     _unmapped_case(
@@ -362,7 +369,8 @@ def _execute_case(request: RuntimeCaseRequest, *, routing_dir: Path) -> Executed
         route_id=request.config_data.get("route_id"),
     )
     shape = _shape_for_case(request.config_data, request.current_case_values)
-    if not route_accepts_shape(route, shape):
+    tensors = materialize_route_tensors(route, shape)
+    if not route_accepts_tensors(route, tensors):
         raise RuntimeError(
             f"v2 route {route.id!r} does not accept shape {json.dumps(shape, sort_keys=True)}"
         )
