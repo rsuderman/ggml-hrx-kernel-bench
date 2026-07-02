@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from ggml_hrx_kernel_bench.import_models import (
     ImportedCase,
     ImportedOpGroup,
@@ -14,6 +16,9 @@ from ggml_hrx_kernel_bench.routing.api import (
     RuntimeCaseRequest,
     create_router,
 )
+from ggml_hrx_kernel_bench.routing.v2.import_resolution import resolve_imported_suite
+from ggml_hrx_kernel_bench.routing.v2.manifest import build_manifest
+from ggml_hrx_kernel_bench.routing.v2.query import load_route_catalog
 
 
 def _write_v2_descriptor(routing_dir: Path) -> None:
@@ -36,8 +41,8 @@ def _write_v2_descriptor(routing_dir: Path) -> None:
                 "id": "add_f32_contiguous_2d",
                 "family": "add_f32",
                 "kernel": {
-                    "source_id": "add_pointwise_f32",
-                    "path": "add_pointwise_f32.loom",
+                    "source_id": "add_f32",
+                    "path": "add_f32.loom",
                     "root_symbol": "@hrx2_add_f32_contiguous_2d",
                     "export_name": "hrx2_add_f32_contiguous_2d",
                 },
@@ -100,7 +105,7 @@ def _write_v2_descriptor(routing_dir: Path) -> None:
 
 def _write_kernel(kernel_dir: Path) -> None:
     kernel_dir.mkdir(parents=True, exist_ok=True)
-    (kernel_dir / "add_pointwise_f32.loom").write_text(
+    (kernel_dir / "add_f32.loom").write_text(
         'kernel.def export("hrx2_add_f32_contiguous_2d") @hrx2_add_f32_contiguous_2d\n',
         encoding="utf-8",
     )
@@ -131,6 +136,57 @@ def test_v2_router_returns_contiguous_add_candidate(tmp_path: Path) -> None:
     assert candidate.route_id == "add_f32_contiguous_2d"
     assert candidate.root_symbol == "@hrx2_add_f32_contiguous_2d"
     assert candidate.shape == {"ncols": 1, "nrows": 64, "cols": 1, "rows": 64}
+
+
+def test_v2_manifest_includes_original_root_metadata(tmp_path: Path) -> None:
+    kernel_dir = tmp_path / "kernels"
+    routing_dir = tmp_path / "routing"
+    original_root = tmp_path / "original"
+    _write_kernel(kernel_dir)
+    _write_v2_descriptor(routing_dir)
+    (original_root / "kernels").mkdir(parents=True, exist_ok=True)
+    (original_root / "kernels" / "add_f32.loom").write_text(
+        'kernel.def export("hrx2_add_f32_contiguous_2d") @hrx2_add_f32_contiguous_2d\n',
+        encoding="utf-8",
+    )
+
+    router = create_router(version="v2", kernel_dir=kernel_dir, routing_dir=routing_dir)
+
+    manifest = router.manifest(original_root=original_root)
+
+    assert manifest["route_count"] == 1
+    assert len(manifest["entries"]) == 1
+    entry = manifest["entries"][0]
+    assert entry["original_path"] == str(original_root / "kernels" / "add_f32.loom")
+    assert entry["original_sha256"] is not None
+    assert entry["imported_sha256"] is not None
+    assert entry["mechanical_rewrites"] == []
+
+
+def test_v2_catalog_objects_are_immutable(tmp_path: Path) -> None:
+    kernel_dir = tmp_path / "kernels"
+    routing_dir = tmp_path / "routing"
+    _write_kernel(kernel_dir)
+    _write_v2_descriptor(routing_dir)
+
+    catalog = load_route_catalog(routing_dir)
+    route = catalog.routes[0]
+
+    with pytest.raises(TypeError):
+        catalog.routes_by_id["new"] = route  # type: ignore[index]
+    with pytest.raises(TypeError):
+        route.tensors["extra"] = route.tensors["src0"]  # type: ignore[index]
+    with pytest.raises(TypeError):
+        route.launch["rows_per_workgroup"] = 2  # type: ignore[index]
+
+
+def test_v2_helpers_require_catalog_or_routing_dir(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="routing_dir or catalog is required"):
+        build_manifest(kernel_dir=tmp_path / "kernels")
+    with pytest.raises(ValueError, match="routing_dir or catalog is required"):
+        resolve_imported_suite(
+            ImportedSuite(schema="test", source_path="test.yaml", op_groups=[]),
+        )
 
 
 def test_v2_router_maps_only_matching_contiguous_add_cases(tmp_path: Path) -> None:
@@ -198,7 +254,7 @@ def test_v2_router_executes_matching_case(tmp_path: Path, monkeypatch) -> None:
 
     def fake_run_candidate_row(args, bench_config, candidate, *, sanitizer):
         assert sanitizer == "none"
-        assert candidate.source_path == kernel_dir / "add_pointwise_f32.loom"
+        assert candidate.source_path == kernel_dir / "add_f32.loom"
         assert candidate.root_symbol == "@hrx2_add_f32_contiguous_2d"
         assert candidate.config == {
             "@hrx2.shape.pointwise.ncols": "10",
@@ -216,7 +272,7 @@ def test_v2_router_executes_matching_case(tmp_path: Path, monkeypatch) -> None:
         }
 
     monkeypatch.setattr(
-        "ggml_hrx_kernel_bench.routing.v2.backend.run_candidate_row",
+        "ggml_hrx_kernel_bench.routing.v2.runtime.run_candidate_row",
         fake_run_candidate_row,
     )
     execution = router.execute_case(

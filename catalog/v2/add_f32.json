@@ -2,8 +2,8 @@
   "id": "add_f32_contiguous_2d",
   "family": "add_f32",
   "kernel": {
-    "source_id": "add_pointwise_f32",
-    "path": "add_pointwise_f32.loom",
+    "source_id": "add_f32",
+    "path": "add_f32.loom",
     "root_symbol": "@hrx2_add_f32_contiguous_2d",
     "export_name": "hrx2_add_f32_contiguous_2d"
   },

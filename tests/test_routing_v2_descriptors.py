@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from ggml_hrx_kernel_bench.routing.v2.descriptors import (
+from ggml_hrx_kernel_bench.routing.v2.matching import tensor_accepts_descriptor
+from ggml_hrx_kernel_bench.routing.v2.models import (
     ConcreteTensor,
     ConcreteTensorDimension,
     DimensionBounds,
@@ -9,7 +10,6 @@ from ggml_hrx_kernel_bench.routing.v2.descriptors import (
     TensorDescriptor,
     TensorDimensionDescriptor,
     TensorStrideIdentifier,
-    tensor_accepts_descriptor,
 )
 
 
@@ -20,7 +20,7 @@ def test_tensor_descriptor_matches_contiguous_row_major_tensor() -> None:
             TensorDimensionDescriptor(name="ncols"),
             TensorDimensionDescriptor(name="nrows"),
         ),
-        strides=(
+        stride_ids=(
             TensorStrideIdentifier(name="stride_cols"),
             TensorStrideIdentifier(name="stride_rows"),
         ),
@@ -53,7 +53,7 @@ def test_tensor_descriptor_rejects_transposed_tensor_order() -> None:
             TensorDimensionDescriptor(name="ncols"),
             TensorDimensionDescriptor(name="nrows"),
         ),
-        strides=(
+        stride_ids=(
             TensorStrideIdentifier(name="stride_cols"),
             TensorStrideIdentifier(name="stride_rows"),
         ),
@@ -86,7 +86,7 @@ def test_tensor_descriptor_rejects_stride_mismatch() -> None:
             TensorDimensionDescriptor(name="ncols"),
             TensorDimensionDescriptor(name="nrows"),
         ),
-        strides=(
+        stride_ids=(
             TensorStrideIdentifier(name="stride_cols"),
             TensorStrideIdentifier(name="stride_rows"),
         ),

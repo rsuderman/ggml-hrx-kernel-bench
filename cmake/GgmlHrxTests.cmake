@@ -63,7 +63,16 @@ function(add_grouped_yaml_import_validation_target target_name yaml_path output_
       ${CMAKE_SOURCE_DIR}/src/ggml_hrx_kernel_bench/routing/v1/schedules.py
       ${CMAKE_SOURCE_DIR}/src/ggml_hrx_kernel_bench/routing/v2/__init__.py
       ${CMAKE_SOURCE_DIR}/src/ggml_hrx_kernel_bench/routing/v2/backend.py
-      ${CMAKE_SOURCE_DIR}/src/ggml_hrx_kernel_bench/routing/v2/descriptors.py
+      ${CMAKE_SOURCE_DIR}/src/ggml_hrx_kernel_bench/routing/v2/candidates.py
+      ${CMAKE_SOURCE_DIR}/src/ggml_hrx_kernel_bench/routing/v2/catalog.py
+      ${CMAKE_SOURCE_DIR}/src/ggml_hrx_kernel_bench/routing/v2/import_resolution.py
+      ${CMAKE_SOURCE_DIR}/src/ggml_hrx_kernel_bench/routing/v2/manifest.py
+      ${CMAKE_SOURCE_DIR}/src/ggml_hrx_kernel_bench/routing/v2/matching.py
+      ${CMAKE_SOURCE_DIR}/src/ggml_hrx_kernel_bench/routing/v2/models.py
+      ${CMAKE_SOURCE_DIR}/src/ggml_hrx_kernel_bench/routing/v2/query.py
+      ${CMAKE_SOURCE_DIR}/src/ggml_hrx_kernel_bench/routing/v2/runtime.py
+      ${CMAKE_SOURCE_DIR}/src/ggml_hrx_kernel_bench/routing/v2/serialization.py
+      ${CMAKE_SOURCE_DIR}/src/ggml_hrx_kernel_bench/routing/v2/shape.py
       ${CMAKE_SOURCE_DIR}/catalog/v2/router.json
     COMMENT "Validating grouped YAML import coverage for ${target_name}"
     VERBATIM
