@@ -2,17 +2,14 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
 
 from .models import (
     ConstraintCheck,
-    DimensionBounds,
     RouteConstraints,
-    StrideDescriptor,
     TensorDescriptor,
-    TensorDimensionDescriptor,
-    TensorStrideIdentifier,
     V2Route,
+    ValueDefinition,
 )
 
 
@@ -44,102 +41,18 @@ def _normalize_dtype(value: Any) -> str | None:
     return text.upper()
 
 
-def _parse_stride(
+def _parse_capture_name(
     path: Path,
     route_index: Any,
     tensor_name: str,
-    dimension_name: str,
+    field_name: str,
     raw: Any,
-) -> StrideDescriptor | None:
-    if raw is None:
-        return None
-    if not isinstance(raw, dict):
+) -> str:
+    if not isinstance(raw, str) or not raw.strip():
         raise RuntimeError(
-            "v2 stride descriptor must be a JSON object for "
-            f"route {route_index} tensor {tensor_name!r} dimension {dimension_name!r}: {path}"
+            f"v2 tensor {field_name} must be a non-empty string capture for route {route_index} tensor {tensor_name!r}: {path}"
         )
-    has_value = "value" in raw
-    has_dimension = "dimension" in raw
-    has_product = "product" in raw
-    active = int(has_value) + int(has_dimension) + int(has_product)
-    if active != 1:
-        raise RuntimeError(
-            "v2 stride descriptor must define exactly one of value, dimension, or product for "
-            f"route {route_index} tensor {tensor_name!r} dimension {dimension_name!r}: {path}"
-        )
-    if has_value:
-        return StrideDescriptor(value=int(raw["value"]))
-    if has_dimension:
-        return StrideDescriptor(dimension=str(raw["dimension"]))
-    product = raw["product"]
-    if not isinstance(product, list) or not product:
-        raise RuntimeError(
-            "v2 stride descriptor product must be a non-empty JSON array for "
-            f"route {route_index} tensor {tensor_name!r} dimension {dimension_name!r}: {path}"
-        )
-    return StrideDescriptor(product=tuple(str(entry) for entry in product))
-
-
-def _parse_dimension_names(
-    path: Path,
-    route_index: Any,
-    tensor_name: str,
-    raw: Any,
-) -> tuple[TensorDimensionDescriptor, ...]:
-    if not isinstance(raw, list) or not raw:
-        raise RuntimeError(
-            "v2 tensor descriptor must contain a non-empty dimensions array for "
-            f"route {route_index} tensor {tensor_name!r}: {path}"
-        )
-    dimensions: list[TensorDimensionDescriptor] = []
-    seen_names: set[str] = set()
-    for raw_dimension in raw:
-        if isinstance(raw_dimension, dict):
-            name = str(raw_dimension["name"])
-        else:
-            name = str(raw_dimension)
-        if name in seen_names:
-            raise RuntimeError(
-                "v2 tensor dimension names must be unique for "
-                f"route {route_index} tensor {tensor_name!r}: {path}"
-            )
-        seen_names.add(name)
-        dimensions.append(TensorDimensionDescriptor(name=name))
-    return tuple(dimensions)
-
-
-def _parse_stride_names(
-    path: Path,
-    route_index: Any,
-    tensor_name: str,
-    raw: Any,
-    dimension_count: int,
-) -> tuple[TensorStrideIdentifier, ...]:
-    if not isinstance(raw, list) or not raw:
-        raise RuntimeError(
-            "v2 tensor strides must be a non-empty JSON array for "
-            f"route {route_index} tensor {tensor_name!r}: {path}"
-        )
-    if len(raw) != dimension_count:
-        raise RuntimeError(
-            "v2 tensor strides must align one-to-one with dimensions for "
-            f"route {route_index} tensor {tensor_name!r}: {path}"
-        )
-    strides: list[TensorStrideIdentifier] = []
-    seen_names: set[str] = set()
-    for raw_stride in raw:
-        if isinstance(raw_stride, dict):
-            name = str(raw_stride["name"])
-        else:
-            name = str(raw_stride)
-        if name in seen_names:
-            raise RuntimeError(
-                "v2 tensor stride identifiers must be unique for "
-                f"route {route_index} tensor {tensor_name!r}: {path}"
-            )
-        seen_names.add(name)
-        strides.append(TensorStrideIdentifier(name=name))
-    return tuple(strides)
+    return raw.strip()
 
 
 def _parse_tensor_descriptor(
@@ -152,11 +65,10 @@ def _parse_tensor_descriptor(
         raise RuntimeError(
             f"v2 tensor descriptor must be a JSON object for route {route_index} tensor {tensor_name!r}: {path}"
         )
-    dimensions = _parse_dimension_names(path, route_index, tensor_name, raw.get("dimensions"))
     return TensorDescriptor(
         dtype=_normalize_dtype(raw.get("dtype")),
-        dimensions=dimensions,
-        stride_ids=_parse_stride_names(path, route_index, tensor_name, raw.get("strides"), len(dimensions)),
+        dimensions_capture=_parse_capture_name(path, route_index, tensor_name, "dimensions", raw.get("dimensions")),
+        strides_capture=_parse_capture_name(path, route_index, tensor_name, "strides", raw.get("strides")),
     )
 
 
@@ -171,149 +83,97 @@ def _parse_tensors(path: Path, route_index: Any, raw: Any) -> dict[str, TensorDe
     }
 
 
-def _parse_size_constraint_check(
-    path: Path,
-    route_index: Any,
-    raw: Any,
-    declared_dimensions: set[str],
-) -> tuple[str, DimensionBounds, ConstraintCheck]:
+def _parse_value_definition(path: Path, route_index: Any, raw: Any) -> ValueDefinition:
     if not isinstance(raw, dict):
-        raise RuntimeError(f"v2 route size constraint must be a JSON object: {path}")
-    dimension_name = str(raw["name"])
-    if dimension_name not in declared_dimensions:
+        raise RuntimeError(f"v2 route value definition must be a JSON object: {path}")
+    name = str(raw.get("name") or "").strip()
+    if not name:
+        raise RuntimeError(f"v2 route {route_index} value definitions require name: {path}")
+    contiguous_strides = raw.get("contiguous_strides")
+    product = raw.get("product")
+    operations = sum(value is not None for value in (contiguous_strides, product))
+    if operations != 1:
         raise RuntimeError(
-            f"v2 route {route_index} size constraints must reference declared dimensions: {path}"
+            f"v2 route {route_index} value definition {name!r} must define exactly one supported computation: {path}"
         )
-    bounds = DimensionBounds(
-        min=None if raw.get("min") is None else int(raw["min"]),
-        max=None if raw.get("max") is None else int(raw["max"]),
-    )
-    return (
-        dimension_name,
-        bounds,
-        ConstraintCheck(
-            identifier=dimension_name,
-            min=bounds.min,
-            max=bounds.max,
-        ),
-    )
-
-
-def _parse_stride_constraint_check(
-    path: Path,
-    route_index: Any,
-    raw: Any,
-    referenced_stride_names: set[str],
-    declared_dimensions: set[str],
-) -> tuple[str, StrideDescriptor, ConstraintCheck]:
-    if not isinstance(raw, dict):
-        raise RuntimeError(f"v2 route stride constraint must be a JSON object: {path}")
-    stride_name = str(raw["name"])
-    if stride_name not in referenced_stride_names:
+    if contiguous_strides is not None and (not isinstance(contiguous_strides, str) or not contiguous_strides.strip()):
         raise RuntimeError(
-            f"v2 route {route_index} stride constraints reference unknown stride identifier {stride_name!r}: {path}"
+            f"v2 route {route_index} value definition {name!r} contiguous_strides must reference a capture name: {path}"
         )
-    descriptor = _parse_stride(path, route_index, "route", stride_name, raw)
-    if descriptor is None:
-        raise RuntimeError(f"v2 route {route_index} stride constraint {stride_name!r} is empty: {path}")
-    if descriptor.dimension is not None and descriptor.dimension not in declared_dimensions:
+    if product is not None and (not isinstance(product, str) or not product.strip()):
         raise RuntimeError(
-            f"v2 route {route_index} stride {stride_name!r} references unknown dimension {descriptor.dimension!r}: {path}"
+            f"v2 route {route_index} value definition {name!r} product must reference a capture name: {path}"
         )
-    if descriptor.product and any(name not in declared_dimensions for name in descriptor.product):
-        raise RuntimeError(
-            f"v2 route {route_index} stride {stride_name!r} references unknown product dimensions: {path}"
-        )
-    return (
-        stride_name,
-        descriptor,
-        ConstraintCheck(
-            identifier=stride_name,
-            value=descriptor.value,
-            dimension=descriptor.dimension,
-            product=descriptor.product,
-        ),
+    return ValueDefinition(
+        name=name,
+        contiguous_strides=None if contiguous_strides is None else contiguous_strides.strip(),
+        product=None if product is None else product.strip(),
     )
 
 
-def _parse_constraints(
-    path: Path,
-    route_index: Any,
-    raw: Any,
-    tensors: Mapping[str, TensorDescriptor],
-) -> RouteConstraints:
+def _parse_values(path: Path, route_index: Any, raw: Any) -> tuple[ValueDefinition, ...]:
     if raw is None:
-        raw = []
+        return ()
+    if not isinstance(raw, list):
+        raise RuntimeError(f"v2 route values must be a JSON array: {path}")
+    values = tuple(_parse_value_definition(path, route_index, entry) for entry in raw)
+    names = [value.name for value in values]
+    if len(names) != len(set(names)):
+        raise RuntimeError(f"v2 route {route_index} repeats value names: {path}")
+    return values
+
+
+def _parse_equals_constraint(path: Path, route_index: Any, raw: Any) -> ConstraintCheck:
+    names = raw.get("equals")
+    if not isinstance(names, list) or len(names) < 2:
+        raise RuntimeError(
+            f"v2 route {route_index} equals constraints must be arrays with at least two names: {path}"
+        )
+    return ConstraintCheck(equals=tuple(str(name) for name in names))
+
+
+def _parse_capture_constraint(path: Path, route_index: Any, raw: Any) -> ConstraintCheck:
+    name = str(raw.get("name") or "").strip()
+    if not name:
+        raise RuntimeError(f"v2 route {route_index} constraints require name: {path}")
+    length = raw.get("length")
+    index = raw.get("index")
+    lower = raw.get("min")
+    upper = raw.get("max")
+    multiple_of = raw.get("multiple_of")
+    if length is not None:
+        if index is not None or lower is not None or upper is not None or multiple_of is not None:
+            raise RuntimeError(
+                f"v2 route {route_index} length constraints cannot mix index/min/max/multiple_of fields: {path}"
+            )
+        return ConstraintCheck(name=name, length=int(length))
+    if lower is None and upper is None and multiple_of is None:
+        raise RuntimeError(
+            f"v2 route {route_index} constraint {name!r} must define length, bounds, or multiple_of: {path}"
+        )
+    return ConstraintCheck(
+        name=name,
+        index=None if index is None else int(index),
+        min=None if lower is None else int(lower),
+        max=None if upper is None else int(upper),
+        multiple_of=None if multiple_of is None else int(multiple_of),
+    )
+
+
+def _parse_constraints(path: Path, route_index: Any, raw: Any) -> RouteConstraints:
+    if raw is None:
+        return RouteConstraints()
     if not isinstance(raw, list):
         raise RuntimeError(f"v2 route constraints must be a JSON array: {path}")
-    declared_dimensions = {
-        dimension.name
-        for descriptor in tensors.values()
-        for dimension in descriptor.dimensions
-    }
-    referenced_strides = {
-        stride.name
-        for descriptor in tensors.values()
-        for stride in descriptor.stride_ids
-    }
-    sizes: dict[str, DimensionBounds] = {}
-    strides: dict[str, StrideDescriptor] = {}
     checks: list[ConstraintCheck] = []
-    seen_size_names: set[str] = set()
-    seen_stride_names: set[str] = set()
     for entry in raw:
         if not isinstance(entry, dict):
             raise RuntimeError(f"v2 route constraints entries must be JSON objects: {path}")
-        has_size_fields = any(field in entry for field in ("min", "max"))
-        has_stride_fields = any(field in entry for field in ("value", "dimension", "product"))
-        if has_size_fields and has_stride_fields:
-            raise RuntimeError(
-                f"v2 route {route_index} constraint {entry.get('name')!r} mixes size and stride fields: {path}"
-            )
-        if has_size_fields:
-            name, bounds, check = _parse_size_constraint_check(
-                path,
-                route_index,
-                entry,
-                declared_dimensions,
-            )
-            if name in seen_size_names:
-                raise RuntimeError(
-                    f"v2 route {route_index} repeats size constraint {name!r}: {path}"
-                )
-            seen_size_names.add(name)
-            sizes[name] = bounds
-            checks.append(check)
+        if "equals" in entry:
+            checks.append(_parse_equals_constraint(path, route_index, entry))
             continue
-        if has_stride_fields:
-            name, descriptor, check = _parse_stride_constraint_check(
-                path,
-                route_index,
-                entry,
-                referenced_strides,
-                declared_dimensions,
-            )
-            if name in seen_stride_names:
-                raise RuntimeError(
-                    f"v2 route {route_index} repeats stride constraint {name!r}: {path}"
-                )
-            seen_stride_names.add(name)
-            strides[name] = descriptor
-            checks.append(check)
-            continue
-        raise RuntimeError(
-            f"v2 route {route_index} constraint {entry.get('name')!r} must define size or stride fields: {path}"
-        )
-    missing = sorted(referenced_strides - seen_stride_names)
-    if missing:
-        raise RuntimeError(
-            f"v2 route {route_index} is missing stride constraints for identifiers {missing}: {path}"
-        )
-    return RouteConstraints(
-        sizes=sizes,
-        strides=strides,
-        checks=tuple(checks),
-    )
+        checks.append(_parse_capture_constraint(path, route_index, entry))
+    return RouteConstraints(checks=tuple(checks))
 
 
 def _parse_route_entry(path: Path, route_index: Any, op: str, raw: Any) -> V2Route:
@@ -323,7 +183,6 @@ def _parse_route_entry(path: Path, route_index: Any, op: str, raw: Any) -> V2Rou
     launch = raw.get("launch") or {}
     config = raw.get("config") or {}
     bindings = config.get("bindings") or []
-    tensors = _parse_tensors(path, route_index, raw.get("tensors"))
     return V2Route(
         id=str(raw["id"]),
         family=str(raw["family"]),
@@ -334,8 +193,9 @@ def _parse_route_entry(path: Path, route_index: Any, op: str, raw: Any) -> V2Rou
         export_name=(
             None if kernel.get("export_name") is None else str(kernel["export_name"])
         ),
-        tensors=tensors,
-        constraints=_parse_constraints(path, route_index, raw.get("constraints"), tensors),
+        tensors=_parse_tensors(path, route_index, raw.get("tensors")),
+        values=_parse_values(path, route_index, raw.get("values")),
+        constraints=_parse_constraints(path, route_index, raw.get("constraints")),
         launch=dict(launch),
         bindings=tuple(dict(binding) for binding in bindings),
     )

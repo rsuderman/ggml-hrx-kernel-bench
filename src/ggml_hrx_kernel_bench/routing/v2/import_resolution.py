@@ -60,15 +60,21 @@ def lower_contiguous_pointwise_tensors(
     case: ImportedCase,
 ) -> tuple[dict[str, ConcreteTensor], dict[str, int]]:
     shape = lower_contiguous_pointwise_shape(case)
+    ne = case.normalized_params.get("ne")
+    if not isinstance(ne, list) or len(ne) != 4:
+        raise ValueError("pointwise lowering requires 4-D extents")
+    if any(not isinstance(value, int) for value in ne):
+        raise ValueError("pointwise lowering requires integer extents")
     dtype = str(case.dtype.get("type", "")).upper()
-    ncols = int(shape["ncols"])
-    nrows = int(shape["nrows"])
-    dimensions = (
-        ConcreteTensorDimension(name="ncols", size=ncols, stride=1),
-        ConcreteTensorDimension(name="nrows", size=nrows, stride=ncols),
-    )
+    dimensions: list[ConcreteTensorDimension] = []
+    stride = 1
+    for index, extent in enumerate(ne):
+        dimensions.append(
+            ConcreteTensorDimension(name=f"d{index}", size=int(extent), stride=stride)
+        )
+        stride *= int(extent)
     tensors = {
-        tensor_name: ConcreteTensor(dtype=dtype, dimensions=dimensions)
+        tensor_name: ConcreteTensor(dtype=dtype, dimensions=tuple(dimensions))
         for tensor_name in ("src0", "src1", "dst")
     }
     return tensors, shape

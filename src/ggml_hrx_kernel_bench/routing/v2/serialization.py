@@ -15,28 +15,48 @@ def tensor_descriptors_json(route: V2Route) -> dict[str, Any]:
     for tensor_name, descriptor in route.tensors.items():
         payload[tensor_name] = {
             "dtype": descriptor.dtype,
-            "dimensions": [dimension.name for dimension in descriptor.dimensions],
-            "strides": [stride.name for stride in descriptor.stride_ids],
+            "dimensions": descriptor.dimensions_capture,
+            "strides": descriptor.strides_capture,
         }
     return payload
 
 
-def tensor_constraints_json(route: V2Route) -> list[dict[str, Any]]:
+def tensor_values_json(route: V2Route) -> list[dict[str, Any]]:
     return [
         {
-            key: value
-            for key, value in (
-                ("name", check.identifier),
-                ("min", check.min),
-                ("max", check.max),
-                ("value", check.value),
-                ("dimension", check.dimension),
-                ("product", list(check.product) if check.product else None),
+            key: entry
+            for key, entry in (
+                ("name", value.name),
+                ("contiguous_strides", value.contiguous_strides),
+                ("product", value.product),
             )
-            if value is not None
+            if entry is not None
         }
-        for check in route.constraints.checks
+        for value in route.values
     ]
+
+
+def tensor_constraints_json(route: V2Route) -> list[dict[str, Any]]:
+    payload: list[dict[str, Any]] = []
+    for check in route.constraints.checks:
+        if check.equals:
+            payload.append({"equals": list(check.equals)})
+            continue
+        payload.append(
+            {
+                key: value
+                for key, value in (
+                    ("name", check.name),
+                    ("length", check.length),
+                    ("index", check.index),
+                    ("min", check.min),
+                    ("max", check.max),
+                    ("multiple_of", check.multiple_of),
+                )
+                if value is not None
+            }
+        )
+    return payload
 
 
 def route_supports(route: V2Route) -> dict[str, Any]:
@@ -44,8 +64,11 @@ def route_supports(route: V2Route) -> dict[str, Any]:
         "src0_type": route.tensors.get("src0").dtype if route.tensors.get("src0") else None,
         "src1_type": route.tensors.get("src1").dtype if route.tensors.get("src1") else None,
         "dst_type": route.tensors.get("dst").dtype if route.tensors.get("dst") else None,
-        "tensor_orders": {
-            tensor_name: [dimension.name for dimension in descriptor.dimensions]
+        "tensor_captures": {
+            tensor_name: {
+                "dimensions": descriptor.dimensions_capture,
+                "strides": descriptor.strides_capture,
+            }
             for tensor_name, descriptor in route.tensors.items()
         },
     }
@@ -61,6 +84,7 @@ def route_json(route: V2Route) -> dict[str, Any]:
         "root_symbol": route.root_symbol,
         "export_name": route.export_name,
         "tensors": tensor_descriptors_json(route),
+        "values": tensor_values_json(route),
         "constraints": tensor_constraints_json(route),
         "launch": dict(route.launch),
     }

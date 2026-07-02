@@ -38,55 +38,53 @@ def _write_v2_descriptor(routing_dir: Path) -> None:
     (routing_dir / "add_f32.json").write_text(
         json.dumps(
             {
-                "id": "add_f32_contiguous_2d",
+                "id": "add_f32_contiguous_1d",
                 "family": "add_f32",
                 "kernel": {
                     "source_id": "add_f32",
                     "path": "add_f32.loom",
-                    "root_symbol": "@hrx2_add_f32_contiguous_2d",
-                    "export_name": "hrx2_add_f32_contiguous_2d",
+                    "root_symbol": "@hrx2_add_f32_contiguous_1d",
+                    "export_name": "hrx2_add_f32_contiguous_1d",
                 },
                 "tensors": {
                     "src0": {
                         "dtype": "F32",
-                        "dimensions": ["ncols", "nrows"],
-                        "strides": ["src0_stride_ncols", "src0_stride_nrows"],
+                        "dimensions": "src0_dimensions",
+                        "strides": "src0_strides",
                     },
                     "src1": {
                         "dtype": "F32",
-                        "dimensions": ["ncols", "nrows"],
-                        "strides": ["src1_stride_ncols", "src1_stride_nrows"],
+                        "dimensions": "src1_dimensions",
+                        "strides": "src1_strides",
                     },
                     "dst": {
                         "dtype": "F32",
-                        "dimensions": ["ncols", "nrows"],
-                        "strides": ["dst_stride_ncols", "dst_stride_nrows"],
+                        "dimensions": "dst_dimensions",
+                        "strides": "dst_strides",
                     },
                 },
+                "values": [
+                    {
+                        "name": "contiguous_strides",
+                        "contiguous_strides": "dst_dimensions",
+                    },
+                    {
+                        "name": "total_size",
+                        "product": "dst_dimensions",
+                    },
+                ],
                 "constraints": [
-                    {"name": "ncols", "min": 1, "max": 65536},
-                    {"name": "nrows", "min": 64, "max": 1048576},
-                    {"name": "src0_stride_ncols", "value": 1},
-                    {"name": "src0_stride_nrows", "dimension": "ncols"},
-                    {"name": "src1_stride_ncols", "value": 1},
-                    {"name": "src1_stride_nrows", "dimension": "ncols"},
-                    {"name": "dst_stride_ncols", "value": 1},
-                    {"name": "dst_stride_nrows", "dimension": "ncols"},
+                    {"equals": ["src0_dimensions", "src1_dimensions", "dst_dimensions"]},
+                    {"equals": ["contiguous_strides", "src0_strides", "src1_strides", "dst_strides"]},
                 ],
                 "launch": {
                     "workgroup_size": [256, 1, 1],
-                    "rows_per_workgroup": 1,
-                    "cols_per_workgroup": 256,
                 },
                 "config": {
                     "bindings": [
                         {
-                            "key": "@hrx2.shape.pointwise.ncols",
-                            "source": "tensor.dst.dimensions.ncols.size",
-                        },
-                        {
-                            "key": "@hrx2.shape.pointwise.nrows",
-                            "source": "tensor.dst.dimensions.nrows.size",
+                            "key": "@hrx2.shape.pointwise.total_size",
+                            "source": "value.total_size",
                         },
                         {
                             "key": "@hrx2.tuning.pointwise.workgroup_size",
@@ -106,7 +104,7 @@ def _write_v2_descriptor(routing_dir: Path) -> None:
 def _write_kernel(kernel_dir: Path) -> None:
     kernel_dir.mkdir(parents=True, exist_ok=True)
     (kernel_dir / "add_f32.loom").write_text(
-        'kernel.def export("hrx2_add_f32_contiguous_2d") @hrx2_add_f32_contiguous_2d\n',
+        'kernel.def export("hrx2_add_f32_contiguous_1d") @hrx2_add_f32_contiguous_1d\n',
         encoding="utf-8",
     )
 
@@ -133,9 +131,9 @@ def test_v2_router_returns_contiguous_add_candidate(tmp_path: Path) -> None:
     assert len(candidates) == 1
     candidate = candidates[0]
     assert candidate.family == "add_f32"
-    assert candidate.route_id == "add_f32_contiguous_2d"
-    assert candidate.root_symbol == "@hrx2_add_f32_contiguous_2d"
-    assert candidate.shape == {"ncols": 1, "nrows": 64, "cols": 1, "rows": 64}
+    assert candidate.route_id == "add_f32_contiguous_1d"
+    assert candidate.root_symbol == "@hrx2_add_f32_contiguous_1d"
+    assert candidate.shape == {"ncols": 256, "nrows": 1, "cols": 256, "rows": 1}
 
 
 def test_v2_manifest_includes_original_root_metadata(tmp_path: Path) -> None:
@@ -146,7 +144,7 @@ def test_v2_manifest_includes_original_root_metadata(tmp_path: Path) -> None:
     _write_v2_descriptor(routing_dir)
     (original_root / "kernels").mkdir(parents=True, exist_ok=True)
     (original_root / "kernels" / "add_f32.loom").write_text(
-        'kernel.def export("hrx2_add_f32_contiguous_2d") @hrx2_add_f32_contiguous_2d\n',
+        'kernel.def export("hrx2_add_f32_contiguous_1d") @hrx2_add_f32_contiguous_1d\n',
         encoding="utf-8",
     )
 
@@ -180,6 +178,26 @@ def test_v2_catalog_objects_are_immutable(tmp_path: Path) -> None:
         route.launch["rows_per_workgroup"] = 2  # type: ignore[index]
 
 
+def test_v2_candidate_route_payload_uses_capture_lists(tmp_path: Path) -> None:
+    kernel_dir = tmp_path / "kernels"
+    routing_dir = tmp_path / "routing"
+    _write_kernel(kernel_dir)
+    _write_v2_descriptor(routing_dir)
+    router = create_router(version="v2", kernel_dir=kernel_dir, routing_dir=routing_dir)
+
+    candidate = router.candidates(CandidateQuery())[0]
+
+    assert candidate.route["tensors"]["src0"]["dimensions"] == "src0_dimensions"
+    assert candidate.route["values"] == [
+        {"name": "contiguous_strides", "contiguous_strides": "dst_dimensions"},
+        {"name": "total_size", "product": "dst_dimensions"},
+    ]
+    assert candidate.route["constraints"] == [
+        {"equals": ["src0_dimensions", "src1_dimensions", "dst_dimensions"]},
+        {"equals": ["contiguous_strides", "src0_strides", "src1_strides", "dst_strides"]},
+    ]
+
+
 def test_v2_helpers_require_catalog_or_routing_dir(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="routing_dir or catalog is required"):
         build_manifest(kernel_dir=tmp_path / "kernels")
@@ -207,8 +225,8 @@ def test_v2_router_maps_only_matching_contiguous_add_cases(tmp_path: Path) -> No
                     ImportedCase(
                         op="ADD",
                         dtype={"type": "f32"},
-                        raw_case={"ne": [10, 100, 1, 1], "nr": [1, 1, 1, 1], "nf": 1, "perm1": 0},
-                        normalized_params={"ne": [10, 100, 1, 1], "nr": [1, 1, 1, 1], "nf": 1, "perm1": 0},
+                        raw_case={"ne": [16, 64, 1, 1], "nr": [1, 1, 1, 1], "nf": 1, "perm1": 0},
+                        normalized_params={"ne": [16, 64, 1, 1], "nr": [1, 1, 1, 1], "nf": 1, "perm1": 0},
                         source_path="test.yaml",
                         source_group_index=0,
                         source_case_index=0,
@@ -216,8 +234,8 @@ def test_v2_router_maps_only_matching_contiguous_add_cases(tmp_path: Path) -> No
                     ImportedCase(
                         op="ADD",
                         dtype={"type": "f32"},
-                        raw_case={"ne": [10, 5, 1, 1], "nr": [1, 1, 1, 1], "nf": 1, "perm1": 0},
-                        normalized_params={"ne": [10, 5, 1, 1], "nr": [1, 1, 1, 1], "nf": 1, "perm1": 0},
+                        raw_case={"ne": [10, 5, 1, 1], "nr": [1, 1, 1, 2], "nf": 1, "perm1": 0},
+                        normalized_params={"ne": [10, 5, 1, 1], "nr": [1, 1, 1, 2], "nf": 1, "perm1": 0},
                         source_path="test.yaml",
                         source_group_index=0,
                         source_case_index=1,
@@ -231,11 +249,11 @@ def test_v2_router_maps_only_matching_contiguous_add_cases(tmp_path: Path) -> No
 
     assert len(resolved.resolved) == 1
     assert resolved.resolved[0].kernel_family == "add_f32"
-    assert resolved.resolved[0].route_id == "add_f32_contiguous_2d"
+    assert resolved.resolved[0].route_id == "add_f32_contiguous_1d"
     assert resolved.resolved[0].params == ["ncols", "nrows", "cols", "rows"]
-    assert resolved.resolved[0].values == [10, 100, 10, 100]
+    assert resolved.resolved[0].values == [16, 64, 16, 64]
     assert len(resolved.unmapped) == 1
-    assert resolved.unmapped[0].reason == UnmappedReason.NO_ROUTE_MATCH
+    assert resolved.unmapped[0].reason == UnmappedReason.SHAPE_LOWERING_NOT_IMPLEMENTED
 
 
 def test_v2_router_executes_matching_case(tmp_path: Path, monkeypatch) -> None:
@@ -247,18 +265,17 @@ def test_v2_router_executes_matching_case(tmp_path: Path, monkeypatch) -> None:
     router = create_router(version="v2", kernel_dir=kernel_dir, routing_dir=routing_dir)
     config = {
         "kernel": "add_f32",
-        "route_id": "add_f32_contiguous_2d",
+        "route_id": "add_f32_contiguous_1d",
         "params": ["ncols", "nrows", "cols", "rows"],
-        "cases": [[10, 100, 10, 100]],
+        "cases": [[16, 64, 16, 64]],
     }
 
     def fake_run_candidate_row(args, bench_config, candidate, *, sanitizer):
         assert sanitizer == "none"
         assert candidate.source_path == kernel_dir / "add_f32.loom"
-        assert candidate.root_symbol == "@hrx2_add_f32_contiguous_2d"
+        assert candidate.root_symbol == "@hrx2_add_f32_contiguous_1d"
         assert candidate.config == {
-            "@hrx2.shape.pointwise.ncols": "10",
-            "@hrx2.shape.pointwise.nrows": "100",
+            "@hrx2.shape.pointwise.total_size": "1024",
             "@hrx2.tuning.pointwise.workgroup_size": "256",
         }
         return {
@@ -280,8 +297,8 @@ def test_v2_router_executes_matching_case(tmp_path: Path, monkeypatch) -> None:
             kernel_dir=kernel_dir,
             routing_dir=routing_dir,
             config_data=config,
-            current_case_id="ncols10_nrows100_cols10_rows100",
-            current_case_values=[10, 100, 10, 100],
+            current_case_id="ncols16_nrows64_cols16_rows64",
+            current_case_values=[16, 64, 16, 64],
             tool_dir=None,
             target="gfx1100",
             rocm_path=None,
@@ -297,4 +314,4 @@ def test_v2_router_executes_matching_case(tmp_path: Path, monkeypatch) -> None:
 
     assert result["status"] == "ran"
     assert result["correctness_ok"] is True
-    assert result["shape"] == {"ncols": 10, "nrows": 100, "cols": 10, "rows": 100}
+    assert result["shape"] == {"ncols": 16, "nrows": 64, "cols": 16, "rows": 64}

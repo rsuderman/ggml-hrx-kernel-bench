@@ -3,7 +3,15 @@ from __future__ import annotations
 from pathlib import Path
 
 from ..models import Candidate, CandidateQuery
-from .matching import default_shape_for_route, materialize_route_tensors, route_dispatch, shape_from_tensors, value_from_tensor_source
+from .matching import (
+    default_shape_for_route,
+    materialize_route_tensors,
+    route_dispatch,
+    route_values,
+    shape_from_tensors,
+    value_from_route_source,
+    value_from_tensor_source,
+)
 from .models import ConcreteTensor, V2Route, stable_id
 from .query import RouteCatalog, candidate_routes
 from .serialization import route_json, route_supports, source_path_for_route
@@ -14,6 +22,7 @@ def build_config(
     route: V2Route,
     shape: dict[str, int],
     tensors: dict[str, ConcreteTensor],
+    resolved_values: dict[str, int | tuple[int, ...]],
 ) -> tuple[dict[str, str], dict[str, int | str], list[str]]:
     config: dict[str, str] = {}
     values: dict[str, int | str] = dict(shape)
@@ -22,7 +31,9 @@ def build_config(
         key = str(binding["key"])
         if "source" in binding:
             source = str(binding["source"])
-            value = value_from_tensor_source(source, tensors)
+            value = value_from_route_source(source, resolved_values)
+            if value is None:
+                value = value_from_tensor_source(source, tensors)
             if value is None:
                 value = resolve_shape_source(source, shape)
             if value is None:
@@ -45,7 +56,10 @@ def candidate_from_shape(
 ) -> Candidate:
     tensors = materialize_route_tensors(route, shape)
     shape = shape_from_tensors(tensors)
-    config, values, missing = build_config(route, shape, tensors)
+    resolved_values = route_values(route, tensors)
+    if resolved_values is None:
+        raise RuntimeError(f"v2 route {route.id!r} failed to resolve route values for shape {shape!r}")
+    config, values, missing = build_config(route, shape, tensors, resolved_values)
     if missing:
         status = "missing_config"
         message = "missing shape/config values: " + ", ".join(missing)
@@ -62,7 +76,7 @@ def candidate_from_shape(
         shape=shape,
         values=values,
         config=config,
-        dispatch=route_dispatch(route, shape),
+        dispatch=route_dispatch(route, shape, values=resolved_values),
         supports=route_supports(route),
         schedule=None,
         coverage="route_backed",

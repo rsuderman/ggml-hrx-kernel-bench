@@ -1,81 +1,54 @@
 {
-  "id": "add_f32_contiguous_2d",
+  "id": "add_f32_contiguous_1d",
   "family": "add_f32",
   "kernel": {
     "source_id": "add_f32",
     "path": "add_f32.loom",
-    "root_symbol": "@hrx2_add_f32_contiguous_2d",
-    "export_name": "hrx2_add_f32_contiguous_2d"
+    "root_symbol": "@hrx2_add_f32_contiguous_1d",
+    "export_name": "hrx2_add_f32_contiguous_1d"
   },
   "tensors": {
     "src0": {
       "dtype": "F32",
-      "dimensions": [
-        "ncols",
-        "nrows"
-      ],
-      "strides": [
-        "src0_stride_ncols",
-        "src0_stride_nrows"
-      ]
+      "dimensions": "src0_dimensions",
+      "strides": "src0_strides"
     },
     "src1": {
       "dtype": "F32",
-      "dimensions": [
-        "ncols",
-        "nrows"
-      ],
-      "strides": [
-        "src1_stride_ncols",
-        "src1_stride_nrows"
-      ]
+      "dimensions": "src1_dimensions",
+      "strides": "src1_strides"
     },
     "dst": {
       "dtype": "F32",
-      "dimensions": [
-        "ncols",
-        "nrows"
-      ],
-      "strides": [
-        "dst_stride_ncols",
-        "dst_stride_nrows"
-      ]
+      "dimensions": "dst_dimensions",
+      "strides": "dst_strides"
     }
   },
+  "values": [
+    {
+      "name": "contiguous_strides",
+      "contiguous_strides": "dst_dimensions"
+    },
+    {
+      "name": "total_size",
+      "product": "dst_dimensions"
+    }
+  ],
   "constraints": [
     {
-      "name": "ncols",
-      "min": 1,
-      "max": 65536
+      "equals": [
+        "src0_dimensions",
+        "src1_dimensions",
+        "dst_dimensions"
+      ]
     },
     {
-      "name": "nrows",
-      "min": 64,
-      "max": 1048576
-    },
-    {
-      "name": "src0_stride_ncols",
-      "value": 1
-    },
-    {
-      "name": "src0_stride_nrows",
-      "dimension": "ncols"
-    },
-    {
-      "name": "src1_stride_ncols",
-      "value": 1
-    },
-    {
-      "name": "src1_stride_nrows",
-      "dimension": "ncols"
-    },
-    {
-      "name": "dst_stride_ncols",
-      "value": 1
-    },
-    {
-      "name": "dst_stride_nrows",
-      "dimension": "ncols"
+      "equals": [
+        "contiguous_strides",
+        "src0_strides",
+        "src1_strides",
+        "dst_strides"
+      ]
     }
   ],
   "launch": {
@@ -83,19 +56,13 @@
       256,
       1,
       1
-    ],
-    "rows_per_workgroup": 1,
-    "cols_per_workgroup": 256
+    ]
   },
   "config": {
     "bindings": [
       {
-        "key": "@hrx2.shape.pointwise.ncols",
-        "source": "tensor.dst.dimensions.ncols.size"
-      },
-      {
-        "key": "@hrx2.shape.pointwise.nrows",
-        "source": "tensor.dst.dimensions.nrows.size"
+        "key": "@hrx2.shape.pointwise.total_size",
+        "source": "value.total_size"
       },
       {
         "key": "@hrx2.tuning.pointwise.workgroup_size",

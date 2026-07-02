@@ -22,54 +22,33 @@ def _freeze_mapping(mapping: Mapping[str, Any]) -> Mapping[str, Any]:
 
 
 @dataclass(frozen=True)
-class StrideDescriptor:
-    value: int | None = None
-    dimension: str | None = None
-    product: tuple[str, ...] = ()
-
-
-@dataclass(frozen=True)
-class DimensionBounds:
-    min: int | None
-    max: int | None
-
-
-@dataclass(frozen=True)
 class ConstraintCheck:
-    identifier: str
+    name: str | None = None
+    length: int | None = None
+    index: int | None = None
     min: int | None = None
     max: int | None = None
-    value: int | None = None
-    dimension: str | None = None
-    product: tuple[str, ...] = ()
+    multiple_of: int | None = None
+    equals: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
 class RouteConstraints:
-    sizes: Mapping[str, DimensionBounds]
-    strides: Mapping[str, StrideDescriptor]
     checks: tuple[ConstraintCheck, ...] = ()
 
-    def __post_init__(self) -> None:
-        object.__setattr__(self, "sizes", _freeze_mapping(self.sizes))
-        object.__setattr__(self, "strides", _freeze_mapping(self.strides))
-
 
 @dataclass(frozen=True)
-class TensorDimensionDescriptor:
+class ValueDefinition:
     name: str
-
-
-@dataclass(frozen=True)
-class TensorStrideIdentifier:
-    name: str
+    contiguous_strides: str | None = None
+    product: str | None = None
 
 
 @dataclass(frozen=True)
 class TensorDescriptor:
     dtype: str | None
-    dimensions: tuple[TensorDimensionDescriptor, ...]
-    stride_ids: tuple[TensorStrideIdentifier, ...]
+    dimensions_capture: str
+    strides_capture: str
 
 
 @dataclass(frozen=True)
@@ -95,6 +74,7 @@ class V2Route:
     root_symbol: str
     export_name: str | None
     tensors: Mapping[str, TensorDescriptor]
+    values: tuple[ValueDefinition, ...]
     constraints: RouteConstraints
     launch: Mapping[str, Any]
     bindings: tuple[Mapping[str, str], ...]
