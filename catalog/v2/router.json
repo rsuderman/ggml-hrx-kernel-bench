@@ -6,11 +6,11 @@
       "abs_f32.json"
     ],
     "ADD": [
-      "add_f32_contiguous_2d_r64_1048576_wg256.json",
-      "add_f32_rhs_row_broadcast_2d_r64_1048576_wg256.json",
-      "add_f32_contiguous_1d.json",
-      "add_f32_generic_wg256.json",
-      "add_f32_generic_4d.json"
+      "add/add_f32_contiguous_2d_r64_1048576_wg256.json",
+      "add/add_f32_rhs_row_broadcast_2d_r64_1048576_wg256.json",
+      "add/add_f32_contiguous_1d.json",
+      "add/add_f32_generic_wg256.json",
+      "add/add_f32_generic_4d.json"
     ]
   }
 }
