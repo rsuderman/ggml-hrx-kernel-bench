@@ -11,20 +11,17 @@
     "src0": {
       "dtype": "F32",
       "dimensions": "src0_dimensions",
-      "strides": "src0_strides",
-      "permutation": "src0_permutation"
+      "strides": "src0_strides"
     },
     "src1": {
       "dtype": "F32",
       "dimensions": "src1_dimensions",
-      "strides": "src1_strides",
-      "permutation": "src1_permutation"
+      "strides": "src1_strides"
     },
     "dst": {
       "dtype": "F32",
       "dimensions": "dst_dimensions",
-      "strides": "dst_strides",
-      "permutation": "dst_permutation"
+      "strides": "dst_strides"
     }
   },
   "values": [
@@ -52,18 +49,6 @@
         "src1_strides",
         "dst_strides"
       ]
-    },
-    {
-      "name": "src0_permutation",
-      "iota": true
-    },
-    {
-      "name": "src1_permutation",
-      "iota": true
-    },
-    {
-      "name": "dst_permutation",
-      "iota": true
     }
   ],
   "launch": {

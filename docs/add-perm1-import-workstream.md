@@ -70,3 +70,53 @@
 - V1 `nf != 1` cases: source case indices `35, 36, 37, 38, 46, 47, 48, 49`
 - V2 remaining unsupported `f32` ADD cases: `8`
 - V2 `nf != 1` cases: source case indices `35, 36, 37, 38, 46, 47, 48, 49`
+
+# Current ADD Correctness Triage
+
+- Date: 2026-07-06
+- User request: triage the ADD tests that are currently failing
+- Primary correctness command: `ctest --test-dir build -R 'ADD' --output-on-failure`
+- Escalation or device access used: unsandboxed `ctest` per repo policy
+
+## Run Status
+
+- Runtime ADD CTest status: passing
+- Import materialization status: no rebuild needed, existing v2 ADD import artifacts still show `45` mapped and `53` unmapped cases
+- Current failing point: none in the runtime ADD CTest path; remaining ADD failures are import-side unmapped cases, not kernel execution failures
+- Evidence:
+  - `ctest --test-dir build -R 'ADD' --output-on-failure` passed for both `kernel-run-llama-cpp-tests-ADD-generated` and `kernel-run-llama-cpp-tests-v2-ADD-generated`
+  - `build/tests/kernels/artifacts/llama-cpp-tests-import-v2/ops/ADD/import-summary.md` reports `45` mapped and `53` unmapped cases
+
+## Real Worklist
+
+### ADD v2 `f32` `nf != 1` grouped-YAML cases remain unsupported
+
+- Operation or feature: ADD grouped-YAML import lowering for v2 generic pointwise cases with `nf != 1`
+- Expected behavior: these `f32` ADD cases should materialize to a v2 route if the importer is meant to support grouped pointwise factorization beyond `nf=1`
+- Actual behavior: all eight such cases remain unmapped as `shape_lowering_not_implemented`
+- Evidence: the per-op summary and unmapped artifact show source case indices `35, 36, 37, 38, 46, 47, 48, 49` with detail `contiguous pointwise routing requires nf=1`
+- Shapes, dtypes, layouts, or config:
+  - `ne=[10,5,4,3]`, `nr=[2,1,1,1]`, `nf=2`
+  - `ne=[10,5,4,3]`, `nr=[1,1,2,1]`, `nf=4`
+  - `ne=[10,5,4,3]`, `nr=[1,1,2,2]`, `nf=6`
+  - `ne=[10,5,4,3]`, `nr=[1,2,2,2]`, `nf=7`
+  - `ne=[16,5,4,3]`, `nr=[1,1,1,1]`, `nf=16`
+  - `ne=[16,5,4,3]`, `nr=[1,2,1,1]`, `nf=3`
+  - `ne=[16,5,4,3]`, `nr=[1,1,1,2]`, `nf=5`
+  - `ne=[16,5,4,3]`, `nr=[2,2,2,2]`, `nf=8`
+- Source references:
+  - `src/ggml_hrx_kernel_bench/routing/v2/import_resolution.py:118`
+  - `src/ggml_hrx_kernel_bench/routing/v2/import_resolution.py:147`
+  - `build/tests/kernels/artifacts/llama-cpp-tests-import-v2/ops/ADD/import-summary.md`
+- Validation status: confirmed by artifact inspection and fresh unsandboxed ADD-focused CTest
+- Next concrete action: decide whether `nf != 1` should lower into the generic 4D route; if yes, widen `lower_generic_pointwise_tensors()` and rerun v2 import coverage plus the ADD runtime CTest
+
+## Intentional Negative Coverage
+
+- `ADD` `f16` remains unmapped in v2 as `no_dtype_mapping` for `45` cases because only `add_f32` routes exist today.
+
+## Supplemental Probes
+
+- Probe: inspected `build/tests/kernels/artifacts/llama-cpp-tests-import-v2/ops/ADD/unmapped.json`
+- Why it was needed: distinguish real runtime test failures from import support gaps after the stale `LastTestsFailed.log` entry
+- Result: the only remaining v2 ADD `f32` gaps are the eight `nf != 1` cases above

@@ -14,10 +14,14 @@ def tensor_descriptors_json(route: V2Route) -> dict[str, Any]:
     payload: dict[str, Any] = {}
     for tensor_name, descriptor in route.tensors.items():
         payload[tensor_name] = {
-            "dtype": descriptor.dtype,
-            "dimensions": descriptor.dimensions_capture,
-            "strides": descriptor.strides_capture,
-            "permutation": descriptor.permutation_capture,
+            key: value
+            for key, value in (
+                ("dtype", descriptor.dtype),
+                ("dimensions", descriptor.dimensions_capture),
+                ("strides", descriptor.strides_capture),
+                ("permutation", descriptor.permutation_capture),
+            )
+            if value is not None
         }
     return payload
 
@@ -71,9 +75,13 @@ def route_supports(route: V2Route) -> dict[str, Any]:
         "dst_type": route.tensors.get("dst").dtype if route.tensors.get("dst") else None,
         "tensor_captures": {
             tensor_name: {
-                "dimensions": descriptor.dimensions_capture,
-                "strides": descriptor.strides_capture,
-                "permutation": descriptor.permutation_capture,
+                key: value
+                for key, value in (
+                    ("dimensions", descriptor.dimensions_capture),
+                    ("strides", descriptor.strides_capture),
+                    ("permutation", descriptor.permutation_capture),
+                )
+                if value is not None
             }
             for tensor_name, descriptor in route.tensors.items()
         },

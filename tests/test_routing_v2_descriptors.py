@@ -219,19 +219,16 @@ def test_generic_4d_route_accepts_non_contiguous_broadcast_and_repeat_tensors() 
                 dtype="F32",
                 dimensions_capture="src0_dimensions",
                 strides_capture="src0_strides",
-                permutation_capture="src0_permutation",
             ),
             "src1": TensorDescriptor(
                 dtype="F32",
                 dimensions_capture="src1_dimensions",
                 strides_capture="src1_strides",
-                permutation_capture="src1_permutation",
             ),
             "dst": TensorDescriptor(
                 dtype="F32",
                 dimensions_capture="dst_dimensions",
                 strides_capture="dst_strides",
-                permutation_capture="dst_permutation",
             ),
         },
         values=(
@@ -242,8 +239,6 @@ def test_generic_4d_route_accepts_non_contiguous_broadcast_and_repeat_tensors() 
                 ConstraintCheck(name="dst_dimensions", length=4),
                 ConstraintCheck(divides=("src0_dimensions", "dst_dimensions")),
                 ConstraintCheck(divides=("src1_dimensions", "dst_dimensions")),
-                ConstraintCheck(name="src0_permutation", iota=True),
-                ConstraintCheck(name="dst_permutation", iota=True),
             )
         ),
         launch={"workgroup_size": [256, 1, 1]},
@@ -285,7 +280,7 @@ def test_generic_4d_route_accepts_non_contiguous_broadcast_and_repeat_tensors() 
     assert route_accepts_tensors(route, tensors) is True
 
 
-def test_generic_4d_route_rejects_non_iota_src0_permutation() -> None:
+def test_generic_4d_route_accepts_transposed_src0_and_dst() -> None:
     route = V2Route(
         id="add_f32_generic_4d",
         family="add_f32",
@@ -299,19 +294,16 @@ def test_generic_4d_route_rejects_non_iota_src0_permutation() -> None:
                 dtype="F32",
                 dimensions_capture="src0_dimensions",
                 strides_capture="src0_strides",
-                permutation_capture="src0_permutation",
             ),
             "src1": TensorDescriptor(
                 dtype="F32",
                 dimensions_capture="src1_dimensions",
                 strides_capture="src1_strides",
-                permutation_capture="src1_permutation",
             ),
             "dst": TensorDescriptor(
                 dtype="F32",
                 dimensions_capture="dst_dimensions",
                 strides_capture="dst_strides",
-                permutation_capture="dst_permutation",
             ),
         },
         values=(ValueDefinition(name="total_size", product="dst_dimensions"),),
@@ -320,8 +312,6 @@ def test_generic_4d_route_rejects_non_iota_src0_permutation() -> None:
                 ConstraintCheck(name="dst_dimensions", length=4),
                 ConstraintCheck(divides=("src0_dimensions", "dst_dimensions")),
                 ConstraintCheck(divides=("src1_dimensions", "dst_dimensions")),
-                ConstraintCheck(name="src0_permutation", iota=True),
-                ConstraintCheck(name="dst_permutation", iota=True),
             )
         ),
         launch={"workgroup_size": [256, 1, 1]},
@@ -356,8 +346,8 @@ def test_generic_4d_route_rejects_non_iota_src0_permutation() -> None:
                 ConcreteTensorDimension(name="d2", size=6, stride=263),
                 ConcreteTensorDimension(name="d3", size=7, stride=1499),
             ),
-            permutation=(0, 1, 2, 3),
+            permutation=(0, 2, 1, 3),
         ),
     }
 
-    assert route_accepts_tensors(route, tensors) is False
+    assert route_accepts_tensors(route, tensors) is True
