@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import numpy as np
+import pytest
 
 from ggml_hrx_kernel_bench.oracles import generate_oracle, write_workbench
 from ggml_hrx_kernel_bench.routing.api import Candidate
@@ -16,13 +17,15 @@ def _candidate(
     source_id: str = "add_f32",
     root_symbol: str = "@hrx2_add_f32",
     export_name: str = "hrx2_add_f32",
+    op: str = "ADD",
+    source_path: str = "kernels/v2/add/contiguous_1d.loom",
 ) -> Candidate:
     return Candidate(
         id=candidate_id,
         family=family,
-        op="ADD",
+        op=op,
         source_id=source_id,
-        source_path=Path("kernels/v2/add/contiguous_1d.loom"),
+        source_path=Path(source_path),
         root_symbol=root_symbol,
         export_name=export_name,
         route_id=f"{family}_test",
@@ -83,14 +86,32 @@ def test_add_oracle_and_workbench_support_ranked_src1_overrides(tmp_path: Path) 
     assert "tensor<1200xf32>, tensor<600xf32>, tensor<1200xf32>" in workbench
 
 
-def test_add_f16_oracle_and_workbench_use_i16_buffers(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    ("family", "op", "source_path", "root_symbol", "export_name"),
+    (
+        ("add_f16", "ADD", "kernels/v2/add/contiguous_1d.loom", "@hrx2_add_f16", "hrx2_add_f16"),
+        ("mul_f16", "MUL", "kernels/v2/mul/contiguous_1d.loom", "@hrx2_mul_f16", "hrx2_mul_f16"),
+        ("div_f16", "DIV", "kernels/v2/div/contiguous_1d.loom", "@hrx2_div_f16", "hrx2_div_f16"),
+        ("sub_f16", "SUB", "kernels/v2/sub/contiguous_1d.loom", "@hrx2_sub_f16", "hrx2_sub_f16"),
+    ),
+)
+def test_pointwise_f16_oracle_and_workbench_use_i16_buffers(
+    tmp_path: Path,
+    family: str,
+    op: str,
+    source_path: str,
+    root_symbol: str,
+    export_name: str,
+) -> None:
     candidate = _candidate(
-        candidate_id="add_f16_ranked_2d",
+        candidate_id=f"{family}_ranked_2d",
         shape={"d0": 16, "d1": 64},
-        family="add_f16",
-        source_id="add_f16",
-        root_symbol="@hrx2_add_f16",
-        export_name="hrx2_add_f16",
+        family=family,
+        source_id=family,
+        root_symbol=root_symbol,
+        export_name=export_name,
+        op=op,
+        source_path=source_path,
     )
 
     result = generate_oracle(candidate, tmp_path / "fixtures", force=True)
@@ -102,7 +123,7 @@ def test_add_f16_oracle_and_workbench_use_i16_buffers(tmp_path: Path) -> None:
     assert np.load(tmp_path / "fixtures" / "expected.npy").dtype == np.int16
 
     linked_source = tmp_path / "linked.loom"
-    linked_source.write_text("kernel.def export(\"hrx2_add_f16\") @hrx2_add_f16() {}\n", encoding="utf-8")
+    linked_source.write_text(f"kernel.def export(\"{export_name}\") {root_symbol}() {{}}\n", encoding="utf-8")
     _, metadata = write_workbench(candidate, linked_source, tmp_path / "workbench.loom", tmp_path / "fixtures")
 
     assert metadata["status"] == "ok"

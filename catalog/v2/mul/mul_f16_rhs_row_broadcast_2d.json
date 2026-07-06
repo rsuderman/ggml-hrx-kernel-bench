@@ -1,11 +1,11 @@
 {
-  "id": "add_f16_rhs_row_broadcast_2d_r64_1048576_wg256",
-  "family": "add_f16",
+  "id": "mul_f16_rhs_row_broadcast_2d",
+  "family": "mul_f16",
   "kernel": {
-    "source_id": "add_pointwise_f16",
-    "path": "add/rhs_row_broadcast_2d.loom",
-    "root_symbol": "@hrx2_add_f16_rhs_row_broadcast_2d",
-    "export_name": "hrx2_add_f16_rhs_row_broadcast_2d"
+    "source_id": "mul_pointwise_f16",
+    "path": "mul/rhs_row_broadcast_2d.loom",
+    "root_symbol": "@hrx2_mul_f16_rhs_row_broadcast_2d",
+    "export_name": "hrx2_mul_f16_rhs_row_broadcast_2d"
   },
   "tensors": {
     "src0": {

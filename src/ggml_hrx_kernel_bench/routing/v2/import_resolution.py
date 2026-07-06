@@ -197,13 +197,27 @@ def lower_contiguous_unary_tensors(
     return tensors, _fallback_shape_from_extents(ne)
 
 
+def _route_uses_generic_pointwise_lowering(route: V2Route) -> bool:
+    has_rank4_dst = False
+    has_src0_divides = False
+    has_src1_divides = False
+    for check in route.constraints.checks:
+        if check.name == "dst_dimensions" and check.length == 4:
+            has_rank4_dst = True
+        if check.divides == ("src0_dimensions", "dst_dimensions"):
+            has_src0_divides = True
+        if check.divides == ("src1_dimensions", "dst_dimensions"):
+            has_src1_divides = True
+    return has_rank4_dst and has_src0_divides and has_src1_divides
+
+
 def lower_tensors_for_route(
     case: ImportedCase,
     route: V2Route,
 ) -> tuple[dict[str, ConcreteTensor], dict[str, int]]:
     if route.op == "ABS":
         return lower_contiguous_unary_tensors(case)
-    if route.id in {"add_f32_generic_4d", "add_f16_generic_4d"}:
+    if _route_uses_generic_pointwise_lowering(route):
         return lower_generic_pointwise_tensors(case)
     return lower_contiguous_pointwise_tensors(case)
 

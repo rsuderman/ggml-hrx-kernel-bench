@@ -446,18 +446,17 @@ def _pointwise_buffers_and_views(
     dst_seed: int,
     src1_positive: bool = False,
     buffer_pattern: Callable[..., Any] = f32_pattern,
+    src1_pattern: Callable[..., Any] | None = None,
     dst_pattern: Callable[..., Any] | None = None,
 ) -> tuple[Any, Any, Any, Any, Any]:
     dst_pattern = buffer_pattern if dst_pattern is None else dst_pattern
+    if src1_pattern is None:
+        src1_pattern = positive_f32_pattern if src1_positive else buffer_pattern
     common_dims = _pointwise_common_dims(candidate)
     if common_dims is None:
         ncols, nrows, elems = _dims(candidate)
         src0_buffer = buffer_pattern(np, (elems,), seed=src0_seed)
-        src1_buffer = (
-            positive_f32_pattern(np, (elems,), seed=src1_seed)
-            if src1_positive
-            else buffer_pattern(np, (elems,), seed=src1_seed)
-        )
+        src1_buffer = src1_pattern(np, (elems,), seed=src1_seed)
         dst_init = dst_pattern(np, (elems,), seed=dst_seed, scale=0.25)
         src0_view = src0_buffer.reshape(nrows, ncols)
         src1_view = _pointwise_src1_view(np, candidate, src1_buffer)
@@ -471,7 +470,6 @@ def _pointwise_buffers_and_views(
     src1_strides = _pointwise_tensor_strides(candidate, "src1", src1_dims)
     dst_strides = _pointwise_tensor_strides(candidate, "dst", dst_dims)
     src0_buffer = buffer_pattern(np, (_buffer_length(src0_dims, src0_strides),), seed=src0_seed)
-    src1_pattern = positive_f32_pattern if src1_positive else buffer_pattern
     src1_buffer = src1_pattern(np, (_buffer_length(src1_dims, src1_strides),), seed=src1_seed)
     dst_init = dst_pattern(np, (_buffer_length(dst_dims, dst_strides),), seed=dst_seed, scale=0.25)
     src0_indices = _pointwise_logical_indices(np, common_dims, src0_dims, src0_strides)
@@ -652,25 +650,54 @@ def _div_arrays(np: Any, candidate: Candidate, seed: int) -> dict[str, Any]:
     }
 
 
-def _add_f16_exact_arrays(np: Any, candidate: Candidate, seed: int) -> dict[str, Any]:
-    src0_buffer, src0, src1_buffer, src1, (dst_init, dst_indices) = _pointwise_buffers_and_views(
-        np,
-        candidate,
-        src0_seed=seed,
-        src1_seed=seed + 1,
-        dst_seed=seed + 2,
-        buffer_pattern=f16_pattern,
-    )
-    expected = dst_init.copy()
-    expected[dst_indices] = (src0.astype(np.float32) + src1.astype(np.float32)).astype(np.float16)
-    return {
-        "arrays": {
-            "src0": _f16_bits(np, src0_buffer),
-            "src1": _f16_bits(np, src1_buffer),
-            "dst_init": _f16_bits(np, dst_init),
-            "expected": _f16_bits(np, expected),
+def _positive_f16_pattern(np: Any, shape: tuple[int, ...], *, seed: int, scale: float = 0.25):
+    return positive_f32_pattern(np, shape, seed=seed, scale=scale).astype(np.float16)
+
+
+def _pointwise_exact_arrays(
+    op: Callable[[Any, Any], Any],
+    *,
+    src1_positive: bool = False,
+) -> Callable[[Any, Candidate, int], dict[str, Any]]:
+    def build(np: Any, candidate: Candidate, seed: int) -> dict[str, Any]:
+        src1_pattern = _positive_f16_pattern if src1_positive else f16_pattern
+        src0_buffer, src0, src1_buffer, src1, (dst_init, dst_indices) = _pointwise_buffers_and_views(
+            np,
+            candidate,
+            src0_seed=seed,
+            src1_seed=seed + 1,
+            dst_seed=seed + 2,
+            buffer_pattern=f16_pattern,
+            src1_pattern=src1_pattern,
+        )
+        expected = dst_init.copy()
+        expected[dst_indices] = op(src0.astype(np.float32), src1.astype(np.float32)).astype(np.float16)
+        return {
+            "arrays": {
+                "src0": _f16_bits(np, src0_buffer),
+                "src1": _f16_bits(np, src1_buffer),
+                "dst_init": _f16_bits(np, dst_init),
+                "expected": _f16_bits(np, expected),
+            }
         }
-    }
+
+    return build
+
+
+def _add_f16_exact_arrays(np: Any, candidate: Candidate, seed: int) -> dict[str, Any]:
+    return _pointwise_exact_arrays(lambda lhs, rhs: lhs + rhs)(np, candidate, seed)
+
+
+def _mul_f16_exact_arrays(np: Any, candidate: Candidate, seed: int) -> dict[str, Any]:
+    return _pointwise_exact_arrays(lambda lhs, rhs: lhs * rhs)(np, candidate, seed)
+
+
+def _div_f16_exact_arrays(np: Any, candidate: Candidate, seed: int) -> dict[str, Any]:
+    return _pointwise_exact_arrays(lambda lhs, rhs: lhs / rhs, src1_positive=True)(np, candidate, seed)
+
+
+def _sub_f16_exact_arrays(np: Any, candidate: Candidate, seed: int) -> dict[str, Any]:
+    return _pointwise_exact_arrays(lambda lhs, rhs: lhs - rhs)(np, candidate, seed)
 
 
 def _scale_arrays(np: Any, candidate: Candidate, seed: int) -> dict[str, Any]:
@@ -1151,6 +1178,7 @@ LOGICAL_ORACLE_SPECS: tuple[LogicalOracleSpec, ...] = (
     LogicalOracleSpec(("add_f32",), "add_f32_numpy", {"atol": 1e-6, "rtol": 1e-6}, _binary_arrays(lambda lhs, rhs: lhs + rhs)),
     LogicalOracleSpec(("mul_f32",), "mul_f32_numpy", {"atol": 1e-6, "rtol": 1e-6}, _binary_arrays(lambda lhs, rhs: lhs * rhs)),
     LogicalOracleSpec(("div_f32",), "div_f32_numpy", {"atol": 1e-5, "rtol": 1e-5}, _div_arrays),
+    LogicalOracleSpec(("sub_f32",), "sub_f32_numpy", {"atol": 1e-6, "rtol": 1e-6}, _binary_arrays(lambda lhs, rhs: lhs - rhs)),
     LogicalOracleSpec(("scale_f32",), "scale_f32_numpy", {"atol": 1e-6, "rtol": 1e-6}, _scale_arrays),
     LogicalOracleSpec(("clamp_f32",), "clamp_f32_numpy", {"atol": 1e-6, "rtol": 1e-6}, _clamp_arrays),
     LogicalOracleSpec(("argsort_f32_i32",), "argsort_f32_i32_numpy_desc", {"atol": 0.0, "rtol": 0.0}, _argsort_arrays),
@@ -1323,7 +1351,7 @@ def _write_abs_workbench(candidate: Candidate, linked_source: Path, workbench_pa
 def _write_pointwise_workbench(candidate: Candidate, linked_source: Path, workbench_path: Path, fixture_dir: Path) -> tuple[str, dict[str, Any]]:
     src0_elems, src1_elems, dst_elems = _pointwise_buffer_lengths(candidate)
     case_name, bench_name = _case_names(candidate)
-    if candidate.family == "add_f16":
+    if candidate.family in {"add_f16", "mul_f16", "div_f16", "sub_f16"}:
         lines = [
             _read_i16(workbench_path, fixture_dir, "src0", src0_elems),
             _read_i16(workbench_path, fixture_dir, "src1", src1_elems),
@@ -1339,7 +1367,7 @@ def _write_pointwise_workbench(candidate: Candidate, linked_source: Path, workbe
         _read_f32(workbench_path, fixture_dir, "dst_init", dst_elems).replace("%dst_init", "%dst"),
         _read_f32(workbench_path, fixture_dir, "expected", dst_elems),
     ]
-    if candidate.family in {"add_f32", "mul_f32", "div_f32"}:
+    if candidate.family in {"add_f32", "mul_f32", "div_f32", "sub_f32"}:
         lines.insert(1, _read_f32(workbench_path, fixture_dir, "src1", src1_elems))
         call_args = "%src0, %src1, %dst"
         call_types = f"tensor<{src0_elems}xf32>, tensor<{src1_elems}xf32>, tensor<{dst_elems}xf32>"
@@ -1637,8 +1665,25 @@ ORACLE_SPECS: tuple[OracleSpec, ...] = (
         for spec in LOGICAL_ORACLE_SPECS
     ),
     OracleSpec(
-        family_ids=("add_f32", "mul_f32", "div_f32", "add_f16"),
-        generate=_logical_generate(LogicalOracleSpec(("add_f32", "mul_f32", "div_f32", "add_f16"), "pointwise_binary_numpy", {"atol": 1e-5, "rtol": 1e-5}, lambda np, candidate, seed: {"add_f32": _binary_arrays(lambda lhs, rhs: lhs + rhs), "mul_f32": _binary_arrays(lambda lhs, rhs: lhs * rhs), "div_f32": _div_arrays, "add_f16": _add_f16_exact_arrays}[candidate.family](np, candidate, seed), exact_kernel_abi=True)),
+        family_ids=("add_f32", "mul_f32", "div_f32", "sub_f32", "add_f16", "mul_f16", "div_f16", "sub_f16"),
+        generate=_logical_generate(
+            LogicalOracleSpec(
+                ("add_f32", "mul_f32", "div_f32", "sub_f32", "add_f16", "mul_f16", "div_f16", "sub_f16"),
+                "pointwise_binary_numpy",
+                {"atol": 1e-5, "rtol": 1e-5},
+                lambda np, candidate, seed: {
+                    "add_f32": _binary_arrays(lambda lhs, rhs: lhs + rhs),
+                    "mul_f32": _binary_arrays(lambda lhs, rhs: lhs * rhs),
+                    "div_f32": _div_arrays,
+                    "sub_f32": _binary_arrays(lambda lhs, rhs: lhs - rhs),
+                    "add_f16": _add_f16_exact_arrays,
+                    "mul_f16": _mul_f16_exact_arrays,
+                    "div_f16": _div_f16_exact_arrays,
+                    "sub_f16": _sub_f16_exact_arrays,
+                }[candidate.family](np, candidate, seed),
+                exact_kernel_abi=True,
+            )
+        ),
         write_workbench=_write_pointwise_workbench,
     ),
     OracleSpec(

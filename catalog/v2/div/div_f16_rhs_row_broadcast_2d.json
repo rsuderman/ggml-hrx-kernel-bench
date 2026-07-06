@@ -1,0 +1,107 @@
+{
+  "id": "div_f16_rhs_row_broadcast_2d",
+  "family": "div_f16",
+  "kernel": {
+    "source_id": "div_pointwise_f16",
+    "path": "div/rhs_row_broadcast_2d.loom",
+    "root_symbol": "@hrx2_div_f16_rhs_row_broadcast_2d",
+    "export_name": "hrx2_div_f16_rhs_row_broadcast_2d"
+  },
+  "tensors": {
+    "src0": {
+      "dtype": "F16",
+      "dimensions": "src0_dimensions",
+      "strides": "src0_strides"
+    },
+    "src1": {
+      "dtype": "F16",
+      "dimensions": "src1_dimensions",
+      "strides": "src1_strides"
+    },
+    "dst": {
+      "dtype": "F16",
+      "dimensions": "dst_dimensions",
+      "strides": "dst_strides"
+    }
+  },
+  "values": [
+    {
+      "name": "contiguous_strides",
+      "contiguous_strides": "dst_dimensions"
+    }
+  ],
+  "constraints": [
+    {
+      "name": "dst_dimensions",
+      "length": 2
+    },
+    {
+      "name": "dst_dimensions",
+      "index": 0,
+      "min": 1,
+      "max": 65536
+    },
+    {
+      "name": "dst_dimensions",
+      "index": 1,
+      "min": 64,
+      "max": 1048576
+    },
+    {
+      "equals": [
+        "src0_dimensions",
+        "dst_dimensions"
+      ]
+    },
+    {
+      "equals": [
+        "contiguous_strides",
+        "src0_strides",
+        "dst_strides"
+      ]
+    },
+    {
+      "name": "src1_dimensions",
+      "index": 1,
+      "min": 1,
+      "max": 1
+    },
+    {
+      "name": "src1_strides",
+      "index": 0,
+      "min": 1,
+      "max": 1
+    },
+    {
+      "name": "src1_strides",
+      "index": 1,
+      "min": 0,
+      "max": 0
+    }
+  ],
+  "launch": {
+    "workgroup_size": [
+      256,
+      1,
+      1
+    ],
+    "rows_per_workgroup": 1,
+    "cols_per_workgroup": 256
+  },
+  "config": {
+    "bindings": [
+      {
+        "key": "@hrx2.shape.pointwise.d0",
+        "source": "shape.d0"
+      },
+      {
+        "key": "@hrx2.shape.pointwise.d1",
+        "source": "shape.d1"
+      },
+      {
+        "key": "@hrx2.tuning.pointwise.workgroup_size",
+        "value": "256"
+      }
+    ]
+  }
+}

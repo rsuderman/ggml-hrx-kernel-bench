@@ -6,16 +6,52 @@
       "abs_f32.json"
     ],
     "ADD": [
-      "add/add_f16_contiguous_2d_r64_1048576_wg256.json",
-      "add/add_f16_rhs_row_broadcast_2d_r64_1048576_wg256.json",
+      "add/add_f16_contiguous_2d.json",
+      "add/add_f16_rhs_row_broadcast_2d.json",
       "add/add_f16_contiguous_1d.json",
-      "add/add_f16_generic_wg256.json",
+      "add/add_f16_generic_2d.json",
       "add/add_f16_generic_4d.json",
-      "add/add_f32_contiguous_2d_r64_1048576_wg256.json",
-      "add/add_f32_rhs_row_broadcast_2d_r64_1048576_wg256.json",
+      "add/add_f32_contiguous_2d.json",
+      "add/add_f32_rhs_row_broadcast_2d.json",
       "add/add_f32_contiguous_1d.json",
-      "add/add_f32_generic_wg256.json",
+      "add/add_f32_generic_2d.json",
       "add/add_f32_generic_4d.json"
+    ],
+    "DIV": [
+      "div/div_f16_contiguous_2d.json",
+      "div/div_f16_rhs_row_broadcast_2d.json",
+      "div/div_f16_contiguous_1d.json",
+      "div/div_f16_generic_2d.json",
+      "div/div_f16_generic_4d.json",
+      "div/div_f32_contiguous_2d.json",
+      "div/div_f32_rhs_row_broadcast_2d.json",
+      "div/div_f32_contiguous_1d.json",
+      "div/div_f32_generic_2d.json",
+      "div/div_f32_generic_4d.json"
+    ],
+    "MUL": [
+      "mul/mul_f16_contiguous_2d.json",
+      "mul/mul_f16_rhs_row_broadcast_2d.json",
+      "mul/mul_f16_contiguous_1d.json",
+      "mul/mul_f16_generic_2d.json",
+      "mul/mul_f16_generic_4d.json",
+      "mul/mul_f32_contiguous_2d.json",
+      "mul/mul_f32_rhs_row_broadcast_2d.json",
+      "mul/mul_f32_contiguous_1d.json",
+      "mul/mul_f32_generic_2d.json",
+      "mul/mul_f32_generic_4d.json"
+    ],
+    "SUB": [
+      "sub/sub_f16_contiguous_2d.json",
+      "sub/sub_f16_rhs_row_broadcast_2d.json",
+      "sub/sub_f16_contiguous_1d.json",
+      "sub/sub_f16_generic_2d.json",
+      "sub/sub_f16_generic_4d.json",
+      "sub/sub_f32_contiguous_2d.json",
+      "sub/sub_f32_rhs_row_broadcast_2d.json",
+      "sub/sub_f32_contiguous_1d.json",
+      "sub/sub_f32_generic_2d.json",
+      "sub/sub_f32_generic_4d.json"
     ]
   }
 }

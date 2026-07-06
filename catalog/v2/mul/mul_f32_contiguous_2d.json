@@ -1,25 +1,25 @@
 {
-  "id": "add_f16_contiguous_2d_r64_1048576_wg256",
-  "family": "add_f16",
+  "id": "mul_f32_contiguous_2d",
+  "family": "mul_f32",
   "kernel": {
-    "source_id": "add_pointwise_f16",
-    "path": "add/contiguous_2d.loom",
-    "root_symbol": "@hrx2_add_f16_contiguous_2d",
-    "export_name": "hrx2_add_f16_contiguous_2d"
+    "source_id": "mul_pointwise_f32",
+    "path": "mul/contiguous_2d.loom",
+    "root_symbol": "@hrx2_mul_f32_contiguous_2d",
+    "export_name": "hrx2_mul_f32_contiguous_2d"
   },
   "tensors": {
     "src0": {
-      "dtype": "F16",
+      "dtype": "F32",
       "dimensions": "src0_dimensions",
       "strides": "src0_strides"
     },
     "src1": {
-      "dtype": "F16",
+      "dtype": "F32",
       "dimensions": "src1_dimensions",
       "strides": "src1_strides"
     },
     "dst": {
-      "dtype": "F16",
+      "dtype": "F32",
       "dimensions": "dst_dimensions",
       "strides": "dst_strides"
     }

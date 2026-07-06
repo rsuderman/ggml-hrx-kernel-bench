@@ -1,11 +1,11 @@
 {
-  "id": "add_f16_generic_wg256",
-  "family": "add_f16",
+  "id": "div_f16_contiguous_2d",
+  "family": "div_f16",
   "kernel": {
-    "source_id": "add_pointwise_f16",
-    "path": "add/generic_2d.loom",
-    "root_symbol": "@hrx2_add_f16",
-    "export_name": "hrx2_add_f16"
+    "source_id": "div_pointwise_f16",
+    "path": "div/contiguous_2d.loom",
+    "root_symbol": "@hrx2_div_f16_contiguous_2d",
+    "export_name": "hrx2_div_f16_contiguous_2d"
   },
   "tensors": {
     "src0": {
@@ -24,7 +24,12 @@
       "strides": "dst_strides"
     }
   },
-  "values": [],
+  "values": [
+    {
+      "name": "contiguous_strides",
+      "contiguous_strides": "dst_dimensions"
+    }
+  ],
   "constraints": [
     {
       "name": "dst_dimensions",
@@ -39,24 +44,23 @@
     {
       "name": "dst_dimensions",
       "index": 1,
-      "min": 1,
+      "min": 64,
       "max": 1048576
     },
     {
       "equals": [
         "src0_dimensions",
+        "src1_dimensions",
         "dst_dimensions"
       ]
     },
     {
-      "name": "src1_dimensions",
-      "length": 2
-    },
-    {
-      "name": "src1_strides",
-      "index": 0,
-      "min": 1,
-      "max": 1
+      "equals": [
+        "contiguous_strides",
+        "src0_strides",
+        "src1_strides",
+        "dst_strides"
+      ]
     }
   ],
   "launch": {
@@ -66,7 +70,7 @@
       1
     ],
     "rows_per_workgroup": 1,
-    "cols_per_workgroup": 1
+    "cols_per_workgroup": 256
   },
   "config": {
     "bindings": [
@@ -77,18 +81,6 @@
       {
         "key": "@hrx2.shape.pointwise.d1",
         "source": "shape.d1"
-      },
-      {
-        "key": "@hrx2.shape.pointwise.src0_d1_stride",
-        "source": "shape.src0_d1_stride"
-      },
-      {
-        "key": "@hrx2.shape.pointwise.src1_d1_stride",
-        "source": "shape.src1_d1_stride"
-      },
-      {
-        "key": "@hrx2.shape.pointwise.src1_d0",
-        "source": "shape.src1_d0"
       },
       {
         "key": "@hrx2.tuning.pointwise.workgroup_size",

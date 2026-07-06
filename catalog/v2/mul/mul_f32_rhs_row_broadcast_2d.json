@@ -1,11 +1,11 @@
 {
-  "id": "add_f32_generic_wg256",
-  "family": "add_f32",
+  "id": "mul_f32_rhs_row_broadcast_2d",
+  "family": "mul_f32",
   "kernel": {
-    "source_id": "add_pointwise_f32",
-    "path": "add/generic_2d.loom",
-    "root_symbol": "@hrx2_add_f32",
-    "export_name": "hrx2_add_f32"
+    "source_id": "mul_pointwise_f32",
+    "path": "mul/rhs_row_broadcast_2d.loom",
+    "root_symbol": "@hrx2_mul_f32_rhs_row_broadcast_2d",
+    "export_name": "hrx2_mul_f32_rhs_row_broadcast_2d"
   },
   "tensors": {
     "src0": {
@@ -24,7 +24,12 @@
       "strides": "dst_strides"
     }
   },
-  "values": [],
+  "values": [
+    {
+      "name": "contiguous_strides",
+      "contiguous_strides": "dst_dimensions"
+    }
+  ],
   "constraints": [
     {
       "name": "dst_dimensions",
@@ -39,7 +44,7 @@
     {
       "name": "dst_dimensions",
       "index": 1,
-      "min": 1,
+      "min": 64,
       "max": 1048576
     },
     {
@@ -49,14 +54,29 @@
       ]
     },
     {
+      "equals": [
+        "contiguous_strides",
+        "src0_strides",
+        "dst_strides"
+      ]
+    },
+    {
       "name": "src1_dimensions",
-      "length": 2
+      "index": 1,
+      "min": 1,
+      "max": 1
     },
     {
       "name": "src1_strides",
       "index": 0,
       "min": 1,
       "max": 1
+    },
+    {
+      "name": "src1_strides",
+      "index": 1,
+      "min": 0,
+      "max": 0
     }
   ],
   "launch": {
@@ -66,7 +86,7 @@
       1
     ],
     "rows_per_workgroup": 1,
-    "cols_per_workgroup": 1
+    "cols_per_workgroup": 256
   },
   "config": {
     "bindings": [
@@ -77,18 +97,6 @@
       {
         "key": "@hrx2.shape.pointwise.d1",
         "source": "shape.d1"
-      },
-      {
-        "key": "@hrx2.shape.pointwise.src0_d1_stride",
-        "source": "shape.src0_d1_stride"
-      },
-      {
-        "key": "@hrx2.shape.pointwise.src1_d1_stride",
-        "source": "shape.src1_d1_stride"
-      },
-      {
-        "key": "@hrx2.shape.pointwise.src1_d0",
-        "source": "shape.src1_d0"
       },
       {
         "key": "@hrx2.tuning.pointwise.workgroup_size",

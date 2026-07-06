@@ -359,7 +359,7 @@ def test_generic_4d_route_accepts_transposed_src0_and_dst() -> None:
 
 def test_materialize_rank2_tensors_models_rhs_row_broadcast_route() -> None:
     route = V2Route(
-        id="add_f32_rhs_row_broadcast_2d_r64_1048576_wg256",
+        id="add_f32_rhs_row_broadcast_2d",
         family="add_f32",
         op="ADD",
         source_id="add_pointwise_f32",

@@ -15,7 +15,14 @@ from ggml_hrx_kernel_bench.routing.api import (
     RuntimeCaseRequest,
     create_router,
 )
-from ggml_hrx_kernel_bench.routing.v2.import_resolution import resolve_imported_suite
+from ggml_hrx_kernel_bench.routing.v2.import_resolution import resolve_imported_suite, resolve_route_for_case
+from ggml_hrx_kernel_bench.routing.v2.models import (
+    ConstraintCheck,
+    RouteConstraints,
+    TensorDescriptor,
+    V2Route,
+    ValueDefinition,
+)
 from ggml_hrx_kernel_bench.routing.v2.manifest import build_manifest
 from ggml_hrx_kernel_bench.routing.v2.query import load_route_catalog
 
@@ -382,6 +389,67 @@ def test_v2_router_lowers_permuted_rhs_add_case(tmp_path: Path) -> None:
     assert resolved.resolved[0].params == ["d0", "d1", "d2", "d3", "src1_d0_stride", "src1_d1_stride", "src1_d2_stride"]
     assert resolved.resolved[0].values == [10, 5, 4, 3, 20, 1, 5]
     assert resolved.unmapped == []
+
+
+def test_v2_import_resolution_lowers_permuted_rhs_for_non_add_generic_route() -> None:
+    route = V2Route(
+        id="mul_f32_generic_4d",
+        family="mul_f32",
+        op="MUL",
+        source_id="mul_f32",
+        kernel_path="mul/generic_4d.loom",
+        root_symbol="@hrx2_mul_f32_generic_4d",
+        export_name="hrx2_mul_f32_generic_4d",
+        tensors={
+            "src0": TensorDescriptor(dtype="F32", dimensions_capture="src0_dimensions", strides_capture="src0_strides"),
+            "src1": TensorDescriptor(dtype="F32", dimensions_capture="src1_dimensions", strides_capture="src1_strides"),
+            "dst": TensorDescriptor(dtype="F32", dimensions_capture="dst_dimensions", strides_capture="dst_strides"),
+        },
+        values=(ValueDefinition(name="total_size", product="dst_dimensions"),),
+        constraints=RouteConstraints(
+            checks=(
+                ConstraintCheck(name="dst_dimensions", length=4),
+                ConstraintCheck(divides=("src0_dimensions", "dst_dimensions")),
+                ConstraintCheck(divides=("src1_dimensions", "dst_dimensions")),
+            )
+        ),
+        launch={"workgroup_size": [256, 1, 1]},
+        bindings=(),
+    )
+    case = ImportedCase(
+        op="MUL",
+        dtype={"type": "f32"},
+        raw_case={
+            "ne": [10, 5, 4, 3],
+            "nr": [1, 1, 1, 1],
+            "nf": 1,
+            "perm1": [1, 2, 0, 3],
+        },
+        normalized_params={
+            "ne": [10, 5, 4, 3],
+            "nr": [1, 1, 1, 1],
+            "nf": 1,
+            "perm1": [1, 2, 0, 3],
+        },
+        source_path="test.yaml",
+        source_group_index=0,
+        source_case_index=0,
+    )
+
+    resolved_route, shape, reason, detail = resolve_route_for_case(case, [route])
+
+    assert resolved_route is route
+    assert shape == {
+        "d0": 10,
+        "d1": 5,
+        "d2": 4,
+        "d3": 3,
+        "src1_d0_stride": 20,
+        "src1_d1_stride": 1,
+        "src1_d2_stride": 5,
+    }
+    assert reason is None
+    assert detail is None
 
 
 def test_v2_helpers_require_catalog_or_routing_dir(tmp_path: Path) -> None:

@@ -1,0 +1,162 @@
+{
+  "id": "mul_f32_generic_4d",
+  "family": "mul_f32",
+  "kernel": {
+    "source_id": "mul_f32",
+    "path": "mul/generic_4d.loom",
+    "root_symbol": "@hrx2_mul_f32_generic_4d",
+    "export_name": "hrx2_mul_f32_generic_4d"
+  },
+  "tensors": {
+    "src0": {
+      "dtype": "F32",
+      "dimensions": "src0_dimensions",
+      "strides": "src0_strides"
+    },
+    "src1": {
+      "dtype": "F32",
+      "dimensions": "src1_dimensions",
+      "strides": "src1_strides"
+    },
+    "dst": {
+      "dtype": "F32",
+      "dimensions": "dst_dimensions",
+      "strides": "dst_strides"
+    }
+  },
+  "values": [
+    {
+      "name": "total_size",
+      "product": "dst_dimensions"
+    }
+  ],
+  "constraints": [
+    {
+      "name": "dst_dimensions",
+      "length": 4
+    },
+    {
+      "divides": [
+        "src0_dimensions",
+        "dst_dimensions"
+      ]
+    },
+    {
+      "divides": [
+        "src1_dimensions",
+        "dst_dimensions"
+      ]
+    }
+  ],
+  "launch": {
+    "workgroup_size": [
+      256,
+      1,
+      1
+    ]
+  },
+  "config": {
+    "bindings": [
+      {
+        "key": "@hrx2.shape.mul4d.ne0",
+        "source": "tensor.dst.dimensions.d0.size"
+      },
+      {
+        "key": "@hrx2.shape.mul4d.ne1",
+        "source": "tensor.dst.dimensions.d1.size"
+      },
+      {
+        "key": "@hrx2.shape.mul4d.ne2",
+        "source": "tensor.dst.dimensions.d2.size"
+      },
+      {
+        "key": "@hrx2.shape.mul4d.ne3",
+        "source": "tensor.dst.dimensions.d3.size"
+      },
+      {
+        "key": "@hrx2.shape.mul4d.src0_ne0",
+        "source": "tensor.src0.dimensions.d0.size"
+      },
+      {
+        "key": "@hrx2.shape.mul4d.src0_ne1",
+        "source": "tensor.src0.dimensions.d1.size"
+      },
+      {
+        "key": "@hrx2.shape.mul4d.src0_ne2",
+        "source": "tensor.src0.dimensions.d2.size"
+      },
+      {
+        "key": "@hrx2.shape.mul4d.src0_ne3",
+        "source": "tensor.src0.dimensions.d3.size"
+      },
+      {
+        "key": "@hrx2.shape.mul4d.src1_ne0",
+        "source": "tensor.src1.dimensions.d0.size"
+      },
+      {
+        "key": "@hrx2.shape.mul4d.src1_ne1",
+        "source": "tensor.src1.dimensions.d1.size"
+      },
+      {
+        "key": "@hrx2.shape.mul4d.src1_ne2",
+        "source": "tensor.src1.dimensions.d2.size"
+      },
+      {
+        "key": "@hrx2.shape.mul4d.src1_ne3",
+        "source": "tensor.src1.dimensions.d3.size"
+      },
+      {
+        "key": "@hrx2.stride.mul4d.src0_nb0",
+        "source": "tensor.src0.dimensions.d0.stride"
+      },
+      {
+        "key": "@hrx2.stride.mul4d.src0_nb1",
+        "source": "tensor.src0.dimensions.d1.stride"
+      },
+      {
+        "key": "@hrx2.stride.mul4d.src0_nb2",
+        "source": "tensor.src0.dimensions.d2.stride"
+      },
+      {
+        "key": "@hrx2.stride.mul4d.src0_nb3",
+        "source": "tensor.src0.dimensions.d3.stride"
+      },
+      {
+        "key": "@hrx2.stride.mul4d.src1_nb0",
+        "source": "tensor.src1.dimensions.d0.stride"
+      },
+      {
+        "key": "@hrx2.stride.mul4d.src1_nb1",
+        "source": "tensor.src1.dimensions.d1.stride"
+      },
+      {
+        "key": "@hrx2.stride.mul4d.src1_nb2",
+        "source": "tensor.src1.dimensions.d2.stride"
+      },
+      {
+        "key": "@hrx2.stride.mul4d.src1_nb3",
+        "source": "tensor.src1.dimensions.d3.stride"
+      },
+      {
+        "key": "@hrx2.stride.mul4d.dst_nb0",
+        "source": "tensor.dst.dimensions.d0.stride"
+      },
+      {
+        "key": "@hrx2.stride.mul4d.dst_nb1",
+        "source": "tensor.dst.dimensions.d1.stride"
+      },
+      {
+        "key": "@hrx2.stride.mul4d.dst_nb2",
+        "source": "tensor.dst.dimensions.d2.stride"
+      },
+      {
+        "key": "@hrx2.stride.mul4d.dst_nb3",
+        "source": "tensor.dst.dimensions.d3.stride"
+      },
+      {
+        "key": "@hrx2.tuning.mul4d.workgroup_size",
+        "value": "256"
+      }
+    ]
+  }
+}

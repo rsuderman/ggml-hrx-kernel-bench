@@ -1,8 +1,8 @@
 {
   "schema": "ggml_hrx_kernel_bench.import_test_coverage.v1",
   "operation_count": 115,
-  "total_pass_case_count": 90,
-  "total_fail_case_count": 11242,
+  "total_pass_case_count": 360,
+  "total_fail_case_count": 10972,
   "operations": [
     {
       "op": "ABS",
@@ -136,8 +136,8 @@
     },
     {
       "op": "DIV",
-      "pass_case_count": 0,
-      "fail_case_count": 91
+      "pass_case_count": 90,
+      "fail_case_count": 1
     },
     {
       "op": "DUP",
@@ -276,8 +276,8 @@
     },
     {
       "op": "MUL",
-      "pass_case_count": 0,
-      "fail_case_count": 91
+      "pass_case_count": 90,
+      "fail_case_count": 1
     },
     {
       "op": "MUL_MAT",
@@ -516,8 +516,8 @@
     },
     {
       "op": "SUB",
-      "pass_case_count": 0,
-      "fail_case_count": 91
+      "pass_case_count": 90,
+      "fail_case_count": 1
     },
     {
       "op": "SUM",
