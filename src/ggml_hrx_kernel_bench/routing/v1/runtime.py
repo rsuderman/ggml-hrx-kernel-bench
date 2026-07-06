@@ -7,21 +7,17 @@ from typing import Any
 from ...cli import run_candidate_row
 from ...config import BenchConfig, ToolPaths
 from .family_specs import normalize_shape
-from ...kernel_test_config import expect, load_config
+from ...kernel_test_config import expect
+from .._config import resolve_kernel_dir, resolve_routing_dir
 from ...reporting import correctness_ok
-from ..case_selection import select_case, select_cases
 from .routes import (
     Candidate,
-    PROJECT_ROOT,
     build_config,
     iter_routes,
     load_sources_by_id,
     route_launch,
     stable_id,
 )
-
-
-ROOT = PROJECT_ROOT
 
 
 def select_route(
@@ -154,8 +150,8 @@ def execute_case(
     output_dir: Path,
     require_tool: Any,
 ) -> tuple[Candidate, dict[str, Any], dict[str, Any]]:
-    resolved_kernel_dir = kernel_dir or (ROOT / "kernels" / "hrx2")
-    resolved_routing_dir = routing_dir or (ROOT / "catalog" / "hrx2")
+    resolved_kernel_dir = resolve_kernel_dir("v1", kernel_dir)
+    resolved_routing_dir = resolve_routing_dir("v1", routing_dir)
     candidate = build_candidate(
         kernel_dir=resolved_kernel_dir,
         routing_dir=resolved_routing_dir,

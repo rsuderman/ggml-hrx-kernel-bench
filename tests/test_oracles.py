@@ -5,6 +5,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+from ggml_hrx_kernel_bench.materialized_assets import materialize_asset_root
 from ggml_hrx_kernel_bench.oracles import generate_oracle, write_workbench
 from ggml_hrx_kernel_bench.routing.api import Candidate
 
@@ -37,6 +38,11 @@ def _candidate(
         supports={},
         coverage="route_backed",
     )
+
+
+def _materialized_copy_source_path(tmp_path: Path) -> str:
+    asset_root = materialize_asset_root(tmp_path / "assets", force=True)
+    return str(asset_root / "kernels" / "v2" / "copy" / "contiguous_1d.loom")
 
 
 def test_add_oracle_uses_ranked_shape_for_fixture_size(tmp_path: Path) -> None:
@@ -87,19 +93,18 @@ def test_add_oracle_and_workbench_support_ranked_src1_overrides(tmp_path: Path) 
 
 
 @pytest.mark.parametrize(
-    ("family", "op", "source_path", "root_symbol", "export_name", "src_dtype", "dst_dtype"),
+    ("family", "op", "root_symbol", "export_name", "src_dtype", "dst_dtype"),
     (
-        ("copy_f16_f16", "CPY", "kernels/v2/copy/contiguous_1d.loom", "@hrx2_copy_f16_f16_contiguous_1d", "hrx2_copy_f16_f16_contiguous_1d", np.int16, np.int16),
-        ("copy_f16_f32", "CPY", "kernels/v2/copy/contiguous_1d.loom", "@hrx2_copy_f16_f32_contiguous_1d", "hrx2_copy_f16_f32_contiguous_1d", np.int16, np.float32),
-        ("copy_f32_f16", "CPY", "kernels/v2/copy/contiguous_1d.loom", "@hrx2_copy_f32_f16_contiguous_1d", "hrx2_copy_f32_f16_contiguous_1d", np.float32, np.int16),
-        ("copy_f32_f32", "CPY", "kernels/v2/copy/contiguous_1d.loom", "@hrx2_copy_f32_f32_contiguous_1d", "hrx2_copy_f32_f32_contiguous_1d", np.float32, np.float32),
+        ("copy_f16_f16", "CPY", "@hrx2_copy_f16_f16_contiguous_1d", "hrx2_copy_f16_f16_contiguous_1d", np.int16, np.int16),
+        ("copy_f16_f32", "CPY", "@hrx2_copy_f16_f32_contiguous_1d", "hrx2_copy_f16_f32_contiguous_1d", np.int16, np.float32),
+        ("copy_f32_f16", "CPY", "@hrx2_copy_f32_f16_contiguous_1d", "hrx2_copy_f32_f16_contiguous_1d", np.float32, np.int16),
+        ("copy_f32_f32", "CPY", "@hrx2_copy_f32_f32_contiguous_1d", "hrx2_copy_f32_f32_contiguous_1d", np.float32, np.float32),
     ),
 )
 def test_copy_oracle_and_workbench_use_expected_buffer_types(
     tmp_path: Path,
     family: str,
     op: str,
-    source_path: str,
     root_symbol: str,
     export_name: str,
     src_dtype: type[np.generic],
@@ -113,7 +118,7 @@ def test_copy_oracle_and_workbench_use_expected_buffer_types(
         root_symbol=root_symbol,
         export_name=export_name,
         op=op,
-        source_path=source_path,
+        source_path=_materialized_copy_source_path(tmp_path),
     )
 
     result = generate_oracle(candidate, tmp_path / "fixtures", force=True)

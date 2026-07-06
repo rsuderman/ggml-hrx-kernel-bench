@@ -2,38 +2,73 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from ..materialized_assets import (
+    ASSET_DIR_NAMES,
+    DEFAULT_ASSET_ROOT,
+    SUPPORTED_VERSIONS,
+    materialize_asset_root,
+)
 from .models import RoutingContext
 
 
-PROJECT_ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_ROUTING_VERSION = "v1"
 DEFAULT_KERNEL_DIRS: dict[str, Path] = {
-    "v1": PROJECT_ROOT / "kernels" / "hrx2",
-    "v2": PROJECT_ROOT / "kernels" / "v2",
+    version: DEFAULT_ASSET_ROOT / "kernels" / asset_dir_name
+    for version, asset_dir_name in ASSET_DIR_NAMES.items()
 }
 DEFAULT_ROUTING_DIRS: dict[str, Path] = {
-    "v1": PROJECT_ROOT / "catalog" / "hrx2",
-    "v2": PROJECT_ROOT / "catalog" / "v2",
+    version: DEFAULT_ASSET_ROOT / "catalog" / asset_dir_name
+    for version, asset_dir_name in ASSET_DIR_NAMES.items()
 }
+
+
+def _ensure_default_asset_root() -> None:
+    materialize_asset_root(DEFAULT_ASSET_ROOT)
 
 
 def supported_routing_versions() -> tuple[str, ...]:
-    return tuple(DEFAULT_ROUTING_DIRS)
+    return SUPPORTED_VERSIONS
 
 
-def resolve_routing_dir(version: str, routing_dir: Path | None) -> Path:
+def _derive_peer_dir(kind: str, version: str, peer_dir: Path | None) -> Path | None:
+    if peer_dir is None:
+        return None
+    asset_dir_name = ASSET_DIR_NAMES[version]
+    resolved_peer = peer_dir.resolve()
+    if resolved_peer.name != asset_dir_name:
+        return None
+    if kind == "routing" and resolved_peer.parent.name == "kernels":
+        return resolved_peer.parent.parent / "catalog" / asset_dir_name
+    if kind == "kernel" and resolved_peer.parent.name == "catalog":
+        return resolved_peer.parent.parent / "kernels" / asset_dir_name
+    return None
+
+
+def resolve_routing_dir(
+    version: str, routing_dir: Path | None, *, kernel_dir: Path | None = None
+) -> Path:
     if routing_dir is not None:
         return routing_dir
+    derived_routing_dir = _derive_peer_dir("routing", version, kernel_dir)
+    if derived_routing_dir is not None:
+        return derived_routing_dir
     try:
+        _ensure_default_asset_root()
         return DEFAULT_ROUTING_DIRS[version]
     except KeyError as exc:
         raise ValueError(f"unsupported routing version: {version}") from exc
 
 
-def resolve_kernel_dir(version: str, kernel_dir: Path | None) -> Path:
+def resolve_kernel_dir(
+    version: str, kernel_dir: Path | None, *, routing_dir: Path | None = None
+) -> Path:
     if kernel_dir is not None:
         return kernel_dir
+    derived_kernel_dir = _derive_peer_dir("kernel", version, routing_dir)
+    if derived_kernel_dir is not None:
+        return derived_kernel_dir
     try:
+        _ensure_default_asset_root()
         return DEFAULT_KERNEL_DIRS[version]
     except KeyError as exc:
         raise ValueError(f"unsupported routing version: {version}") from exc
@@ -47,7 +82,7 @@ def build_routing_context(
     observed_shapes,
 ) -> RoutingContext:
     return RoutingContext(
-        kernel_dir=resolve_kernel_dir(version, kernel_dir),
-        routing_dir=resolve_routing_dir(version, routing_dir),
+        kernel_dir=resolve_kernel_dir(version, kernel_dir, routing_dir=routing_dir),
+        routing_dir=resolve_routing_dir(version, routing_dir, kernel_dir=kernel_dir),
         observed_shapes=observed_shapes,
     )

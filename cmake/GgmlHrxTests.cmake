@@ -1,5 +1,50 @@
 include_guard(GLOBAL)
 
+function(add_materialized_asset_target)
+  set(options)
+  set(one_value_args NAME OUTPUT_DIR)
+  cmake_parse_arguments(GGML_HRX_MVA "${options}" "${one_value_args}" "" ${ARGN})
+
+  if(NOT GGML_HRX_MVA_NAME)
+    message(FATAL_ERROR "add_materialized_asset_target requires NAME")
+  endif()
+  if(NOT GGML_HRX_MVA_OUTPUT_DIR)
+    message(FATAL_ERROR "add_materialized_asset_target requires OUTPUT_DIR")
+  endif()
+
+  file(GLOB_RECURSE ggml_hrx_exact_kernel_sources
+    RELATIVE ${CMAKE_SOURCE_DIR}
+    ${CMAKE_SOURCE_DIR}/kernels/hrx2/*.loom
+    ${CMAKE_SOURCE_DIR}/kernels/v2/*.loom
+  )
+  list(TRANSFORM ggml_hrx_exact_kernel_sources PREPEND ${CMAKE_SOURCE_DIR}/)
+  file(GLOB_RECURSE ggml_hrx_route_sources
+    RELATIVE ${CMAKE_SOURCE_DIR}
+    ${CMAKE_SOURCE_DIR}/catalog/hrx2/*.json
+    ${CMAKE_SOURCE_DIR}/catalog/v2/*.json
+  )
+  list(TRANSFORM ggml_hrx_route_sources PREPEND ${CMAKE_SOURCE_DIR}/)
+
+  set(materialized_stamp ${GGML_HRX_MVA_OUTPUT_DIR}/.materialized.stamp)
+  add_custom_command(
+    OUTPUT ${materialized_stamp}
+    COMMAND
+      ${Python3_EXECUTABLE}
+      ${CMAKE_SOURCE_DIR}/scripts/materialize_assets.py
+      --output ${GGML_HRX_MVA_OUTPUT_DIR}
+    DEPENDS
+      ${ggml_hrx_exact_kernel_sources}
+      ${ggml_hrx_route_sources}
+      ${CMAKE_SOURCE_DIR}/kernels/v2/copy/contiguous_1d.loom.tmpl
+      ${CMAKE_SOURCE_DIR}/scripts/materialize_assets.py
+      ${CMAKE_SOURCE_DIR}/src/ggml_hrx_kernel_bench/materialized_assets.py
+      ${CMAKE_SOURCE_DIR}/src/ggml_hrx_kernel_bench/generators/copy_contiguous.py
+    COMMENT "Materializing runtime assets in ${GGML_HRX_MVA_OUTPUT_DIR}"
+    VERBATIM
+  )
+  add_custom_target(${GGML_HRX_MVA_NAME} ALL DEPENDS ${materialized_stamp})
+endfunction()
+
 function(add_required_tool_test tool_name)
   set(test_command
     ${Python3_EXECUTABLE}
@@ -15,15 +60,33 @@ function(add_required_tool_test tool_name)
   )
 endfunction()
 
-function(add_grouped_yaml_import_validation_target target_name yaml_path output_dir expected_coverage)
-  set(stamp_path ${output_dir}/import-coverage.stamp)
+function(add_grouped_yaml_import_validation_target)
+  set(options)
+  set(one_value_args NAME YAML_PATH OUTPUT_DIR EXPECTED_COVERAGE)
+  set(multi_value_args COMMAND_ARGS DEPENDS)
+  cmake_parse_arguments(GGML_HRX_GYI "${options}" "${one_value_args}" "${multi_value_args}" ${ARGN})
+
+  if(NOT GGML_HRX_GYI_NAME)
+    message(FATAL_ERROR "add_grouped_yaml_import_validation_target requires NAME")
+  endif()
+  if(NOT GGML_HRX_GYI_YAML_PATH)
+    message(FATAL_ERROR "add_grouped_yaml_import_validation_target requires YAML_PATH")
+  endif()
+  if(NOT GGML_HRX_GYI_OUTPUT_DIR)
+    message(FATAL_ERROR "add_grouped_yaml_import_validation_target requires OUTPUT_DIR")
+  endif()
+  if(NOT GGML_HRX_GYI_EXPECTED_COVERAGE)
+    message(FATAL_ERROR "add_grouped_yaml_import_validation_target requires EXPECTED_COVERAGE")
+  endif()
+
+  set(stamp_path ${GGML_HRX_GYI_OUTPUT_DIR}/import-coverage.stamp)
   set(check_command
     ${Python3_EXECUTABLE}
     ${GGML_HRX_TESTS_ROOT}/infra/check_grouped_yaml_import.py
-    ${yaml_path}
-    ${output_dir}
-    --expected-coverage ${expected_coverage}
-    ${ARGN}
+    ${GGML_HRX_GYI_YAML_PATH}
+    ${GGML_HRX_GYI_OUTPUT_DIR}
+    --expected-coverage ${GGML_HRX_GYI_EXPECTED_COVERAGE}
+    ${GGML_HRX_GYI_COMMAND_ARGS}
   )
   if(GGML_HRX_TOOL_DIR)
     list(APPEND check_command --tool-dir ${GGML_HRX_TOOL_DIR})
@@ -40,8 +103,9 @@ function(add_grouped_yaml_import_validation_target target_name yaml_path output_
     COMMAND ${grouped_yaml_env_command}
     COMMAND ${CMAKE_COMMAND} -E touch ${stamp_path}
     DEPENDS
-      ${yaml_path}
-      ${expected_coverage}
+      ${GGML_HRX_GYI_YAML_PATH}
+      ${GGML_HRX_GYI_EXPECTED_COVERAGE}
+      ${GGML_HRX_GYI_DEPENDS}
       ${GGML_HRX_TESTS_ROOT}/infra/bootstrap.py
       ${GGML_HRX_TESTS_ROOT}/infra/check_grouped_yaml_import.py
       ${GGML_HRX_TESTS_ROOT}/infra/generate_kernel_runtime_tests_cmake.py
@@ -73,11 +137,10 @@ function(add_grouped_yaml_import_validation_target target_name yaml_path output_
       ${CMAKE_SOURCE_DIR}/src/ggml_hrx_kernel_bench/routing/v2/runtime.py
       ${CMAKE_SOURCE_DIR}/src/ggml_hrx_kernel_bench/routing/v2/serialization.py
       ${CMAKE_SOURCE_DIR}/src/ggml_hrx_kernel_bench/routing/v2/shape.py
-      ${CMAKE_SOURCE_DIR}/catalog/v2/router.json
-    COMMENT "Validating grouped YAML import coverage for ${target_name}"
+    COMMENT "Validating grouped YAML import coverage for ${GGML_HRX_GYI_NAME}"
     VERBATIM
   )
-  add_custom_target(${target_name} ALL DEPENDS ${stamp_path})
+  add_custom_target(${GGML_HRX_GYI_NAME} ALL DEPENDS ${stamp_path})
 endfunction()
 
 function(add_generated_kernel_runtime_tests)

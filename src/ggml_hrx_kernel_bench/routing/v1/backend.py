@@ -14,13 +14,13 @@ from ..models import (
     RoutingExportResult,
     RuntimeCaseRequest,
 )
+from ..case_selection import select_case as shared_select_case
+from ..case_selection import select_cases as shared_select_cases
 from .export import export_llama_catalog
 from .importer import resolve_imported_suite
 from .routes import all_candidates, build_manifest
 from .runtime import case_result as runtime_case_result
 from .runtime import execute_case as runtime_execute_case
-from .runtime import select_case as runtime_select_case
-from .runtime import select_cases as runtime_select_cases
 
 
 @dataclass(frozen=True)
@@ -76,12 +76,12 @@ class V1RoutingBackend:
     def select_case(
         self, config: dict[str, Any], selector: str
     ) -> tuple[str, list[int]]:
-        return runtime_select_case(config, selector)
+        return shared_select_case(config, selector)
 
     def select_cases(
         self, config: dict[str, Any], selectors: list[str] | None
     ) -> list[tuple[str, list[int]]]:
-        return runtime_select_cases(config, selectors)
+        return shared_select_cases(config, selectors)
 
     def execute_case(self, request: RuntimeCaseRequest) -> ExecutedCase:
         kernel_dir = request.kernel_dir or self.context.kernel_dir
