@@ -8,16 +8,24 @@ from ggml_hrx_kernel_bench.oracles import generate_oracle, write_workbench
 from ggml_hrx_kernel_bench.routing.api import Candidate
 
 
-def _candidate(*, candidate_id: str, shape: dict[str, int]) -> Candidate:
+def _candidate(
+    *,
+    candidate_id: str,
+    shape: dict[str, int],
+    family: str = "add_f32",
+    source_id: str = "add_f32",
+    root_symbol: str = "@hrx2_add_f32",
+    export_name: str = "hrx2_add_f32",
+) -> Candidate:
     return Candidate(
         id=candidate_id,
-        family="add_f32",
+        family=family,
         op="ADD",
-        source_id="add_f32",
+        source_id=source_id,
         source_path=Path("kernels/v2/add/contiguous_1d.loom"),
-        root_symbol="@hrx2_add_f32",
-        export_name="hrx2_add_f32",
-        route_id="add_f32_test",
+        root_symbol=root_symbol,
+        export_name=export_name,
+        route_id=f"{family}_test",
         route=None,
         shape=shape,
         values={},
@@ -73,3 +81,31 @@ def test_add_oracle_and_workbench_support_ranked_src1_overrides(tmp_path: Path) 
     assert metadata["status"] == "ok"
     workbench = (tmp_path / "workbench.loom").read_text(encoding="utf-8")
     assert "tensor<1200xf32>, tensor<600xf32>, tensor<1200xf32>" in workbench
+
+
+def test_add_f16_oracle_and_workbench_use_i16_buffers(tmp_path: Path) -> None:
+    candidate = _candidate(
+        candidate_id="add_f16_ranked_2d",
+        shape={"d0": 16, "d1": 64},
+        family="add_f16",
+        source_id="add_f16",
+        root_symbol="@hrx2_add_f16",
+        export_name="hrx2_add_f16",
+    )
+
+    result = generate_oracle(candidate, tmp_path / "fixtures", force=True)
+
+    assert result.status == "fixtures_ready"
+    assert np.load(tmp_path / "fixtures" / "src0.npy").dtype == np.int16
+    assert np.load(tmp_path / "fixtures" / "src1.npy").dtype == np.int16
+    assert np.load(tmp_path / "fixtures" / "dst_init.npy").dtype == np.int16
+    assert np.load(tmp_path / "fixtures" / "expected.npy").dtype == np.int16
+
+    linked_source = tmp_path / "linked.loom"
+    linked_source.write_text("kernel.def export(\"hrx2_add_f16\") @hrx2_add_f16() {}\n", encoding="utf-8")
+    _, metadata = write_workbench(candidate, linked_source, tmp_path / "workbench.loom", tmp_path / "fixtures")
+
+    assert metadata["status"] == "ok"
+    workbench = (tmp_path / "workbench.loom").read_text(encoding="utf-8")
+    assert "tensor<1024xi16>, tensor<1024xi16>, tensor<1024xi16>" in workbench
+    assert "check.expect.equal" in workbench

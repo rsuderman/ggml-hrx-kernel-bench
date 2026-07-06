@@ -92,6 +92,10 @@ def positive_f32_pattern(np: Any, shape: tuple[int, ...], *, seed: int, scale: f
     return np.exp(raw).astype(np.float32)
 
 
+def f16_pattern(np: Any, shape: tuple[int, ...], *, seed: int, scale: float = 1.0):
+    return f32_pattern(np, shape, seed=seed, scale=scale).astype(np.float16)
+
+
 def normalized_f32_rows(np: Any, shape: tuple[int, int], *, seed: int, l2_norm: float = 1.0):
     values = f32_pattern(np, shape, seed=seed)
     # Keep every RHS row at a fixed energy. This makes the dot-product error
@@ -441,17 +445,20 @@ def _pointwise_buffers_and_views(
     src1_seed: int,
     dst_seed: int,
     src1_positive: bool = False,
+    buffer_pattern: Callable[..., Any] = f32_pattern,
+    dst_pattern: Callable[..., Any] | None = None,
 ) -> tuple[Any, Any, Any, Any, Any]:
+    dst_pattern = buffer_pattern if dst_pattern is None else dst_pattern
     common_dims = _pointwise_common_dims(candidate)
     if common_dims is None:
         ncols, nrows, elems = _dims(candidate)
-        src0_buffer = f32_pattern(np, (elems,), seed=src0_seed)
+        src0_buffer = buffer_pattern(np, (elems,), seed=src0_seed)
         src1_buffer = (
             positive_f32_pattern(np, (elems,), seed=src1_seed)
             if src1_positive
-            else f32_pattern(np, (elems,), seed=src1_seed)
+            else buffer_pattern(np, (elems,), seed=src1_seed)
         )
-        dst_init = f32_pattern(np, (elems,), seed=dst_seed, scale=0.25)
+        dst_init = dst_pattern(np, (elems,), seed=dst_seed, scale=0.25)
         src0_view = src0_buffer.reshape(nrows, ncols)
         src1_view = _pointwise_src1_view(np, candidate, src1_buffer)
         dst_indices = np.arange(elems, dtype=np.int64).reshape(nrows, ncols)
@@ -463,10 +470,10 @@ def _pointwise_buffers_and_views(
     src0_strides = _pointwise_tensor_strides(candidate, "src0", src0_dims)
     src1_strides = _pointwise_tensor_strides(candidate, "src1", src1_dims)
     dst_strides = _pointwise_tensor_strides(candidate, "dst", dst_dims)
-    src0_buffer = f32_pattern(np, (_buffer_length(src0_dims, src0_strides),), seed=src0_seed)
-    src1_pattern = positive_f32_pattern if src1_positive else f32_pattern
+    src0_buffer = buffer_pattern(np, (_buffer_length(src0_dims, src0_strides),), seed=src0_seed)
+    src1_pattern = positive_f32_pattern if src1_positive else buffer_pattern
     src1_buffer = src1_pattern(np, (_buffer_length(src1_dims, src1_strides),), seed=src1_seed)
-    dst_init = f32_pattern(np, (_buffer_length(dst_dims, dst_strides),), seed=dst_seed, scale=0.25)
+    dst_init = dst_pattern(np, (_buffer_length(dst_dims, dst_strides),), seed=dst_seed, scale=0.25)
     src0_indices = _pointwise_logical_indices(np, common_dims, src0_dims, src0_strides)
     src1_indices = _pointwise_logical_indices(np, common_dims, src1_dims, src1_strides)
     dst_indices = _pointwise_logical_indices(np, common_dims, dst_dims, dst_strides)
@@ -597,6 +604,10 @@ def _read_i16(workbench_path: Path, fixture_dir: Path, name: str, elems: int) ->
     return f"""  %{name} = check.file.read.npy path(\"{_rel_fixture(workbench_path, fixture_dir, name + ".npy")}\") : tensor<{elems}xi16>"""
 
 
+def _f16_bits(np: Any, array: Any) -> Any:
+    return np.ascontiguousarray(array.reshape(-1)).view(np.int16)
+
+
 def _binary_arrays(op: Callable[[Any, Any], Any]) -> Callable[[Any, Candidate, int], dict[str, Any]]:
     def build(np: Any, candidate: Candidate, seed: int) -> dict[str, Any]:
         src0_buffer, src0, src1_buffer, src1, (dst_init, dst_indices) = _pointwise_buffers_and_views(
@@ -637,6 +648,27 @@ def _div_arrays(np: Any, candidate: Candidate, seed: int) -> dict[str, Any]:
             "src1": src1_buffer.reshape(-1),
             "dst_init": dst_init.reshape(-1),
             "expected": expected.reshape(-1),
+        }
+    }
+
+
+def _add_f16_exact_arrays(np: Any, candidate: Candidate, seed: int) -> dict[str, Any]:
+    src0_buffer, src0, src1_buffer, src1, (dst_init, dst_indices) = _pointwise_buffers_and_views(
+        np,
+        candidate,
+        src0_seed=seed,
+        src1_seed=seed + 1,
+        dst_seed=seed + 2,
+        buffer_pattern=f16_pattern,
+    )
+    expected = dst_init.copy()
+    expected[dst_indices] = (src0.astype(np.float32) + src1.astype(np.float32)).astype(np.float16)
+    return {
+        "arrays": {
+            "src0": _f16_bits(np, src0_buffer),
+            "src1": _f16_bits(np, src1_buffer),
+            "dst_init": _f16_bits(np, dst_init),
+            "expected": _f16_bits(np, expected),
         }
     }
 
@@ -1291,6 +1323,17 @@ def _write_abs_workbench(candidate: Candidate, linked_source: Path, workbench_pa
 def _write_pointwise_workbench(candidate: Candidate, linked_source: Path, workbench_path: Path, fixture_dir: Path) -> tuple[str, dict[str, Any]]:
     src0_elems, src1_elems, dst_elems = _pointwise_buffer_lengths(candidate)
     case_name, bench_name = _case_names(candidate)
+    if candidate.family == "add_f16":
+        lines = [
+            _read_i16(workbench_path, fixture_dir, "src0", src0_elems),
+            _read_i16(workbench_path, fixture_dir, "src1", src1_elems),
+            _read_i16(workbench_path, fixture_dir, "dst_init", dst_elems).replace("%dst_init", "%dst"),
+            _read_i16(workbench_path, fixture_dir, "expected", dst_elems),
+            f"  func.call {candidate.root_symbol}(%src0, %src1, %dst) : (tensor<{src0_elems}xi16>, tensor<{src1_elems}xi16>, tensor<{dst_elems}xi16>)",
+            f"  check.expect.equal actual(%dst) expected(%expected) : tensor<{dst_elems}xi16>",
+        ]
+        return _emit_case(linked_source, workbench_path, case_name, bench_name, "\n".join(lines))
+
     lines = [
         _read_f32(workbench_path, fixture_dir, "src0", src0_elems),
         _read_f32(workbench_path, fixture_dir, "dst_init", dst_elems).replace("%dst_init", "%dst"),
@@ -1594,8 +1637,8 @@ ORACLE_SPECS: tuple[OracleSpec, ...] = (
         for spec in LOGICAL_ORACLE_SPECS
     ),
     OracleSpec(
-        family_ids=("add_f32", "mul_f32", "div_f32"),
-        generate=_logical_generate(LogicalOracleSpec(("add_f32", "mul_f32", "div_f32"), "pointwise_binary_f32_numpy", {"atol": 1e-5, "rtol": 1e-5}, lambda np, candidate, seed: {"add_f32": _binary_arrays(lambda lhs, rhs: lhs + rhs), "mul_f32": _binary_arrays(lambda lhs, rhs: lhs * rhs), "div_f32": _div_arrays}[candidate.family](np, candidate, seed), exact_kernel_abi=True)),
+        family_ids=("add_f32", "mul_f32", "div_f32", "add_f16"),
+        generate=_logical_generate(LogicalOracleSpec(("add_f32", "mul_f32", "div_f32", "add_f16"), "pointwise_binary_numpy", {"atol": 1e-5, "rtol": 1e-5}, lambda np, candidate, seed: {"add_f32": _binary_arrays(lambda lhs, rhs: lhs + rhs), "mul_f32": _binary_arrays(lambda lhs, rhs: lhs * rhs), "div_f32": _div_arrays, "add_f16": _add_f16_exact_arrays}[candidate.family](np, candidate, seed), exact_kernel_abi=True)),
         write_workbench=_write_pointwise_workbench,
     ),
     OracleSpec(

@@ -203,7 +203,7 @@ def lower_tensors_for_route(
 ) -> tuple[dict[str, ConcreteTensor], dict[str, int]]:
     if route.op == "ABS":
         return lower_contiguous_unary_tensors(case)
-    if route.id == "add_f32_generic_4d":
+    if route.id in {"add_f32_generic_4d", "add_f16_generic_4d"}:
         return lower_generic_pointwise_tensors(case)
     return lower_contiguous_pointwise_tensors(case)
 
