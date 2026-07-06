@@ -314,11 +314,30 @@ def _rms_norm_f32(np: Any, candidate: Candidate, fixture_dir: Path, seed: int) -
 
 
 def _copy_f32_f16(np: Any, candidate: Candidate, fixture_dir: Path, seed: int) -> OracleResult:
-    n = int(candidate.values.get("shape.copy.n") or _element_count(candidate))
     src_dtype, dst_dtype = _copy_family_dtypes(candidate.family)
-    src = f16_pattern(np, (n,), seed=seed) if src_dtype == "f16" else f32_pattern(np, (n,), seed=seed)
-    expected = src.astype(np.float16 if dst_dtype == "f16" else np.float32)
-    dst_init = np.zeros((n,), dtype=np.float16 if dst_dtype == "f16" else np.float32)
+    common_dims = _ranked_shape(candidate)
+    if common_dims is None:
+        n = int(candidate.values.get("shape.copy.n") or _element_count(candidate))
+        src = f16_pattern(np, (n,), seed=seed) if src_dtype == "f16" else f32_pattern(np, (n,), seed=seed)
+        expected = src.astype(np.float16 if dst_dtype == "f16" else np.float32)
+        dst_init = np.zeros((n,), dtype=np.float16 if dst_dtype == "f16" else np.float32)
+    else:
+        src0_dims = _copy_tensor_dims(candidate, "src0", common_dims)
+        dst_dims = _copy_tensor_dims(candidate, "dst", common_dims)
+        src0_strides = _copy_tensor_strides(candidate, "src0", src0_dims)
+        dst_strides = _copy_tensor_strides(candidate, "dst", dst_dims)
+        src0_buffer_len = _buffer_length(src0_dims, src0_strides)
+        dst_buffer_len = _buffer_length(dst_dims, dst_strides)
+        src = (
+            f16_pattern(np, (src0_buffer_len,), seed=seed)
+            if src_dtype == "f16"
+            else f32_pattern(np, (src0_buffer_len,), seed=seed)
+        )
+        dst_init = np.zeros((dst_buffer_len,), dtype=np.float16 if dst_dtype == "f16" else np.float32)
+        src_indices = _pointwise_logical_indices(np, common_dims, src0_dims, src0_strides)
+        dst_indices = _pointwise_logical_indices(np, common_dims, dst_dims, dst_strides)
+        expected = dst_init.copy()
+        expected[dst_indices] = src[src_indices].astype(np.float16 if dst_dtype == "f16" else np.float32)
     np.save(
         fixture_dir / "src0.npy",
         _f16_bits(np, src) if src_dtype == "f16" else src.astype(np.float32),
@@ -408,6 +427,29 @@ def _dims(candidate: Candidate) -> tuple[int, int, int]:
 
 def _pointwise_common_dims(candidate: Candidate) -> tuple[int, ...] | None:
     return _ranked_shape(candidate)
+
+
+def _copy_tensor_dims(
+    candidate: Candidate,
+    tensor_name: str,
+    common_dims: tuple[int, ...],
+) -> tuple[int, ...]:
+    return tuple(
+        int(candidate.shape.get(f"{tensor_name}_d{index}", common_dims[index]))
+        for index in range(len(common_dims))
+    )
+
+
+def _copy_tensor_strides(
+    candidate: Candidate,
+    tensor_name: str,
+    tensor_dims: tuple[int, ...],
+) -> tuple[int, ...]:
+    defaults = _contiguous_strides(tensor_dims)
+    return tuple(
+        int(candidate.shape.get(f"{tensor_name}_d{index}_stride", defaults[index]))
+        for index in range(len(tensor_dims))
+    )
 
 
 def _pointwise_tensor_dims(
@@ -1309,14 +1351,24 @@ check.benchmark<{case_name}> {bench_name}
 
 
 def _write_copy_workbench(candidate: Candidate, linked_source: Path, workbench_path: Path, fixture_dir: Path) -> tuple[str, dict[str, Any]]:
-    n = int(candidate.values.get("shape.copy.n") or _element_count(candidate))
     src_dtype, dst_dtype = _copy_family_dtypes(candidate.family)
+    common_dims = _ranked_shape(candidate)
+    if common_dims is None:
+        src0_elems = int(candidate.values.get("shape.copy.n") or _element_count(candidate))
+        dst_elems = src0_elems
+    else:
+        src0_dims = _copy_tensor_dims(candidate, "src0", common_dims)
+        dst_dims = _copy_tensor_dims(candidate, "dst", common_dims)
+        src0_strides = _copy_tensor_strides(candidate, "src0", src0_dims)
+        dst_strides = _copy_tensor_strides(candidate, "dst", dst_dims)
+        src0_elems = _buffer_length(src0_dims, src0_strides)
+        dst_elems = _buffer_length(dst_dims, dst_strides)
     case_name, bench_name = _case_names(candidate)
-    src_tensor_type = f"tensor<{n}xi16>" if src_dtype == "f16" else f"tensor<{n}xf32>"
-    dst_tensor_type = f"tensor<{n}xi16>" if dst_dtype == "f16" else f"tensor<{n}xf32>"
-    read_src = _read_i16(workbench_path, fixture_dir, "src0", n) if src_dtype == "f16" else _read_f32(workbench_path, fixture_dir, "src0", n)
-    read_dst = _read_i16(workbench_path, fixture_dir, "dst_init", n) if dst_dtype == "f16" else _read_f32(workbench_path, fixture_dir, "dst_init", n)
-    read_expected = _read_i16(workbench_path, fixture_dir, "expected", n) if dst_dtype == "f16" else _read_f32(workbench_path, fixture_dir, "expected", n)
+    src_tensor_type = f"tensor<{src0_elems}xi16>" if src_dtype == "f16" else f"tensor<{src0_elems}xf32>"
+    dst_tensor_type = f"tensor<{dst_elems}xi16>" if dst_dtype == "f16" else f"tensor<{dst_elems}xf32>"
+    read_src = _read_i16(workbench_path, fixture_dir, "src0", src0_elems) if src_dtype == "f16" else _read_f32(workbench_path, fixture_dir, "src0", src0_elems)
+    read_dst = _read_i16(workbench_path, fixture_dir, "dst_init", dst_elems) if dst_dtype == "f16" else _read_f32(workbench_path, fixture_dir, "dst_init", dst_elems)
+    read_expected = _read_i16(workbench_path, fixture_dir, "expected", dst_elems) if dst_dtype == "f16" else _read_f32(workbench_path, fixture_dir, "expected", dst_elems)
     read_dst = read_dst.replace("%dst_init", "%dst")
     if dst_dtype == "f16":
         check = f"  check.expect.equal actual(%dst) expected(%expected) : {dst_tensor_type}"

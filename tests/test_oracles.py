@@ -138,6 +138,47 @@ def test_copy_oracle_and_workbench_use_expected_buffer_types(
         assert "check.expect.close" in workbench
 
 
+def test_copy_oracle_and_workbench_support_transposed_f32_source(tmp_path: Path) -> None:
+    candidate = _candidate(
+        candidate_id="copy_f32_f32_non_contiguous_4d",
+        shape={
+            "d0": 4,
+            "d1": 256,
+            "d2": 3,
+            "d3": 3,
+            "src0_d0_stride": 256,
+            "src0_d1_stride": 1,
+        },
+        family="copy_f32_f32",
+        source_id="copy_f32_f32",
+        root_symbol="@copy_f32_f32_non_contiguous_4d",
+        export_name="copy_f32_f32_non_contiguous_4d",
+        op="CPY",
+        source_path="kernels/v2/copy/non_contiguous_4d.loom",
+    )
+
+    result = generate_oracle(candidate, tmp_path / "fixtures", force=True)
+
+    assert result.status == "fixtures_ready"
+    src0 = np.load(tmp_path / "fixtures" / "src0.npy")
+    expected = np.load(tmp_path / "fixtures" / "expected.npy")
+    src0_view = src0.reshape(3, 3, 4, 256).transpose(0, 1, 3, 2).reshape(-1)
+    assert np.array_equal(expected, src0_view)
+    assert not np.array_equal(expected, src0)
+
+    linked_source = tmp_path / "linked.loom"
+    linked_source.write_text(
+        'kernel.def export("copy_f32_f32_non_contiguous_4d") @copy_f32_f32_non_contiguous_4d() {}\n',
+        encoding="utf-8",
+    )
+    _, metadata = write_workbench(candidate, linked_source, tmp_path / "workbench.loom", tmp_path / "fixtures")
+
+    assert metadata["status"] == "ok"
+    workbench = (tmp_path / "workbench.loom").read_text(encoding="utf-8")
+    assert "tensor<9216xf32>, tensor<9216xf32>" in workbench
+    assert "check.expect.close" in workbench
+
+
 @pytest.mark.parametrize(
     ("family", "op", "source_path", "root_symbol", "export_name"),
     (

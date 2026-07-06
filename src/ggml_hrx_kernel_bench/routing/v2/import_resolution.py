@@ -110,7 +110,9 @@ def _shape_from_extents(extents: list[int]) -> dict[str, int]:
     return {f"d{index}": int(extent) for index, extent in enumerate(extents)}
 
 
-def _parse_copy_parameters(case: ImportedCase) -> list[int]:
+def _parse_copy_parameters(
+    case: ImportedCase,
+) -> tuple[list[int], int, tuple[int, int, int, int], tuple[int, int, int, int]]:
     ne = case.normalized_params.get("ne")
     src_transpose = case.normalized_params.get("_src_transpose", 0)
     permute_src = case.normalized_params.get("permute_src", list(COPY_IDENTITY_PERMUTATION))
@@ -126,11 +128,12 @@ def _parse_copy_parameters(case: ImportedCase) -> list[int]:
             raise ValueError(f"copy lowering requires {name} to be a 4-D permutation list")
         if any(not isinstance(value, int) for value in permutation):
             raise ValueError(f"copy lowering requires integer {name} values")
-        if tuple(int(value) for value in permutation) != COPY_IDENTITY_PERMUTATION:
-            raise ValueError(f"copy lowering requires {name}=[0, 0, 0, 0]")
-    if src_transpose != 0:
-        raise ValueError("copy lowering requires _src_transpose=0")
-    return [int(value) for value in ne]
+    return (
+        [int(value) for value in ne],
+        int(src_transpose),
+        tuple(int(value) for value in permute_src),
+        tuple(int(value) for value in permute_dst),
+    )
 
 
 def lower_contiguous_pointwise_shape(case: ImportedCase) -> dict[str, int]:
@@ -224,7 +227,13 @@ def lower_contiguous_unary_tensors(
 def lower_contiguous_copy_tensors(
     case: ImportedCase,
 ) -> tuple[dict[str, ConcreteTensor], dict[str, int]]:
-    ne = _parse_copy_parameters(case)
+    ne, src_transpose, permute_src, permute_dst = _parse_copy_parameters(case)
+    if permute_src != COPY_IDENTITY_PERMUTATION:
+        raise ValueError("copy lowering requires permute_src=[0, 0, 0, 0]")
+    if permute_dst != COPY_IDENTITY_PERMUTATION:
+        raise ValueError("copy lowering requires permute_dst=[0, 0, 0, 0]")
+    if src_transpose != 0:
+        raise ValueError("copy lowering requires _src_transpose=0")
     src_dtype = str(case.dtype.get("type_src", "")).upper()
     dst_dtype = str(case.dtype.get("type_dst", "")).upper()
     dimensions = _dimensions_from_extents(ne)
@@ -233,6 +242,37 @@ def lower_contiguous_copy_tensors(
         "dst": ConcreteTensor(dtype=dst_dtype, dimensions=dimensions),
     }
     return tensors, _shape_from_extents(ne)
+
+
+def lower_transposed_copy_tensors(
+    case: ImportedCase,
+) -> tuple[dict[str, ConcreteTensor], dict[str, int]]:
+    ne, src_transpose, permute_src, permute_dst = _parse_copy_parameters(case)
+    if permute_src != COPY_IDENTITY_PERMUTATION:
+        raise ValueError("copy lowering requires permute_src=[0, 0, 0, 0]")
+    if permute_dst != COPY_IDENTITY_PERMUTATION:
+        raise ValueError("copy lowering requires permute_dst=[0, 0, 0, 0]")
+    if src_transpose != 1:
+        raise ValueError("copy transpose lowering requires _src_transpose=1")
+
+    src_dtype = str(case.dtype.get("type_src", "")).upper()
+    dst_dtype = str(case.dtype.get("type_dst", "")).upper()
+    if src_dtype != "F32" or dst_dtype != "F32":
+        raise ValueError("copy transpose lowering currently requires type_src=f32 and type_dst=f32")
+
+    transposed_extents = [ne[1], ne[0], ne[2], ne[3]]
+    src0_strides = [ne[0], 1, ne[0] * ne[1], ne[0] * ne[1] * ne[2]]
+    tensors = {
+        "src0": ConcreteTensor(
+            dtype=src_dtype,
+            dimensions=_dimensions_from_extents_and_strides(transposed_extents, src0_strides),
+        ),
+        "dst": ConcreteTensor(
+            dtype=dst_dtype,
+            dimensions=_dimensions_from_extents(transposed_extents),
+        ),
+    }
+    return tensors, _shape_from_extents(transposed_extents)
 
 
 def _route_uses_generic_pointwise_lowering(route: V2Route) -> bool:
@@ -275,6 +315,35 @@ def _route_uses_contiguous_copy_lowering(route: V2Route) -> bool:
     return has_total_size and has_contiguous_strides and has_equal_dimensions and has_equal_strides
 
 
+def _route_uses_non_contiguous_copy_lowering(route: V2Route) -> bool:
+    if route.op != "CPY" or set(route.tensors) != {"src0", "dst"}:
+        return False
+    src0_dimensions = route.tensors["src0"].dimensions_capture
+    dst_dimensions = route.tensors["dst"].dimensions_capture
+    dst_strides = route.tensors["dst"].strides_capture
+    has_total_size = any(
+        value.name == "total_size" and value.product == dst_dimensions
+        for value in route.values
+    )
+    has_contiguous_strides = any(
+        value.name == "contiguous_strides" and value.contiguous_strides == dst_dimensions
+        for value in route.values
+    )
+    has_rank4_dst = any(
+        check.name == "dst_dimensions" and check.length == 4
+        for check in route.constraints.checks
+    )
+    has_equal_dimensions = any(
+        set(check.equals) == {src0_dimensions, dst_dimensions}
+        for check in route.constraints.checks
+    )
+    has_contiguous_dst = any(
+        set(check.equals) == {"contiguous_strides", dst_strides}
+        for check in route.constraints.checks
+    )
+    return has_total_size and has_contiguous_strides and has_rank4_dst and has_equal_dimensions and has_contiguous_dst
+
+
 def lower_tensors_for_route(
     case: ImportedCase,
     route: V2Route,
@@ -283,6 +352,8 @@ def lower_tensors_for_route(
         return lower_contiguous_unary_tensors(case)
     if _route_uses_generic_pointwise_lowering(route):
         return lower_generic_pointwise_tensors(case)
+    if _route_uses_non_contiguous_copy_lowering(route):
+        return lower_transposed_copy_tensors(case)
     if _route_uses_contiguous_copy_lowering(route):
         return lower_contiguous_copy_tensors(case)
     return lower_contiguous_pointwise_tensors(case)

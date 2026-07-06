@@ -21,6 +21,7 @@
       "copy/copy_f16_f16_contiguous_1d.json",
       "copy/copy_f16_f32_contiguous_1d.json",
       "copy/copy_f32_f16_contiguous_1d.json",
+      "copy/copy_f32_f32_non_contiguous_4d.json",
       "copy/copy_f32_f32_contiguous_1d.json"
     ],
     "DIV": [

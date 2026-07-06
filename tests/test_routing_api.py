@@ -205,7 +205,12 @@ def _write_v2_copy_descriptor(routing_dir: Path) -> None:
         json.dumps(
             {
                 "schema": "ggml_hrx_kernel_bench.routing_descriptors.v2",
-                "routes": {"CPY": ["copy/copy_f32_f16_contiguous_1d.json"]},
+                "routes": {
+                    "CPY": [
+                        "copy/copy_f32_f32_non_contiguous_4d.json",
+                        "copy/copy_f32_f16_contiguous_1d.json",
+                    ]
+                },
             },
             indent=2,
             sort_keys=True,
@@ -274,6 +279,94 @@ def _write_v2_copy_descriptor(routing_dir: Path) -> None:
         + "\n",
         encoding="utf-8",
     )
+    (copy_dir / "copy_f32_f32_non_contiguous_4d.json").write_text(
+        json.dumps(
+            {
+                "id": "copy_f32_f32_non_contiguous_4d",
+                "family": "copy_f32_f32",
+                "kernel": {
+                    "source_id": "copy_f32_f32",
+                    "path": "copy/non_contiguous_4d.loom",
+                    "root_symbol": "@copy_f32_f32_non_contiguous_4d",
+                    "export_name": "copy_f32_f32_non_contiguous_4d",
+                },
+                "tensors": {
+                    "src0": {
+                        "dtype": "F32",
+                        "dimensions": "src0_dimensions",
+                        "strides": "src0_strides",
+                    },
+                    "dst": {
+                        "dtype": "F32",
+                        "dimensions": "dst_dimensions",
+                        "strides": "dst_strides",
+                    },
+                },
+                "values": [
+                    {
+                        "name": "contiguous_strides",
+                        "contiguous_strides": "dst_dimensions",
+                    },
+                    {
+                        "name": "total_size",
+                        "product": "dst_dimensions",
+                    },
+                ],
+                "constraints": [
+                    {"name": "dst_dimensions", "length": 4},
+                    {"equals": ["src0_dimensions", "dst_dimensions"]},
+                    {"equals": ["contiguous_strides", "dst_strides"]},
+                ],
+                "launch": {
+                    "workgroup_size": [256, 1, 1],
+                },
+                "config": {
+                    "bindings": [
+                        {
+                            "key": "@hrx2.shape.copy4d.ne0",
+                            "source": "tensor.dst.dimensions.d0.size",
+                        },
+                        {
+                            "key": "@hrx2.shape.copy4d.ne1",
+                            "source": "tensor.dst.dimensions.d1.size",
+                        },
+                        {
+                            "key": "@hrx2.shape.copy4d.ne2",
+                            "source": "tensor.dst.dimensions.d2.size",
+                        },
+                        {
+                            "key": "@hrx2.shape.copy4d.ne3",
+                            "source": "tensor.dst.dimensions.d3.size",
+                        },
+                        {
+                            "key": "@hrx2.stride.copy4d.src0_nb0",
+                            "source": "tensor.src0.dimensions.d0.stride",
+                        },
+                        {
+                            "key": "@hrx2.stride.copy4d.src0_nb1",
+                            "source": "tensor.src0.dimensions.d1.stride",
+                        },
+                        {
+                            "key": "@hrx2.stride.copy4d.src0_nb2",
+                            "source": "tensor.src0.dimensions.d2.stride",
+                        },
+                        {
+                            "key": "@hrx2.stride.copy4d.src0_nb3",
+                            "source": "tensor.src0.dimensions.d3.stride",
+                        },
+                        {
+                            "key": "@hrx2.tuning.copy4d.workgroup_size",
+                            "value": "256",
+                        },
+                    ]
+                },
+            },
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
 
 
 def _write_copy_kernel(kernel_dir: Path) -> None:
@@ -281,6 +374,10 @@ def _write_copy_kernel(kernel_dir: Path) -> None:
     copy_dir.mkdir(parents=True, exist_ok=True)
     (copy_dir / "contiguous_1d.loom").write_text(
         'kernel.def export("hrx2_copy_f32_f16_contiguous_1d") @hrx2_copy_f32_f16_contiguous_1d\n',
+        encoding="utf-8",
+    )
+    (copy_dir / "non_contiguous_4d.loom").write_text(
+        'kernel.def export("copy_f32_f32_non_contiguous_4d") @copy_f32_f32_non_contiguous_4d\n',
         encoding="utf-8",
     )
 
@@ -379,6 +476,43 @@ def test_v2_resolve_copy_route_for_contiguous_case(tmp_path: Path) -> None:
     assert route is not None
     assert route.id == "copy_f32_f16_contiguous_1d"
     assert shape == {"d0": 16, "d1": 4, "d2": 2, "d3": 2}
+
+
+def test_v2_resolve_copy_route_for_transposed_f32_case(tmp_path: Path) -> None:
+    kernel_dir = tmp_path / "kernels"
+    routing_dir = tmp_path / "routing"
+    _write_copy_kernel(kernel_dir)
+    _write_v2_copy_descriptor(routing_dir)
+    catalog = load_route_catalog(routing_dir)
+    case = ImportedCase(
+        op="CPY",
+        dtype={"type_src": "f32", "type_dst": "f32"},
+        raw_case={},
+        normalized_params={
+            "ne": [256, 4, 3, 1],
+            "_src_transpose": 1,
+            "permute_src": [0, 0, 0, 0],
+            "permute_dst": [0, 0, 0, 0],
+        },
+        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_group_index=0,
+        source_case_index=0,
+    )
+
+    route, shape, reason, detail = resolve_route_for_case(case, list(routes_for_op(catalog, "CPY")))
+
+    assert reason is None
+    assert detail is None
+    assert route is not None
+    assert route.id == "copy_f32_f32_non_contiguous_4d"
+    assert shape == {
+        "d0": 4,
+        "d1": 256,
+        "d2": 3,
+        "d3": 1,
+        "src0_d0_stride": 256,
+        "src0_d1_stride": 1,
+    }
 
 
 def test_v2_catalog_objects_are_immutable(tmp_path: Path) -> None:
