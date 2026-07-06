@@ -6,6 +6,7 @@ from typing import Any, Callable, Iterable, Mapping
 
 from .import_models import ImportedCase
 
+POINTWISE_BASE_PERMUTATION = (0, 1, 2, 3)
 
 POINTWISE_ROUTE_SOURCES = frozenset(
     {
@@ -68,6 +69,20 @@ def _identity_permutation(case: ImportedCase, key: str) -> bool:
     return _all_equal(_int_list(case, key), 0)
 
 
+def _pointwise_permutation(case: ImportedCase, key: str = "perm1") -> tuple[int, int, int, int]:
+    raw = _params(case).get(key, list(POINTWISE_BASE_PERMUTATION))
+    if not isinstance(raw, list) or len(raw) != 4:
+        raise ValueError(f"{key} must be a 4-D permutation list")
+    values = tuple(_int_list(case, key))
+    if tuple(sorted(values)) != POINTWISE_BASE_PERMUTATION:
+        raise ValueError(f"{key} must be a permutation of [0, 1, 2, 3]")
+    return values
+
+
+def _is_base_pointwise_permutation(permutation: tuple[int, int, int, int]) -> bool:
+    return permutation == POINTWISE_BASE_PERMUTATION
+
+
 def _pointwise_contract(route: Mapping[str, Any]) -> bool:
     sources = _binding_sources(route)
     return bool(sources) and sources.issubset(POINTWISE_ROUTE_SOURCES)
@@ -82,7 +97,7 @@ class PointwiseCaseFacts:
     ne: tuple[int, int, int, int]
     nr: tuple[int, int, int, int]
     nf: int
-    perm1: int
+    perm1: tuple[int, int, int, int]
 
     @property
     def src1_ncols(self) -> int:
@@ -113,7 +128,7 @@ def _pointwise_facts(case: ImportedCase) -> PointwiseCaseFacts:
     ne = _int_list(case, "ne")
     nr = _int_list(case, "nr")
     nf = _int_value(case, "nf", default=0)
-    perm1 = _int_value(case, "perm1", default=0)
+    perm1 = _pointwise_permutation(case)
     if len(ne) != 4 or len(nr) != 4:
         raise ValueError("pointwise lowering requires 4-D extents")
     return PointwiseCaseFacts(
@@ -127,8 +142,8 @@ def _pointwise_facts(case: ImportedCase) -> PointwiseCaseFacts:
 def _pointwise_contiguous_shape(facts: PointwiseCaseFacts) -> dict[str, int]:
     if facts.nf != 1:
         raise ValueError("pointwise contiguous layout requires nf=1")
-    if facts.perm1 != 0:
-        raise ValueError("pointwise contiguous layout requires perm1=0")
+    if not _is_base_pointwise_permutation(facts.perm1):
+        raise ValueError("pointwise contiguous layout requires perm1=[0, 1, 2, 3]")
     if not _all_equal(facts.nr, 1):
         raise ValueError("pointwise contiguous layout requires same-shape inputs")
     return {"ncols": facts.ncols, "nrows": facts.nrows}
@@ -137,8 +152,8 @@ def _pointwise_contiguous_shape(facts: PointwiseCaseFacts) -> dict[str, int]:
 def _pointwise_rhs_row_broadcast_shape(facts: PointwiseCaseFacts) -> dict[str, int]:
     if facts.nf != 1:
         raise ValueError("pointwise rhs row broadcast requires nf=1")
-    if facts.perm1 != 0:
-        raise ValueError("pointwise rhs row broadcast requires perm1=0")
+    if not _is_base_pointwise_permutation(facts.perm1):
+        raise ValueError("pointwise rhs row broadcast requires perm1=[0, 1, 2, 3]")
     if facts.src1_nrows != 1:
         raise ValueError("pointwise rhs row broadcast requires a single rhs row")
     if facts.src1_ncols != facts.ncols:
@@ -166,8 +181,8 @@ def _pointwise_scalar_broadcast_shape(facts: PointwiseCaseFacts) -> dict[str, in
 def _pointwise_rhs_column_broadcast_shape(facts: PointwiseCaseFacts) -> dict[str, int]:
     if facts.nf != 1:
         raise ValueError("pointwise rhs column broadcast requires nf=1")
-    if facts.perm1 != 0:
-        raise ValueError("pointwise rhs column broadcast requires perm1=0")
+    if not _is_base_pointwise_permutation(facts.perm1):
+        raise ValueError("pointwise rhs column broadcast requires perm1=[0, 1, 2, 3]")
     if facts.ne[0] != 1 or facts.ne[1] != 1:
         raise ValueError(
             "pointwise rhs column broadcast requires singleton leading rhs dims"
@@ -193,8 +208,8 @@ def _pointwise_rhs_intra_row_repeat_shape(
 ) -> dict[str, int]:
     if facts.nf != 1:
         raise ValueError("pointwise rhs intra-row repeat requires nf=1")
-    if facts.perm1 != 0:
-        raise ValueError("pointwise rhs intra-row repeat requires perm1=0")
+    if not _is_base_pointwise_permutation(facts.perm1):
+        raise ValueError("pointwise rhs intra-row repeat requires perm1=[0, 1, 2, 3]")
     if facts.ne[0] <= 1:
         raise ValueError(
             "pointwise rhs intra-row repeat requires more than one rhs column"

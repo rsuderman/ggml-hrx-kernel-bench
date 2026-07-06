@@ -13,6 +13,9 @@ from .models import ConcreteTensor, ConcreteTensorDimension, V2Route
 from .query import RouteCatalog, require_route_catalog, routes_for_op
 from .shape import normalize_shape
 
+POINTWISE_BASE_PERMUTATION = (0, 1, 2, 3)
+POINTWISE_SRC1_PERMUTATION = (1, 2, 0, 3)
+
 
 def _unmapped_case(
     case: ImportedCase,
@@ -33,20 +36,33 @@ def _unmapped_case(
     )
 
 
-def _parse_pointwise_parameters(case: ImportedCase) -> tuple[list[int], list[int], int, int]:
+def _parse_pointwise_permutation(raw: object) -> tuple[int, int, int, int]:
+    if not isinstance(raw, list) or len(raw) != 4:
+        raise ValueError("pointwise lowering requires a 4-D perm1 permutation list")
+    if any(not isinstance(value, int) for value in raw):
+        raise ValueError("pointwise lowering requires integer perm1 values")
+    permutation = tuple(int(value) for value in raw)
+    if tuple(sorted(permutation)) != POINTWISE_BASE_PERMUTATION:
+        raise ValueError("pointwise lowering requires perm1 to be a permutation of [0, 1, 2, 3]")
+    return permutation
+
+
+def _parse_pointwise_parameters(
+    case: ImportedCase,
+) -> tuple[list[int], list[int], int, tuple[int, int, int, int]]:
     ne = case.normalized_params.get("ne")
     nr = case.normalized_params.get("nr")
     nf = case.normalized_params.get("nf", 0)
-    perm1 = case.normalized_params.get("perm1", 0)
+    perm1 = case.normalized_params.get("perm1", list(POINTWISE_BASE_PERMUTATION))
     if not isinstance(ne, list) or not isinstance(nr, list):
         raise ValueError("pointwise lowering requires ne and nr arrays")
     if len(ne) != 4 or len(nr) != 4:
         raise ValueError("pointwise lowering requires 4-D extents")
     if any(not isinstance(value, int) for value in (*ne, *nr)):
         raise ValueError("pointwise lowering requires integer extents")
-    if not isinstance(nf, int) or not isinstance(perm1, int):
-        raise ValueError("pointwise lowering requires integer nf and perm1")
-    return [int(value) for value in ne], [int(value) for value in nr], int(nf), int(perm1)
+    if not isinstance(nf, int):
+        raise ValueError("pointwise lowering requires integer nf")
+    return [int(value) for value in ne], [int(value) for value in nr], int(nf), _parse_pointwise_permutation(perm1)
 
 
 def _dimensions_from_extents(extents: list[int]) -> tuple[ConcreteTensorDimension, ...]:
@@ -58,6 +74,36 @@ def _dimensions_from_extents(extents: list[int]) -> tuple[ConcreteTensorDimensio
         )
         stride *= int(extent)
     return tuple(dimensions)
+
+
+def _dimensions_from_extents_and_strides(
+    extents: list[int],
+    strides: list[int],
+) -> tuple[ConcreteTensorDimension, ...]:
+    return tuple(
+        ConcreteTensorDimension(name=f"d{index}", size=int(extent), stride=int(stride))
+        for index, (extent, stride) in enumerate(zip(extents, strides))
+    )
+
+
+def _permuted_dimensions_from_extents(
+    extents: list[int],
+    permutation: tuple[int, int, int, int],
+) -> tuple[ConcreteTensorDimension, ...]:
+    if permutation == POINTWISE_BASE_PERMUTATION:
+        return _dimensions_from_extents(extents)
+    if permutation != POINTWISE_SRC1_PERMUTATION:
+        raise ValueError(f"generic pointwise routing does not support perm1={list(permutation)!r}")
+    base_extents = [int(extents[axis]) for axis in permutation]
+    base_strides: list[int] = []
+    stride = 1
+    for extent in base_extents:
+        base_strides.append(stride)
+        stride *= extent
+    logical_strides = [0, 0, 0, 0]
+    for base_axis, logical_axis in enumerate(permutation):
+        logical_strides[logical_axis] = base_strides[base_axis]
+    return _dimensions_from_extents_and_strides(extents, logical_strides)
 
 
 def _fallback_shape_from_extents(extents: list[int]) -> dict[str, int]:
@@ -73,8 +119,8 @@ def lower_contiguous_pointwise_shape(case: ImportedCase) -> dict[str, int]:
     ne, nr, nf, perm1 = _parse_pointwise_parameters(case)
     if nf != 1:
         raise ValueError("contiguous pointwise routing requires nf=1")
-    if perm1 != 0:
-        raise ValueError("contiguous pointwise routing requires perm1=0")
+    if perm1 != POINTWISE_BASE_PERMUTATION:
+        raise ValueError("contiguous pointwise routing requires perm1=[0, 1, 2, 3]")
     if any(int(value) != 1 for value in nr):
         raise ValueError("contiguous pointwise routing requires same-shape inputs")
     return _fallback_shape_from_extents(ne)
@@ -100,13 +146,11 @@ def lower_generic_pointwise_tensors(
     ne, nr, nf, perm1 = _parse_pointwise_parameters(case)
     if nf != 1:
         raise ValueError("generic pointwise routing requires nf=1")
-    if perm1 != 0:
-        raise ValueError("generic pointwise routing requires perm1=0")
     dst_extents = [int(extent) * int(repeat) for extent, repeat in zip(ne, nr)]
     dtype = str(case.dtype.get("type", "")).upper()
     tensors = {
         "src0": ConcreteTensor(dtype=dtype, dimensions=_dimensions_from_extents(dst_extents)),
-        "src1": ConcreteTensor(dtype=dtype, dimensions=_dimensions_from_extents(ne)),
+        "src1": ConcreteTensor(dtype=dtype, dimensions=_permuted_dimensions_from_extents(ne, perm1)),
         "dst": ConcreteTensor(dtype=dtype, dimensions=_dimensions_from_extents(dst_extents)),
     }
     return tensors, _fallback_shape_from_extents(dst_extents)

@@ -19,7 +19,7 @@ ops:
         - ne: [1, 1, 1, 1]
           nf: 1
           nr: [32, 1, 1, 1]
-          perm1: 0
+          perm1: [0, 1, 2, 3]
   CPY:
     - dtype:
         type_dst: f16

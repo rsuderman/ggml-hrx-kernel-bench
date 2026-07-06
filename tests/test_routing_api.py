@@ -9,7 +9,6 @@ from ggml_hrx_kernel_bench.import_models import (
     ImportedCase,
     ImportedOpGroup,
     ImportedSuite,
-    UnmappedReason,
 )
 from ggml_hrx_kernel_bench.routing.api import (
     CandidateQuery,
@@ -334,6 +333,54 @@ def test_v2_generic_4d_candidate_binds_dimension_sizes_and_strides(tmp_path: Pat
     }
 
 
+def test_v2_router_lowers_permuted_rhs_add_case(tmp_path: Path) -> None:
+    kernel_dir = tmp_path / "kernels"
+    routing_dir = tmp_path / "routing"
+    _write_kernel(kernel_dir)
+    _write_v2_descriptor(routing_dir)
+    router = create_router(version="v2", kernel_dir=kernel_dir, routing_dir=routing_dir)
+    suite = ImportedSuite(
+        schema="test",
+        source_path="test.yaml",
+        op_groups=[
+            ImportedOpGroup(
+                op="ADD",
+                dtype={"type": "f32"},
+                source_path="test.yaml",
+                cases=(
+                    ImportedCase(
+                        op="ADD",
+                        dtype={"type": "f32"},
+                        raw_case={
+                            "ne": [10, 5, 4, 3],
+                            "nr": [1, 1, 1, 1],
+                            "nf": 1,
+                            "perm1": [1, 2, 0, 3],
+                        },
+                        normalized_params={
+                            "ne": [10, 5, 4, 3],
+                            "nr": [1, 1, 1, 1],
+                            "nf": 1,
+                            "perm1": [1, 2, 0, 3],
+                        },
+                        source_path="test.yaml",
+                        source_group_index=0,
+                        source_case_index=0,
+                    ),
+                ),
+            )
+        ],
+    )
+
+    resolved = router.resolve_imported_suite(suite)
+
+    assert len(resolved.resolved) == 1
+    assert resolved.resolved[0].route_id == "add_f32_generic_4d"
+    assert resolved.resolved[0].params == ["d0", "d1", "d2", "d3"]
+    assert resolved.resolved[0].values == [10, 5, 4, 3]
+    assert resolved.unmapped == []
+
+
 def test_v2_helpers_require_catalog_or_routing_dir(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="routing_dir or catalog is required"):
         build_manifest(kernel_dir=tmp_path / "kernels")
@@ -361,8 +408,8 @@ def test_v2_router_maps_contiguous_and_generic_add_cases(tmp_path: Path) -> None
                     ImportedCase(
                         op="ADD",
                         dtype={"type": "f32"},
-                        raw_case={"ne": [16, 64, 1, 1], "nr": [1, 1, 1, 1], "nf": 1, "perm1": 0},
-                        normalized_params={"ne": [16, 64, 1, 1], "nr": [1, 1, 1, 1], "nf": 1, "perm1": 0},
+                        raw_case={"ne": [16, 64, 1, 1], "nr": [1, 1, 1, 1], "nf": 1, "perm1": [0, 1, 2, 3]},
+                        normalized_params={"ne": [16, 64, 1, 1], "nr": [1, 1, 1, 1], "nf": 1, "perm1": [0, 1, 2, 3]},
                         source_path="test.yaml",
                         source_group_index=0,
                         source_case_index=0,
@@ -370,8 +417,8 @@ def test_v2_router_maps_contiguous_and_generic_add_cases(tmp_path: Path) -> None
                     ImportedCase(
                         op="ADD",
                         dtype={"type": "f32"},
-                        raw_case={"ne": [10, 5, 1, 1], "nr": [1, 1, 1, 2], "nf": 1, "perm1": 0},
-                        normalized_params={"ne": [10, 5, 1, 1], "nr": [1, 1, 1, 2], "nf": 1, "perm1": 0},
+                        raw_case={"ne": [10, 5, 1, 1], "nr": [1, 1, 1, 2], "nf": 1, "perm1": [0, 1, 2, 3]},
+                        normalized_params={"ne": [10, 5, 1, 1], "nr": [1, 1, 1, 2], "nf": 1, "perm1": [0, 1, 2, 3]},
                         source_path="test.yaml",
                         source_group_index=0,
                         source_case_index=1,
@@ -379,8 +426,8 @@ def test_v2_router_maps_contiguous_and_generic_add_cases(tmp_path: Path) -> None
                     ImportedCase(
                         op="ADD",
                         dtype={"type": "f32"},
-                        raw_case={"ne": [10, 5, 4, 3], "nr": [1, 1, 1, 1], "nf": 1, "perm1": 1},
-                        normalized_params={"ne": [10, 5, 4, 3], "nr": [1, 1, 1, 1], "nf": 1, "perm1": 1},
+                        raw_case={"ne": [10, 5, 4, 3], "nr": [1, 1, 1, 1], "nf": 1, "perm1": [1, 2, 0, 3]},
+                        normalized_params={"ne": [10, 5, 4, 3], "nr": [1, 1, 1, 1], "nf": 1, "perm1": [1, 2, 0, 3]},
                         source_path="test.yaml",
                         source_group_index=0,
                         source_case_index=2,
@@ -392,7 +439,7 @@ def test_v2_router_maps_contiguous_and_generic_add_cases(tmp_path: Path) -> None
 
     resolved = router.resolve_imported_suite(suite)
 
-    assert len(resolved.resolved) == 2
+    assert len(resolved.resolved) == 3
     assert resolved.resolved[0].kernel_family == "add_f32"
     assert resolved.resolved[0].route_id == "add_f32_contiguous_1d"
     assert resolved.resolved[0].params == ["ncols", "nrows", "cols", "rows"]
@@ -400,9 +447,10 @@ def test_v2_router_maps_contiguous_and_generic_add_cases(tmp_path: Path) -> None
     assert resolved.resolved[1].route_id == "add_f32_generic_4d"
     assert resolved.resolved[1].params == ["d0", "d1", "d2", "d3"]
     assert resolved.resolved[1].values == [10, 5, 1, 2]
-    assert len(resolved.unmapped) == 1
-    assert resolved.unmapped[0].reason == UnmappedReason.SHAPE_LOWERING_NOT_IMPLEMENTED
-    assert resolved.unmapped[0].imported.source_case_index == 2
+    assert resolved.resolved[2].route_id == "add_f32_generic_4d"
+    assert resolved.resolved[2].params == ["d0", "d1", "d2", "d3"]
+    assert resolved.resolved[2].values == [10, 5, 4, 3]
+    assert resolved.unmapped == []
 
 
 def test_v2_router_executes_matching_case(tmp_path: Path, monkeypatch) -> None:
