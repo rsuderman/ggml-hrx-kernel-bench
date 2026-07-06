@@ -24,7 +24,7 @@ from ggml_hrx_kernel_bench.routing.v2.models import (
     ValueDefinition,
 )
 from ggml_hrx_kernel_bench.routing.v2.manifest import build_manifest
-from ggml_hrx_kernel_bench.routing.v2.query import load_route_catalog
+from ggml_hrx_kernel_bench.routing.v2.query import load_route_catalog, routes_for_op
 
 
 def _write_v2_descriptor(routing_dir: Path) -> None:
@@ -199,6 +199,92 @@ def _write_kernel(kernel_dir: Path) -> None:
     )
 
 
+def _write_v2_copy_descriptor(routing_dir: Path) -> None:
+    routing_dir.mkdir(parents=True, exist_ok=True)
+    (routing_dir / "router.json").write_text(
+        json.dumps(
+            {
+                "schema": "ggml_hrx_kernel_bench.routing_descriptors.v2",
+                "routes": {"CPY": ["copy/copy_f32_f16_contiguous_1d.json"]},
+            },
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    copy_dir = routing_dir / "copy"
+    copy_dir.mkdir(parents=True, exist_ok=True)
+    (copy_dir / "copy_f32_f16_contiguous_1d.json").write_text(
+        json.dumps(
+            {
+                "id": "copy_f32_f16_contiguous_1d",
+                "family": "copy_f32_f16",
+                "kernel": {
+                    "source_id": "copy_f32_f16",
+                    "path": "copy/contiguous_1d.loom",
+                    "root_symbol": "@hrx2_copy_f32_f16_contiguous_1d",
+                    "export_name": "hrx2_copy_f32_f16_contiguous_1d",
+                },
+                "tensors": {
+                    "src0": {
+                        "dtype": "F32",
+                        "dimensions": "src0_dimensions",
+                        "strides": "src0_strides",
+                    },
+                    "dst": {
+                        "dtype": "F16",
+                        "dimensions": "dst_dimensions",
+                        "strides": "dst_strides",
+                    },
+                },
+                "values": [
+                    {
+                        "name": "contiguous_strides",
+                        "contiguous_strides": "dst_dimensions",
+                    },
+                    {
+                        "name": "total_size",
+                        "product": "dst_dimensions",
+                    },
+                ],
+                "constraints": [
+                    {"equals": ["src0_dimensions", "dst_dimensions"]},
+                    {"equals": ["contiguous_strides", "src0_strides", "dst_strides"]},
+                ],
+                "launch": {
+                    "workgroup_size": [256, 1, 1],
+                },
+                "config": {
+                    "bindings": [
+                        {
+                            "key": "@hrx2.shape.copy.n",
+                            "source": "value.total_size",
+                        },
+                        {
+                            "key": "@hrx2.tuning.copy.workgroup_size",
+                            "value": "256",
+                        },
+                    ]
+                },
+            },
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+
+def _write_copy_kernel(kernel_dir: Path) -> None:
+    copy_dir = kernel_dir / "copy"
+    copy_dir.mkdir(parents=True, exist_ok=True)
+    (copy_dir / "contiguous_1d.loom").write_text(
+        'kernel.def export("hrx2_copy_f32_f16_contiguous_1d") @hrx2_copy_f32_f16_contiguous_1d\n',
+        encoding="utf-8",
+    )
+
+
 def test_v2_router_returns_no_candidates_without_descriptor(tmp_path: Path) -> None:
     router = create_router(
         version="v2",
@@ -263,6 +349,36 @@ def test_v2_manifest_includes_original_root_metadata(tmp_path: Path) -> None:
     assert generic["imported_sha256"] is not None
     assert contiguous["mechanical_rewrites"] == []
     assert generic["mechanical_rewrites"] == []
+
+
+def test_v2_resolve_copy_route_for_contiguous_case(tmp_path: Path) -> None:
+    kernel_dir = tmp_path / "kernels"
+    routing_dir = tmp_path / "routing"
+    _write_copy_kernel(kernel_dir)
+    _write_v2_copy_descriptor(routing_dir)
+    catalog = load_route_catalog(routing_dir)
+    case = ImportedCase(
+        op="CPY",
+        dtype={"type_src": "f32", "type_dst": "f16"},
+        raw_case={},
+        normalized_params={
+            "ne": [16, 4, 2, 2],
+            "_src_transpose": 0,
+            "permute_src": [0, 0, 0, 0],
+            "permute_dst": [0, 0, 0, 0],
+        },
+        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_group_index=0,
+        source_case_index=0,
+    )
+
+    route, shape, reason, detail = resolve_route_for_case(case, list(routes_for_op(catalog, "CPY")))
+
+    assert reason is None
+    assert detail is None
+    assert route is not None
+    assert route.id == "copy_f32_f16_contiguous_1d"
+    assert shape == {"d0": 16, "d1": 4, "d2": 2, "d3": 2}
 
 
 def test_v2_catalog_objects_are_immutable(tmp_path: Path) -> None:

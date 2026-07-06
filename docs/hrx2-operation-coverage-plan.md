@@ -79,6 +79,36 @@ import and runtime validation work.
 - Source references:
   - `src/ggml_hrx_kernel_bench/routing/v2/import_resolution.py`
 
+### CPY
+
+#### Non-Identity Permutation And Transposed Copy Cases
+
+- Status: partially supported
+- Scope: grouped-YAML CPY import lowering
+- Correctness status: the validated v2 CPY runtime slice covers contiguous,
+  non-transposed copies for `f16 -> f16`, `f32 -> f32`, `f16 -> f32`, and
+  `f32 -> f16`; the remaining CPY negatives are import-only and do not
+  currently reach kernel execution
+- Current behavior: v2 CPY lowering only accepts `_src_transpose=0`,
+  `permute_src=[0,0,0,0]`, and `permute_dst=[0,0,0,0]` for those four dtype
+  pairs
+- Evidence:
+  - `build/tests/kernels/artifacts/llama-cpp-tests-import-v2/ops/CPY/import-summary.md`
+  - `build/tests/kernels/artifacts/llama-cpp-tests-import-v2/ops/CPY/unmapped.json`
+  - `ctest --test-dir build --output-on-failure -R kernel-run-llama-cpp-tests-v2-CPY-generated`
+- Current counts:
+  - `10` mapped cases
+  - `26` `shape_lowering_not_implemented` cases for the supported f16/f32 dtype pairs
+  - `384` `no_dtype_mapping` cases for other source/destination dtype combinations
+- Why the remaining supported-dtype cases fail:
+  - grouped-YAML permutations such as `permute_src=[0,2,1,3]`,
+    `permute_src=[1,0,2,3]`, and destination permutations such as
+    `permute_dst=[0,2,1,3]` are rejected before route matching
+  - `_src_transpose=1` cases are also rejected before tensor descriptors are
+    materialized
+- Source references:
+  - `src/ggml_hrx_kernel_bench/routing/v2/import_resolution.py`
+
 ### MUL
 
 #### Fused Mul Case (`nf != 1`)

@@ -315,13 +315,26 @@ def _rms_norm_f32(np: Any, candidate: Candidate, fixture_dir: Path, seed: int) -
 
 def _copy_f32_f16(np: Any, candidate: Candidate, fixture_dir: Path, seed: int) -> OracleResult:
     n = int(candidate.values.get("shape.copy.n") or _element_count(candidate))
-    src = f32_pattern(np, (n,), seed=seed)
-    expected = src.astype(np.float16).view(np.uint16)
-    dst_init = np.zeros((n,), dtype=np.uint16)
-    np.save(fixture_dir / "src0.npy", src, allow_pickle=False)
-    np.save(fixture_dir / "dst_init.npy", dst_init.view(np.int16), allow_pickle=False)
-    np.save(fixture_dir / "expected.npy", expected.view(np.int16), allow_pickle=False)
-    meta = _metadata(candidate, seed, "copy_f32_f16_numpy_cast_bits", {"atol": 0.0, "rtol": 0.0})
+    src_dtype, dst_dtype = _copy_family_dtypes(candidate.family)
+    src = f16_pattern(np, (n,), seed=seed) if src_dtype == "f16" else f32_pattern(np, (n,), seed=seed)
+    expected = src.astype(np.float16 if dst_dtype == "f16" else np.float32)
+    dst_init = np.zeros((n,), dtype=np.float16 if dst_dtype == "f16" else np.float32)
+    np.save(
+        fixture_dir / "src0.npy",
+        _f16_bits(np, src) if src_dtype == "f16" else src.astype(np.float32),
+        allow_pickle=False,
+    )
+    np.save(
+        fixture_dir / "dst_init.npy",
+        _f16_bits(np, dst_init) if dst_dtype == "f16" else dst_init.astype(np.float32),
+        allow_pickle=False,
+    )
+    np.save(
+        fixture_dir / "expected.npy",
+        _f16_bits(np, expected) if dst_dtype == "f16" else expected.astype(np.float32),
+        allow_pickle=False,
+    )
+    meta = _metadata(candidate, seed, f"copy_{src_dtype}_{dst_dtype}_numpy_cast", {"atol": 0.0, "rtol": 0.0})
     meta_path = fixture_dir / "oracle.json"
     write_json(meta_path, meta)
     return OracleResult("fixtures_ready", meta["oracle"], fixture_dir, meta_path, fixture_dir / "expected.npy", meta["tolerance"])
@@ -588,6 +601,19 @@ check.benchmark<{case_name}> {bench_name}
 """,
     )
     return bench_name, {"status": "ok", "workbench_path": str(workbench_path)}
+
+
+def _copy_family_dtypes(family: str) -> tuple[str, str]:
+    mapping = {
+        "copy_f16_f16": ("f16", "f16"),
+        "copy_f16_f32": ("f16", "f32"),
+        "copy_f32_f16": ("f32", "f16"),
+        "copy_f32_f32": ("f32", "f32"),
+    }
+    try:
+        return mapping[family]
+    except KeyError as exc:
+        raise ValueError(f"unsupported COPY family {family}") from exc
 
 
 def _read_f32(workbench_path: Path, fixture_dir: Path, name: str, elems: int) -> str:
@@ -1283,23 +1309,34 @@ check.benchmark<{case_name}> {bench_name}
 
 
 def _write_copy_workbench(candidate: Candidate, linked_source: Path, workbench_path: Path, fixture_dir: Path) -> tuple[str, dict[str, Any]]:
-    n = int(candidate.values.get("shape.copy.n") or candidate.shape.get("ncols", 1) * candidate.shape.get("nrows", 1))
-    case_name = f"@case_{candidate.id}"
-    bench_name = f"@bench_{candidate.id}"
-    suffix = f"""
-check.case public {case_name} {{
-  %src0 = check.file.read.npy path("{_rel_fixture(workbench_path, fixture_dir, "src0.npy")}") : tensor<{n}xf32>
-  %dst = check.file.read.npy path("{_rel_fixture(workbench_path, fixture_dir, "dst_init.npy")}") : tensor<{n}xi16>
-  %expected = check.file.read.npy path("{_rel_fixture(workbench_path, fixture_dir, "expected.npy")}") : tensor<{n}xi16>
-  func.call {candidate.root_symbol}(%src0, %dst) : (tensor<{n}xf32>, tensor<{n}xi16>)
-  check.expect.equal actual(%dst) expected(%expected) : tensor<{n}xi16>
-  check.return
-}}
-
-check.benchmark<{case_name}> {bench_name}
-"""
-    _source_plus_case(linked_source, workbench_path, suffix)
-    return bench_name, {"status": "ok", "workbench_path": str(workbench_path)}
+    n = int(candidate.values.get("shape.copy.n") or _element_count(candidate))
+    src_dtype, dst_dtype = _copy_family_dtypes(candidate.family)
+    case_name, bench_name = _case_names(candidate)
+    src_tensor_type = f"tensor<{n}xi16>" if src_dtype == "f16" else f"tensor<{n}xf32>"
+    dst_tensor_type = f"tensor<{n}xi16>" if dst_dtype == "f16" else f"tensor<{n}xf32>"
+    read_src = _read_i16(workbench_path, fixture_dir, "src0", n) if src_dtype == "f16" else _read_f32(workbench_path, fixture_dir, "src0", n)
+    read_dst = _read_i16(workbench_path, fixture_dir, "dst_init", n) if dst_dtype == "f16" else _read_f32(workbench_path, fixture_dir, "dst_init", n)
+    read_expected = _read_i16(workbench_path, fixture_dir, "expected", n) if dst_dtype == "f16" else _read_f32(workbench_path, fixture_dir, "expected", n)
+    read_dst = read_dst.replace("%dst_init", "%dst")
+    if dst_dtype == "f16":
+        check = f"  check.expect.equal actual(%dst) expected(%expected) : {dst_tensor_type}"
+    else:
+        check = f"  check.expect.close actual(%dst) expected(%expected) atol(0.0) rtol(0.0) nan(same) : {dst_tensor_type}"
+    return _emit_case(
+        linked_source,
+        workbench_path,
+        case_name,
+        bench_name,
+        "\n".join(
+            [
+                read_src,
+                read_dst,
+                read_expected,
+                f"  func.call {candidate.root_symbol}(%src0, %dst) : ({src_tensor_type}, {dst_tensor_type})",
+                check,
+            ]
+        ),
+    )
 
 
 def _write_cont_workbench(candidate: Candidate, linked_source: Path, workbench_path: Path, fixture_dir: Path) -> tuple[str, dict[str, Any]]:
@@ -1647,7 +1684,7 @@ ORACLE_SPECS: tuple[OracleSpec, ...] = (
         write_workbench=_write_rms_norm_workbench,
     ),
     OracleSpec(
-        family_ids=("copy_f32_f16",),
+        family_ids=("copy_f16_f16", "copy_f16_f32", "copy_f32_f16", "copy_f32_f32"),
         generate=_copy_f32_f16,
         write_workbench=_write_copy_workbench,
     ),

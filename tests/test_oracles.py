@@ -87,6 +87,58 @@ def test_add_oracle_and_workbench_support_ranked_src1_overrides(tmp_path: Path) 
 
 
 @pytest.mark.parametrize(
+    ("family", "op", "source_path", "root_symbol", "export_name", "src_dtype", "dst_dtype"),
+    (
+        ("copy_f16_f16", "CPY", "kernels/v2/copy/contiguous_1d.loom", "@hrx2_copy_f16_f16_contiguous_1d", "hrx2_copy_f16_f16_contiguous_1d", np.int16, np.int16),
+        ("copy_f16_f32", "CPY", "kernels/v2/copy/contiguous_1d.loom", "@hrx2_copy_f16_f32_contiguous_1d", "hrx2_copy_f16_f32_contiguous_1d", np.int16, np.float32),
+        ("copy_f32_f16", "CPY", "kernels/v2/copy/contiguous_1d.loom", "@hrx2_copy_f32_f16_contiguous_1d", "hrx2_copy_f32_f16_contiguous_1d", np.float32, np.int16),
+        ("copy_f32_f32", "CPY", "kernels/v2/copy/contiguous_1d.loom", "@hrx2_copy_f32_f32_contiguous_1d", "hrx2_copy_f32_f32_contiguous_1d", np.float32, np.float32),
+    ),
+)
+def test_copy_oracle_and_workbench_use_expected_buffer_types(
+    tmp_path: Path,
+    family: str,
+    op: str,
+    source_path: str,
+    root_symbol: str,
+    export_name: str,
+    src_dtype: type[np.generic],
+    dst_dtype: type[np.generic],
+) -> None:
+    candidate = _candidate(
+        candidate_id=f"{family}_ranked_4d",
+        shape={"d0": 16, "d1": 4, "d2": 2, "d3": 2},
+        family=family,
+        source_id=family,
+        root_symbol=root_symbol,
+        export_name=export_name,
+        op=op,
+        source_path=source_path,
+    )
+
+    result = generate_oracle(candidate, tmp_path / "fixtures", force=True)
+
+    assert result.status == "fixtures_ready"
+    assert np.load(tmp_path / "fixtures" / "src0.npy").dtype == src_dtype
+    assert np.load(tmp_path / "fixtures" / "dst_init.npy").dtype == dst_dtype
+    assert np.load(tmp_path / "fixtures" / "expected.npy").dtype == dst_dtype
+
+    linked_source = tmp_path / "linked.loom"
+    linked_source.write_text(f"kernel.def export(\"{export_name}\") {root_symbol}() {{}}\n", encoding="utf-8")
+    _, metadata = write_workbench(candidate, linked_source, tmp_path / "workbench.loom", tmp_path / "fixtures")
+
+    assert metadata["status"] == "ok"
+    workbench = (tmp_path / "workbench.loom").read_text(encoding="utf-8")
+    src_tensor = "tensor<256xi16>" if src_dtype is np.int16 else "tensor<256xf32>"
+    dst_tensor = "tensor<256xi16>" if dst_dtype is np.int16 else "tensor<256xf32>"
+    assert f"{src_tensor}, {dst_tensor}" in workbench
+    if dst_dtype is np.int16:
+        assert "check.expect.equal" in workbench
+    else:
+        assert "check.expect.close" in workbench
+
+
+@pytest.mark.parametrize(
     ("family", "op", "source_path", "root_symbol", "export_name"),
     (
         ("add_f16", "ADD", "kernels/v2/add/contiguous_1d.loom", "@hrx2_add_f16", "hrx2_add_f16"),

@@ -14,6 +14,7 @@ from .query import RouteCatalog, require_route_catalog, routes_for_op
 
 POINTWISE_BASE_PERMUTATION = (0, 1, 2, 3)
 POINTWISE_SRC1_PERMUTATION = (1, 2, 0, 3)
+COPY_IDENTITY_PERMUTATION = (0, 0, 0, 0)
 
 
 def _unmapped_case(
@@ -109,6 +110,29 @@ def _shape_from_extents(extents: list[int]) -> dict[str, int]:
     return {f"d{index}": int(extent) for index, extent in enumerate(extents)}
 
 
+def _parse_copy_parameters(case: ImportedCase) -> list[int]:
+    ne = case.normalized_params.get("ne")
+    src_transpose = case.normalized_params.get("_src_transpose", 0)
+    permute_src = case.normalized_params.get("permute_src", list(COPY_IDENTITY_PERMUTATION))
+    permute_dst = case.normalized_params.get("permute_dst", list(COPY_IDENTITY_PERMUTATION))
+    if not isinstance(ne, list) or len(ne) != 4:
+        raise ValueError("copy lowering requires a 4-D ne extent list")
+    if any(not isinstance(value, int) for value in ne):
+        raise ValueError("copy lowering requires integer ne extents")
+    if not isinstance(src_transpose, int):
+        raise ValueError("copy lowering requires integer _src_transpose")
+    for name, permutation in (("permute_src", permute_src), ("permute_dst", permute_dst)):
+        if not isinstance(permutation, list) or len(permutation) != 4:
+            raise ValueError(f"copy lowering requires {name} to be a 4-D permutation list")
+        if any(not isinstance(value, int) for value in permutation):
+            raise ValueError(f"copy lowering requires integer {name} values")
+        if tuple(int(value) for value in permutation) != COPY_IDENTITY_PERMUTATION:
+            raise ValueError(f"copy lowering requires {name}=[0, 0, 0, 0]")
+    if src_transpose != 0:
+        raise ValueError("copy lowering requires _src_transpose=0")
+    return [int(value) for value in ne]
+
+
 def lower_contiguous_pointwise_shape(case: ImportedCase) -> dict[str, int]:
     ne, nr, nf, perm1 = _parse_pointwise_parameters(case)
     if nf != 1:
@@ -197,6 +221,20 @@ def lower_contiguous_unary_tensors(
     return tensors, _fallback_shape_from_extents(ne)
 
 
+def lower_contiguous_copy_tensors(
+    case: ImportedCase,
+) -> tuple[dict[str, ConcreteTensor], dict[str, int]]:
+    ne = _parse_copy_parameters(case)
+    src_dtype = str(case.dtype.get("type_src", "")).upper()
+    dst_dtype = str(case.dtype.get("type_dst", "")).upper()
+    dimensions = _dimensions_from_extents(ne)
+    tensors = {
+        "src0": ConcreteTensor(dtype=src_dtype, dimensions=dimensions),
+        "dst": ConcreteTensor(dtype=dst_dtype, dimensions=dimensions),
+    }
+    return tensors, _shape_from_extents(ne)
+
+
 def _route_uses_generic_pointwise_lowering(route: V2Route) -> bool:
     has_rank4_dst = False
     has_src0_divides = False
@@ -211,6 +249,32 @@ def _route_uses_generic_pointwise_lowering(route: V2Route) -> bool:
     return has_rank4_dst and has_src0_divides and has_src1_divides
 
 
+def _route_uses_contiguous_copy_lowering(route: V2Route) -> bool:
+    if route.op != "CPY" or set(route.tensors) != {"src0", "dst"}:
+        return False
+    src0_dimensions = route.tensors["src0"].dimensions_capture
+    src0_strides = route.tensors["src0"].strides_capture
+    dst_dimensions = route.tensors["dst"].dimensions_capture
+    dst_strides = route.tensors["dst"].strides_capture
+    has_total_size = any(
+        value.name == "total_size" and value.product == dst_dimensions
+        for value in route.values
+    )
+    has_contiguous_strides = any(
+        value.name == "contiguous_strides" and value.contiguous_strides == dst_dimensions
+        for value in route.values
+    )
+    has_equal_dimensions = any(
+        set(check.equals) == {src0_dimensions, dst_dimensions}
+        for check in route.constraints.checks
+    )
+    has_equal_strides = any(
+        set(check.equals) == {"contiguous_strides", src0_strides, dst_strides}
+        for check in route.constraints.checks
+    )
+    return has_total_size and has_contiguous_strides and has_equal_dimensions and has_equal_strides
+
+
 def lower_tensors_for_route(
     case: ImportedCase,
     route: V2Route,
@@ -219,6 +283,8 @@ def lower_tensors_for_route(
         return lower_contiguous_unary_tensors(case)
     if _route_uses_generic_pointwise_lowering(route):
         return lower_generic_pointwise_tensors(case)
+    if _route_uses_contiguous_copy_lowering(route):
+        return lower_contiguous_copy_tensors(case)
     return lower_contiguous_pointwise_tensors(case)
 
 
@@ -271,7 +337,7 @@ def resolve_route_for_case(
         None,
         None,
         UnmappedReason.SHAPE_LOWERING_NOT_IMPLEMENTED,
-        lowering_errors[0] if lowering_errors else "pointwise lowering is not implemented for this route set",
+        lowering_errors[0] if lowering_errors else "shape lowering is not implemented for this route set",
     )
 
 
