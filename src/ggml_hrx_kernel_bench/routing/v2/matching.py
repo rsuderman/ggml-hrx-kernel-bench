@@ -92,9 +92,20 @@ def _capture_tensor(descriptor: TensorDescriptor, tensor: ConcreteTensor, captur
         return False
     dimensions = tuple(int(dimension.size) for dimension in tensor.dimensions)
     strides = tuple(int(dimension.stride) for dimension in tensor.dimensions)
+    permutation = tensor.permutation
+    if permutation is None:
+        permutation = tuple(range(len(dimensions)))
+    elif len(permutation) != len(dimensions):
+        return False
     if not _store_capture(captures, descriptor.dimensions_capture, dimensions):
         return False
     if not _store_capture(captures, descriptor.strides_capture, strides):
+        return False
+    if descriptor.permutation_capture is not None and not _store_capture(
+        captures,
+        descriptor.permutation_capture,
+        tuple(int(axis) for axis in permutation),
+    ):
         return False
     return True
 
@@ -145,6 +156,10 @@ def _constraint_accepts(check: ConstraintCheck, values: Mapping[str, CapturedVal
     captured = values.get(check.name)
     if captured is None:
         return False
+    if check.iota:
+        if not isinstance(captured, tuple):
+            return False
+        return captured == tuple(range(len(captured)))
     if check.length is not None:
         if not isinstance(captured, tuple):
             return False

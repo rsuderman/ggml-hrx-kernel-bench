@@ -29,6 +29,7 @@ class ConstraintCheck:
     min: int | None = None
     max: int | None = None
     multiple_of: int | None = None
+    iota: bool = False
     equals: tuple[str, ...] = ()
     divides: tuple[str, ...] = ()
 
@@ -50,6 +51,7 @@ class TensorDescriptor:
     dtype: str | None
     dimensions_capture: str
     strides_capture: str
+    permutation_capture: str | None = None
 
 
 @dataclass(frozen=True)
@@ -63,6 +65,7 @@ class ConcreteTensorDimension:
 class ConcreteTensor:
     dtype: str
     dimensions: tuple[ConcreteTensorDimension, ...]
+    permutation: tuple[int, ...] | None = None
 
 
 @dataclass(frozen=True)

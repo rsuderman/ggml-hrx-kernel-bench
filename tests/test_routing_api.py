@@ -50,16 +50,19 @@ def _write_v2_descriptor(routing_dir: Path) -> None:
                         "dtype": "F32",
                         "dimensions": "src0_dimensions",
                         "strides": "src0_strides",
+                        "permutation": "src0_permutation",
                     },
                     "src1": {
                         "dtype": "F32",
                         "dimensions": "src1_dimensions",
                         "strides": "src1_strides",
+                        "permutation": "src1_permutation",
                     },
                     "dst": {
                         "dtype": "F32",
                         "dimensions": "dst_dimensions",
                         "strides": "dst_strides",
+                        "permutation": "dst_permutation",
                     },
                 },
                 "values": [
@@ -75,6 +78,9 @@ def _write_v2_descriptor(routing_dir: Path) -> None:
                 "constraints": [
                     {"equals": ["src0_dimensions", "src1_dimensions", "dst_dimensions"]},
                     {"equals": ["contiguous_strides", "src0_strides", "src1_strides", "dst_strides"]},
+                    {"name": "src0_permutation", "iota": True},
+                    {"name": "src1_permutation", "iota": True},
+                    {"name": "dst_permutation", "iota": True},
                 ],
                 "launch": {
                     "workgroup_size": [256, 1, 1],
@@ -114,16 +120,19 @@ def _write_v2_descriptor(routing_dir: Path) -> None:
                         "dtype": "F32",
                         "dimensions": "src0_dimensions",
                         "strides": "src0_strides",
+                        "permutation": "src0_permutation",
                     },
                     "src1": {
                         "dtype": "F32",
                         "dimensions": "src1_dimensions",
                         "strides": "src1_strides",
+                        "permutation": "src1_permutation",
                     },
                     "dst": {
                         "dtype": "F32",
                         "dimensions": "dst_dimensions",
                         "strides": "dst_strides",
+                        "permutation": "dst_permutation",
                     },
                 },
                 "values": [
@@ -136,6 +145,8 @@ def _write_v2_descriptor(routing_dir: Path) -> None:
                     {"name": "dst_dimensions", "length": 4},
                     {"divides": ["src0_dimensions", "dst_dimensions"]},
                     {"divides": ["src1_dimensions", "dst_dimensions"]},
+                    {"name": "src0_permutation", "iota": True},
+                    {"name": "dst_permutation", "iota": True},
                 ],
                 "launch": {
                     "workgroup_size": [256, 1, 1],
@@ -283,6 +294,7 @@ def test_v2_candidate_route_payload_uses_capture_lists(tmp_path: Path) -> None:
     candidate = router.candidates(CandidateQuery())[0]
 
     assert candidate.route["tensors"]["src0"]["dimensions"] == "src0_dimensions"
+    assert candidate.route["tensors"]["src0"]["permutation"] == "src0_permutation"
     assert candidate.route["values"] == [
         {"name": "contiguous_strides", "contiguous_strides": "dst_dimensions"},
         {"name": "total_size", "product": "dst_dimensions"},
@@ -290,6 +302,9 @@ def test_v2_candidate_route_payload_uses_capture_lists(tmp_path: Path) -> None:
     assert candidate.route["constraints"] == [
         {"equals": ["src0_dimensions", "src1_dimensions", "dst_dimensions"]},
         {"equals": ["contiguous_strides", "src0_strides", "src1_strides", "dst_strides"]},
+        {"name": "src0_permutation", "iota": True},
+        {"name": "src1_permutation", "iota": True},
+        {"name": "dst_permutation", "iota": True},
     ]
 
 

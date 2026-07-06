@@ -61,3 +61,12 @@
 - Highest-priority next fix: widen dtype coverage if ADD `f16` support is desired
 - Fastest validation command after that fix: `cmake --build build --target kernel-llama-cpp-tests-import-coverage-v2`
 - Remaining unknowns: no additional unknowns for the `perm1` schema migration
+
+# Current Unsupported F32 ADD Cases
+
+- V1 remaining unsupported `f32` ADD cases: `26`
+- V1 `perm1`-gated cases: source case indices `9, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34`
+- V1 broadcast/repeat cases rejected by same-shape lowering: source case indices `21, 23, 25, 27, 29, 33`
+- V1 `nf != 1` cases: source case indices `35, 36, 37, 38, 46, 47, 48, 49`
+- V2 remaining unsupported `f32` ADD cases: `8`
+- V2 `nf != 1` cases: source case indices `35, 36, 37, 38, 46, 47, 48, 49`

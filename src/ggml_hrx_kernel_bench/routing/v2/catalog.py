@@ -69,6 +69,11 @@ def _parse_tensor_descriptor(
         dtype=_normalize_dtype(raw.get("dtype")),
         dimensions_capture=_parse_capture_name(path, route_index, tensor_name, "dimensions", raw.get("dimensions")),
         strides_capture=_parse_capture_name(path, route_index, tensor_name, "strides", raw.get("strides")),
+        permutation_capture=(
+            None
+            if raw.get("permutation") is None
+            else _parse_capture_name(path, route_index, tensor_name, "permutation", raw.get("permutation"))
+        ),
     )
 
 
@@ -150,15 +155,24 @@ def _parse_capture_constraint(path: Path, route_index: Any, raw: Any) -> Constra
     lower = raw.get("min")
     upper = raw.get("max")
     multiple_of = raw.get("multiple_of")
+    iota = raw.get("iota")
     if length is not None:
-        if index is not None or lower is not None or upper is not None or multiple_of is not None:
+        if index is not None or lower is not None or upper is not None or multiple_of is not None or iota is not None:
             raise RuntimeError(
-                f"v2 route {route_index} length constraints cannot mix index/min/max/multiple_of fields: {path}"
+                f"v2 route {route_index} length constraints cannot mix index/min/max/multiple_of/iota fields: {path}"
             )
         return ConstraintCheck(name=name, length=int(length))
+    if iota is not None:
+        if index is not None or lower is not None or upper is not None or multiple_of is not None:
+            raise RuntimeError(
+                f"v2 route {route_index} iota constraints cannot mix index/min/max/multiple_of fields: {path}"
+            )
+        if not isinstance(iota, bool) or not iota:
+            raise RuntimeError(f"v2 route {route_index} iota constraints must set iota=true: {path}")
+        return ConstraintCheck(name=name, iota=True)
     if lower is None and upper is None and multiple_of is None:
         raise RuntimeError(
-            f"v2 route {route_index} constraint {name!r} must define length, bounds, or multiple_of: {path}"
+            f"v2 route {route_index} constraint {name!r} must define length, iota, bounds, or multiple_of: {path}"
         )
     return ConstraintCheck(
         name=name,

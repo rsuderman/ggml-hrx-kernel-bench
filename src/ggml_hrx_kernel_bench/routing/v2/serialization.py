@@ -17,6 +17,7 @@ def tensor_descriptors_json(route: V2Route) -> dict[str, Any]:
             "dtype": descriptor.dtype,
             "dimensions": descriptor.dimensions_capture,
             "strides": descriptor.strides_capture,
+            "permutation": descriptor.permutation_capture,
         }
     return payload
 
@@ -42,6 +43,9 @@ def tensor_constraints_json(route: V2Route) -> list[dict[str, Any]]:
         if check.equals:
             payload.append({"equals": list(check.equals)})
             continue
+        if check.divides:
+            payload.append({"divides": list(check.divides)})
+            continue
         payload.append(
             {
                 key: value
@@ -52,6 +56,7 @@ def tensor_constraints_json(route: V2Route) -> list[dict[str, Any]]:
                     ("min", check.min),
                     ("max", check.max),
                     ("multiple_of", check.multiple_of),
+                    ("iota", True if check.iota else None),
                 )
                 if value is not None
             }
@@ -68,6 +73,7 @@ def route_supports(route: V2Route) -> dict[str, Any]:
             tensor_name: {
                 "dimensions": descriptor.dimensions_capture,
                 "strides": descriptor.strides_capture,
+                "permutation": descriptor.permutation_capture,
             }
             for tensor_name, descriptor in route.tensors.items()
         },

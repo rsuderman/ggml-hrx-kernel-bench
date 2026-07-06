@@ -134,7 +134,11 @@ def lower_contiguous_pointwise_tensors(
     dtype = str(case.dtype.get("type", "")).upper()
     dimensions = _dimensions_from_extents(ne)
     tensors = {
-        tensor_name: ConcreteTensor(dtype=dtype, dimensions=dimensions)
+        tensor_name: ConcreteTensor(
+            dtype=dtype,
+            dimensions=dimensions,
+            permutation=POINTWISE_BASE_PERMUTATION,
+        )
         for tensor_name in ("src0", "src1", "dst")
     }
     return tensors, shape
@@ -149,9 +153,21 @@ def lower_generic_pointwise_tensors(
     dst_extents = [int(extent) * int(repeat) for extent, repeat in zip(ne, nr)]
     dtype = str(case.dtype.get("type", "")).upper()
     tensors = {
-        "src0": ConcreteTensor(dtype=dtype, dimensions=_dimensions_from_extents(dst_extents)),
-        "src1": ConcreteTensor(dtype=dtype, dimensions=_permuted_dimensions_from_extents(ne, perm1)),
-        "dst": ConcreteTensor(dtype=dtype, dimensions=_dimensions_from_extents(dst_extents)),
+        "src0": ConcreteTensor(
+            dtype=dtype,
+            dimensions=_dimensions_from_extents(dst_extents),
+            permutation=POINTWISE_BASE_PERMUTATION,
+        ),
+        "src1": ConcreteTensor(
+            dtype=dtype,
+            dimensions=_permuted_dimensions_from_extents(ne, perm1),
+            permutation=perm1,
+        ),
+        "dst": ConcreteTensor(
+            dtype=dtype,
+            dimensions=_dimensions_from_extents(dst_extents),
+            permutation=POINTWISE_BASE_PERMUTATION,
+        ),
     }
     return tensors, _fallback_shape_from_extents(dst_extents)
 
