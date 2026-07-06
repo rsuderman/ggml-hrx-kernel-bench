@@ -8,6 +8,7 @@ from pathlib import Path
 from bootstrap import CATALOG_DIR, ROOT
 
 from ggml_hrx_kernel_bench.grouped_yaml_import import materialize_grouped_yaml
+from ggml_hrx_kernel_bench.routing.api import supported_routing_versions
 
 
 def main() -> int:
@@ -28,6 +29,12 @@ def main() -> int:
         "--tool-dir",
         help="optional directory containing loom-link, loom-compile, and iree-benchmark-loom",
     )
+    parser.add_argument(
+        "--routing-version",
+        choices=supported_routing_versions(),
+        default="v1",
+    )
+    parser.add_argument("--routing-dir", type=Path, default=CATALOG_DIR)
     args = parser.parse_args()
 
     if args.tool_dir:
@@ -39,7 +46,8 @@ def main() -> int:
     payload = materialize_grouped_yaml(
         yaml_path,
         output_dir=output_dir,
-        catalog_dir=CATALOG_DIR,
+        routing_version=args.routing_version,
+        routing_dir=args.routing_dir.resolve(),
         split_by_op=args.split_by_op,
     )
     print(json.dumps(payload, sort_keys=True))

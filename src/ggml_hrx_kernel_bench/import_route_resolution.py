@@ -1,9 +1,7 @@
 from __future__ import annotations
-
 from dataclasses import dataclass
 from typing import Any, Iterable, Mapping
 
-from .family_specs import ShapeDomain, normalize_shape, resolve_binding_value
 from .import_mapping_registry import lower_case_for_route
 from .import_models import ImportedCase, UnmappedReason
 
@@ -14,6 +12,74 @@ class RouteResolution:
     shape: dict[str, int]
 
 
+_DEFAULT_AXIS_VALUES: dict[str, tuple[int, ...]] = {
+    "k": (256, 512, 1024, 2048, 3072, 4096, 5120, 6144, 8192, 11008, 14336, 16384),
+    "rows": (1, 2, 8, 16, 32, 64, 65, 127, 128, 129, 256, 512, 1024, 2048, 4096),
+    "cols": (1, 2, 8, 16, 32, 33, 63, 64, 65, 127, 128, 129, 256, 512, 1024),
+    "ncols": (1, 8, 16, 32, 64, 65, 127, 128, 129, 256, 512, 1024, 2048, 4096),
+    "nrows": (1, 2, 8, 16, 32, 33, 63, 64, 65, 127, 128, 129, 256, 512, 1024),
+    "n_dims": (32, 64, 80, 96, 128),
+}
+
+
+@dataclass(frozen=True)
+class _ShapeDomain:
+    family: str
+    route_id: str
+    root_symbol: str
+    domain: Mapping[str, Any]
+    guards: Mapping[str, Any]
+
+    @property
+    def axes(self) -> tuple[str, ...]:
+        return tuple(name for name in _DEFAULT_AXIS_VALUES if self.has_axis(name))
+
+    def has_axis(self, name: str) -> bool:
+        return f"{name}_min" in self.domain or f"{name}_max" in self.domain
+
+    def bounds(self, name: str) -> tuple[int, int]:
+        defaults = _DEFAULT_AXIS_VALUES[name]
+        lo = self.domain.get(f"{name}_min")
+        hi = self.domain.get(f"{name}_max")
+        return (
+            int(lo if lo is not None else min(defaults)),
+            int(hi if hi is not None else max(defaults)),
+        )
+
+    def multiple(self, name: str) -> int | None:
+        value = self.guards.get(f"{name}_multiple_of")
+        if not value:
+            return None
+        value_i = int(value)
+        return value_i if value_i > 1 else None
+
+    def accepts(self, shape: Mapping[str, int]) -> bool:
+        for axis in self.axes:
+            if axis not in shape:
+                return False
+            value = int(shape[axis])
+            lo, hi = self.bounds(axis)
+            multiple = self.multiple(axis)
+            if value < lo or value > hi:
+                return False
+            if multiple and value % multiple != 0:
+                return False
+        return True
+
+
+def _normalize_shape(shape: Mapping[str, int]) -> dict[str, int]:
+    normalized = {str(key): int(value) for key, value in shape.items()}
+    if "ncols" in normalized and "cols" not in normalized:
+        normalized["cols"] = normalized["ncols"]
+    if "cols" in normalized and "ncols" not in normalized:
+        normalized["ncols"] = normalized["cols"]
+    if "nrows" in normalized and "rows" not in normalized:
+        normalized["rows"] = normalized["nrows"]
+    if "rows" in normalized and "nrows" not in normalized:
+        normalized["nrows"] = normalized["rows"]
+    return normalized
+
+
 def route_family(route: Mapping[str, Any]) -> str:
     return str(route.get("family") or route.get("source_id") or "")
 
@@ -22,7 +88,24 @@ def _is_power_of_two(value: int) -> bool:
     return value > 0 and value & (value - 1) == 0
 
 
-def _shape_guard_value(family: str, guard: str, shape: Mapping[str, int]) -> bool:
+def _shape_value(shape: Mapping[str, int], *names: str, default: int = 0) -> int:
+    for name in names:
+        if name in shape:
+            return int(shape[name])
+    return default
+
+
+def _pointwise_guard_value(name: str, shape: Mapping[str, int]) -> int:
+    if name == "src0_row_stride":
+        return _shape_value(shape, "src0_row_stride", "ncols", "cols", default=1)
+    if name == "src1_row_stride":
+        return _shape_value(shape, "src1_row_stride", "ncols", "cols", default=1)
+    if name == "src1_ncols":
+        return _shape_value(shape, "src1_ncols", "ncols", "cols", default=1)
+    raise KeyError(name)
+
+
+def _shape_guard_value(guard: str, shape: Mapping[str, int]) -> bool:
     if guard == "all_pot":
         return all(_is_power_of_two(int(value)) for value in shape.values())
     if guard == "k_pow2":
@@ -30,42 +113,28 @@ def _shape_guard_value(family: str, guard: str, shape: Mapping[str, int]) -> boo
             int(shape.get("k", shape.get("ncols", shape.get("cols", 0))))
         )
     if guard == "pointwise_src0_row_stride_eq_ncols":
-        return int(
-            shape.get(
-                "src0_row_stride",
-                resolve_binding_value(family, "pointwise.src0_row_stride", shape) or 0,
-            )
-        ) == int(shape.get("ncols", 0))
+        return _pointwise_guard_value("src0_row_stride", shape) == _shape_value(
+            shape, "ncols", "cols"
+        )
     if guard == "pointwise_src1_row_stride_eq_ncols":
-        return int(
-            shape.get(
-                "src1_row_stride",
-                resolve_binding_value(family, "pointwise.src1_row_stride", shape) or 0,
-            )
-        ) == int(shape.get("ncols", 0))
+        return _pointwise_guard_value("src1_row_stride", shape) == _shape_value(
+            shape, "ncols", "cols"
+        )
     if guard == "pointwise_src1_row_stride_eq_zero":
-        return int(
-            shape.get(
-                "src1_row_stride",
-                resolve_binding_value(family, "pointwise.src1_row_stride", shape) or 0,
-            )
-        ) == 0
+        return _pointwise_guard_value("src1_row_stride", shape) == 0
     if guard == "pointwise_src1_ncols_eq_ncols":
-        return int(
-            shape.get(
-                "src1_ncols",
-                resolve_binding_value(family, "pointwise.src1_ncols", shape) or 0,
-            )
-        ) == int(shape.get("ncols", 0))
+        return _pointwise_guard_value("src1_ncols", shape) == _shape_value(
+            shape, "ncols", "cols"
+        )
     return True
 
 
 def _shape_guard_satisfied(
-    family: str, guard: str, expected: Any, shape: Mapping[str, int]
+    guard: str, expected: Any, shape: Mapping[str, int]
 ) -> bool:
     if not isinstance(expected, bool):
         return True
-    actual = _shape_guard_value(family, guard, shape)
+    actual = _shape_guard_value(guard, shape)
     return actual if expected else not actual
 
 
@@ -76,7 +145,7 @@ def route_accepts_shape(route: Mapping[str, Any], shape: dict[str, int]) -> bool
     parsed_guards = route.get("shape_guards") or {}
     if not isinstance(parsed_guards, dict):
         parsed_guards = {}
-    ctx = ShapeDomain(
+    ctx = _ShapeDomain(
         family=route_family(route),
         route_id=str(route.get("id") or ""),
         root_symbol=str(route.get("root_symbol") or ""),
@@ -84,7 +153,7 @@ def route_accepts_shape(route: Mapping[str, Any], shape: dict[str, int]) -> bool
         guards=parsed_guards,
     )
     return ctx.accepts(shape) and all(
-        _shape_guard_satisfied(ctx.family, guard, expected, shape)
+        _shape_guard_satisfied(guard, expected, shape)
         for guard, expected in parsed_guards.items()
     )
 
@@ -154,7 +223,7 @@ def resolve_case_routes(
     lowering_errors: list[str] = []
     for route in dtype_matching:
         try:
-            shape = normalize_shape(lower_case_for_route(case, route))
+            shape = _normalize_shape(lower_case_for_route(case, route))
         except ValueError as exc:
             lowering_errors.append(str(exc))
             continue

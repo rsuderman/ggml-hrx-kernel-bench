@@ -49,8 +49,31 @@ function(add_grouped_yaml_import_validation_target target_name yaml_path output_
       ${CMAKE_SOURCE_DIR}/src/ggml_hrx_kernel_bench/grouped_yaml_import.py
       ${CMAKE_SOURCE_DIR}/src/ggml_hrx_kernel_bench/import_mapping_registry.py
       ${CMAKE_SOURCE_DIR}/src/ggml_hrx_kernel_bench/import_models.py
-      ${CMAKE_SOURCE_DIR}/src/ggml_hrx_kernel_bench/family_specs.py
-      ${CMAKE_SOURCE_DIR}/src/ggml_hrx_kernel_bench/hrx2.py
+      ${CMAKE_SOURCE_DIR}/src/ggml_hrx_kernel_bench/routing/api.py
+      ${CMAKE_SOURCE_DIR}/src/ggml_hrx_kernel_bench/routing/case_selection.py
+      ${CMAKE_SOURCE_DIR}/src/ggml_hrx_kernel_bench/routing/models.py
+      ${CMAKE_SOURCE_DIR}/src/ggml_hrx_kernel_bench/routing/__init__.py
+      ${CMAKE_SOURCE_DIR}/src/ggml_hrx_kernel_bench/routing/v1/__init__.py
+      ${CMAKE_SOURCE_DIR}/src/ggml_hrx_kernel_bench/routing/v1/backend.py
+      ${CMAKE_SOURCE_DIR}/src/ggml_hrx_kernel_bench/routing/v1/export.py
+      ${CMAKE_SOURCE_DIR}/src/ggml_hrx_kernel_bench/routing/v1/family_specs.py
+      ${CMAKE_SOURCE_DIR}/src/ggml_hrx_kernel_bench/routing/v1/importer.py
+      ${CMAKE_SOURCE_DIR}/src/ggml_hrx_kernel_bench/routing/v1/routes.py
+      ${CMAKE_SOURCE_DIR}/src/ggml_hrx_kernel_bench/routing/v1/runtime.py
+      ${CMAKE_SOURCE_DIR}/src/ggml_hrx_kernel_bench/routing/v1/schedules.py
+      ${CMAKE_SOURCE_DIR}/src/ggml_hrx_kernel_bench/routing/v2/__init__.py
+      ${CMAKE_SOURCE_DIR}/src/ggml_hrx_kernel_bench/routing/v2/backend.py
+      ${CMAKE_SOURCE_DIR}/src/ggml_hrx_kernel_bench/routing/v2/candidates.py
+      ${CMAKE_SOURCE_DIR}/src/ggml_hrx_kernel_bench/routing/v2/catalog.py
+      ${CMAKE_SOURCE_DIR}/src/ggml_hrx_kernel_bench/routing/v2/import_resolution.py
+      ${CMAKE_SOURCE_DIR}/src/ggml_hrx_kernel_bench/routing/v2/manifest.py
+      ${CMAKE_SOURCE_DIR}/src/ggml_hrx_kernel_bench/routing/v2/matching.py
+      ${CMAKE_SOURCE_DIR}/src/ggml_hrx_kernel_bench/routing/v2/models.py
+      ${CMAKE_SOURCE_DIR}/src/ggml_hrx_kernel_bench/routing/v2/query.py
+      ${CMAKE_SOURCE_DIR}/src/ggml_hrx_kernel_bench/routing/v2/runtime.py
+      ${CMAKE_SOURCE_DIR}/src/ggml_hrx_kernel_bench/routing/v2/serialization.py
+      ${CMAKE_SOURCE_DIR}/src/ggml_hrx_kernel_bench/routing/v2/shape.py
+      ${CMAKE_SOURCE_DIR}/catalog/v2/router.json
     COMMENT "Validating grouped YAML import coverage for ${target_name}"
     VERBATIM
   )
@@ -59,7 +82,7 @@ endfunction()
 
 function(add_generated_kernel_runtime_tests)
   set(options)
-  set(one_value_args NAME GENERATED_IMPORT_DIR GROUPED_YAML CASE_SELECTOR RUNTIME_OUTPUT_DIR)
+  set(one_value_args NAME GENERATED_IMPORT_DIR GROUPED_YAML CASE_SELECTOR RUNTIME_OUTPUT_DIR ROUTING_VERSION ROUTING_DIR KERNEL_DIR)
   cmake_parse_arguments(GGML_HRX_GKRT "${options}" "${one_value_args}" "" ${ARGN})
 
   if(NOT GGML_HRX_GKRT_NAME)
@@ -95,6 +118,15 @@ function(add_generated_kernel_runtime_tests)
     --runtime-output-dir ${runtime_output_dir}
     --case-selector ${kernel_case_selector}
   )
+  if(GGML_HRX_GKRT_ROUTING_VERSION)
+    list(APPEND generate_tests_command --routing-version ${GGML_HRX_GKRT_ROUTING_VERSION})
+  endif()
+  if(GGML_HRX_GKRT_ROUTING_DIR)
+    list(APPEND generate_tests_command --routing-dir ${GGML_HRX_GKRT_ROUTING_DIR})
+  endif()
+  if(GGML_HRX_GKRT_KERNEL_DIR)
+    list(APPEND generate_tests_command --kernel-dir ${GGML_HRX_GKRT_KERNEL_DIR})
+  endif()
   if(GGML_HRX_TOOL_DIR)
     list(APPEND generate_tests_command --tool-dir ${GGML_HRX_TOOL_DIR})
   endif()

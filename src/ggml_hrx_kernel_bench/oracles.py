@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Mapping
 
-from .hrx2 import Candidate
+from .routing.api import Candidate
 
 
 QK_K = 256

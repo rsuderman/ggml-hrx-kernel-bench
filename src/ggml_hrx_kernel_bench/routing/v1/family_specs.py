@@ -4,9 +4,11 @@ import math
 from dataclasses import dataclass
 from typing import Mapping, Protocol
 
-from .route_schedules import (
+from .schedules import (
+    ShapeDomain as ShapeDomain,
     concrete_shapes_for_route as concrete_shapes_for_route,
     default_shape_for_axisless_route as default_shape_for_axisless_route,
+    normalize_shape as normalize_shape,
 )
 
 

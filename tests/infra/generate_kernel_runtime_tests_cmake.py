@@ -44,6 +44,9 @@ def main() -> int:
     parser.add_argument('--runner-script', required=True)
     parser.add_argument('--runtime-output-dir', required=True)
     parser.add_argument('--case-selector', default='0')
+    parser.add_argument('--routing-version')
+    parser.add_argument('--routing-dir')
+    parser.add_argument('--kernel-dir')
     parser.add_argument('--tool-dir')
     parser.add_argument('--rocm-path')
     args = parser.parse_args()
@@ -67,6 +70,12 @@ def main() -> int:
             '--output-dir',
             _cmake_quote(str(op_output_dir)),
         ]
+        if args.routing_version:
+            command_parts.extend(['--routing-version', _cmake_quote(args.routing_version)])
+        if args.routing_dir:
+            command_parts.extend(['--routing-dir', _cmake_quote(str(Path(args.routing_dir).resolve()))])
+        if args.kernel_dir:
+            command_parts.extend(['--kernel-dir', _cmake_quote(str(Path(args.kernel_dir).resolve()))])
         if args.tool_dir:
             command_parts.extend(['--tool-dir', _cmake_quote(str(Path(args.tool_dir).resolve()))])
         if args.rocm_path:

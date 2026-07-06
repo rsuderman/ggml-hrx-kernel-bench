@@ -8,14 +8,16 @@ from pathlib import Path
 from typing import Any, Iterable
 
 from .family_specs import concrete_shapes_for_route, resolve_binding_value
-from .observed_shapes import ObservedShapeCatalog
-from .route_schedules import schedule_for_shape
-from .specs import file_sha256
+from ...observed_shapes import ObservedShapeCatalog
+from ...specs import file_sha256
+from .schedules import schedule_for_shape
 
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_HRX2_KERNEL_DIR = PROJECT_ROOT / "kernels" / "hrx2"
-DEFAULT_HRX2_CATALOG_DIR = PROJECT_ROOT / "catalog" / "hrx2"
+PROJECT_ROOT = Path(__file__).resolve().parents[4]
+DEFAULT_V1_KERNEL_DIR = PROJECT_ROOT / "kernels" / "hrx2"
+DEFAULT_V1_ROUTING_DIR = PROJECT_ROOT / "catalog" / "hrx2"
+DEFAULT_HRX2_KERNEL_DIR = DEFAULT_V1_KERNEL_DIR
+DEFAULT_HRX2_CATALOG_DIR = DEFAULT_V1_ROUTING_DIR
 
 KERNEL_DEF_RE = re.compile(
     r"kernel\.def(?:\s+target\([^)]*\))?(?:\s+export\(\"(?P<export>[^\"]+)\"\))?\s+(?P<root>@[A-Za-z0-9_.$-]+)"
