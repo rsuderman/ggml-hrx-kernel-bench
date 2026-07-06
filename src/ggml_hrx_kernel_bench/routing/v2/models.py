@@ -30,6 +30,7 @@ class ConstraintCheck:
     max: int | None = None
     multiple_of: int | None = None
     equals: tuple[str, ...] = ()
+    divides: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

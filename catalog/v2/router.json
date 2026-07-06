@@ -2,7 +2,8 @@
   "schema": "ggml_hrx_kernel_bench.routing_descriptors.v2",
   "routes": {
     "ADD": [
-      "add_f32.json"
+      "add_f32.json",
+      "add_f32_generic_4d.json"
     ]
   }
 }

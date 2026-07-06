@@ -3,7 +3,7 @@
   "family": "add_f32",
   "kernel": {
     "source_id": "add_f32",
-    "path": "add_f32.loom",
+    "path": "add/contiguous_1d.loom",
     "root_symbol": "@hrx2_add_f32_contiguous_1d",
     "export_name": "hrx2_add_f32_contiguous_1d"
   },

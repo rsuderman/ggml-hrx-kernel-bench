@@ -128,6 +128,18 @@ def _constraint_accepts(check: ConstraintCheck, values: Mapping[str, CapturedVal
         if first is None:
             return False
         return all(values.get(name) == first for name in check.equals[1:])
+    if check.divides:
+        first = values.get(check.divides[0])
+        if not isinstance(first, tuple):
+            return False
+        for name in check.divides[1:]:
+            current = values.get(name)
+            if not isinstance(current, tuple) or len(current) != len(first):
+                return False
+            for divisor, value in zip(first, current):
+                if divisor <= 0 or value % divisor != 0:
+                    return False
+        return True
     if check.name is None:
         return False
     captured = values.get(check.name)
@@ -247,6 +259,8 @@ def default_shape_for_route(route: V2Route) -> dict[str, int]:
         total_size_min = _scalar_constraint_min(route, "total_size")
         default_cols = total_size_min if total_size_min is not None else int(route.launch.get("workgroup_size", [1])[0] or 1)
         return normalize_shape({"ncols": default_cols, "nrows": 1})
+    if rank == 4:
+        return {f"d{index}": 1 if bounds.get(index, (None, None))[0] is None else int(bounds[index][0]) for index in range(rank)}
     if rank != 2:
         raise RuntimeError(f"v2 route {route.id!r} requires unsupported rank {rank!r} for default shape")
     ncols_min = bounds.get(0, (None, None))[0]
@@ -264,19 +278,32 @@ def materialize_route_tensors(route: V2Route, sizes: Mapping[str, int]) -> dict[
         _, rank, _ = _shape_capture_for_route(route)
     except RuntimeError:
         rank = 2
-    if rank != 2:
-        raise RuntimeError(f"v2 route {route.id!r} requires unsupported rank {rank!r} for materialization")
     normalized_sizes = normalize_shape({str(name): int(value) for name, value in sizes.items()})
-    if "ncols" not in normalized_sizes or "nrows" not in normalized_sizes:
-        raise KeyError("ncols/nrows")
-    dimensions = (
-        ConcreteTensorDimension(name="ncols", size=int(normalized_sizes["ncols"]), stride=1),
-        ConcreteTensorDimension(
-            name="nrows",
-            size=int(normalized_sizes["nrows"]),
-            stride=int(normalized_sizes["ncols"]),
-        ),
-    )
+    if rank == 2:
+        if "ncols" not in normalized_sizes or "nrows" not in normalized_sizes:
+            raise KeyError("ncols/nrows")
+        dimensions = (
+            ConcreteTensorDimension(name="ncols", size=int(normalized_sizes["ncols"]), stride=1),
+            ConcreteTensorDimension(
+                name="nrows",
+                size=int(normalized_sizes["nrows"]),
+                stride=int(normalized_sizes["ncols"]),
+            ),
+        )
+    elif rank == 4:
+        required = tuple(f"d{index}" for index in range(rank))
+        missing = [name for name in required if name not in normalized_sizes]
+        if missing:
+            raise KeyError(",".join(missing))
+        dimensions_list: list[ConcreteTensorDimension] = []
+        stride = 1
+        for name in required:
+            size = int(normalized_sizes[name])
+            dimensions_list.append(ConcreteTensorDimension(name=name, size=size, stride=stride))
+            stride *= size
+        dimensions = tuple(dimensions_list)
+    else:
+        raise RuntimeError(f"v2 route {route.id!r} requires unsupported rank {rank!r} for materialization")
     return {
         tensor_name: ConcreteTensor(dtype=descriptor.dtype or "", dimensions=dimensions)
         for tensor_name, descriptor in route.tensors.items()

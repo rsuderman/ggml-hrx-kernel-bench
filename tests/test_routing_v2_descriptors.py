@@ -109,7 +109,7 @@ def test_route_accepts_tensors_requires_equal_dimension_lists() -> None:
         family="add_f32",
         op="ADD",
         source_id="add_f32",
-        kernel_path="add_f32.loom",
+        kernel_path="add/contiguous_1d.loom",
         root_symbol="@hrx2_add_f32_contiguous_1d",
         export_name="hrx2_add_f32_contiguous_1d",
         tensors={
@@ -155,3 +155,63 @@ def test_route_accepts_tensors_requires_equal_dimension_lists() -> None:
     }
 
     assert route_accepts_tensors(route, tensors) is False
+
+
+def test_generic_4d_route_accepts_non_contiguous_broadcast_and_repeat_tensors() -> None:
+    route = V2Route(
+        id="add_f32_generic_4d",
+        family="add_f32",
+        op="ADD",
+        source_id="add_f32",
+        kernel_path="add/generic_4d.loom",
+        root_symbol="@hrx2_add_f32_generic_4d",
+        export_name="hrx2_add_f32_generic_4d",
+        tensors={
+            "src0": TensorDescriptor(dtype="F32", dimensions_capture="src0_dimensions", strides_capture="src0_strides"),
+            "src1": TensorDescriptor(dtype="F32", dimensions_capture="src1_dimensions", strides_capture="src1_strides"),
+            "dst": TensorDescriptor(dtype="F32", dimensions_capture="dst_dimensions", strides_capture="dst_strides"),
+        },
+        values=(
+            ValueDefinition(name="total_size", product="dst_dimensions"),
+        ),
+        constraints=RouteConstraints(
+            checks=(
+                ConstraintCheck(name="dst_dimensions", length=4),
+                ConstraintCheck(divides=("src0_dimensions", "dst_dimensions")),
+                ConstraintCheck(divides=("src1_dimensions", "dst_dimensions")),
+            )
+        ),
+        launch={"workgroup_size": [256, 1, 1]},
+        bindings=(),
+    )
+    tensors = {
+        "src0": ConcreteTensor(
+            dtype="F32",
+            dimensions=(
+                ConcreteTensorDimension(name="d0", size=4, stride=3),
+                ConcreteTensorDimension(name="d1", size=5, stride=29),
+                ConcreteTensorDimension(name="d2", size=6, stride=211),
+                ConcreteTensorDimension(name="d3", size=7, stride=1703),
+            ),
+        ),
+        "src1": ConcreteTensor(
+            dtype="F32",
+            dimensions=(
+                ConcreteTensorDimension(name="d0", size=2, stride=1),
+                ConcreteTensorDimension(name="d1", size=5, stride=4),
+                ConcreteTensorDimension(name="d2", size=3, stride=10),
+                ConcreteTensorDimension(name="d3", size=7, stride=30),
+            ),
+        ),
+        "dst": ConcreteTensor(
+            dtype="F32",
+            dimensions=(
+                ConcreteTensorDimension(name="d0", size=4, stride=11),
+                ConcreteTensorDimension(name="d1", size=5, stride=47),
+                ConcreteTensorDimension(name="d2", size=6, stride=263),
+                ConcreteTensorDimension(name="d3", size=7, stride=1499),
+            ),
+        ),
+    }
+
+    assert route_accepts_tensors(route, tensors) is True

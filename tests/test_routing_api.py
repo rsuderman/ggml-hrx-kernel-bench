@@ -27,7 +27,7 @@ def _write_v2_descriptor(routing_dir: Path) -> None:
         json.dumps(
             {
                 "schema": "ggml_hrx_kernel_bench.routing_descriptors.v2",
-                "routes": {"ADD": ["add_f32.json"]},
+                "routes": {"ADD": ["add_f32.json", "add_f32_generic_4d.json"]},
             },
             indent=2,
             sort_keys=True,
@@ -42,7 +42,7 @@ def _write_v2_descriptor(routing_dir: Path) -> None:
                 "family": "add_f32",
                 "kernel": {
                     "source_id": "add_f32",
-                    "path": "add_f32.loom",
+                    "path": "add/contiguous_1d.loom",
                     "root_symbol": "@hrx2_add_f32_contiguous_1d",
                     "export_name": "hrx2_add_f32_contiguous_1d",
                 },
@@ -99,12 +99,94 @@ def _write_v2_descriptor(routing_dir: Path) -> None:
         + "\n",
         encoding="utf-8",
     )
+    (routing_dir / "add_f32_generic_4d.json").write_text(
+        json.dumps(
+            {
+                "id": "add_f32_generic_4d",
+                "family": "add_f32",
+                "kernel": {
+                    "source_id": "add_f32",
+                    "path": "add/generic_4d.loom",
+                    "root_symbol": "@hrx2_add_f32_generic_4d",
+                    "export_name": "hrx2_add_f32_generic_4d",
+                },
+                "tensors": {
+                    "src0": {
+                        "dtype": "F32",
+                        "dimensions": "src0_dimensions",
+                        "strides": "src0_strides",
+                    },
+                    "src1": {
+                        "dtype": "F32",
+                        "dimensions": "src1_dimensions",
+                        "strides": "src1_strides",
+                    },
+                    "dst": {
+                        "dtype": "F32",
+                        "dimensions": "dst_dimensions",
+                        "strides": "dst_strides",
+                    },
+                },
+                "values": [
+                    {
+                        "name": "total_size",
+                        "product": "dst_dimensions",
+                    }
+                ],
+                "constraints": [
+                    {"name": "dst_dimensions", "length": 4},
+                    {"divides": ["src0_dimensions", "dst_dimensions"]},
+                    {"divides": ["src1_dimensions", "dst_dimensions"]},
+                ],
+                "launch": {
+                    "workgroup_size": [256, 1, 1],
+                },
+                "config": {
+                    "bindings": [
+                        {"key": "@hrx2.shape.add4d.ne0", "source": "tensor.dst.dimensions.d0.size"},
+                        {"key": "@hrx2.shape.add4d.ne1", "source": "tensor.dst.dimensions.d1.size"},
+                        {"key": "@hrx2.shape.add4d.ne2", "source": "tensor.dst.dimensions.d2.size"},
+                        {"key": "@hrx2.shape.add4d.ne3", "source": "tensor.dst.dimensions.d3.size"},
+                        {"key": "@hrx2.shape.add4d.src0_ne0", "source": "tensor.src0.dimensions.d0.size"},
+                        {"key": "@hrx2.shape.add4d.src0_ne1", "source": "tensor.src0.dimensions.d1.size"},
+                        {"key": "@hrx2.shape.add4d.src0_ne2", "source": "tensor.src0.dimensions.d2.size"},
+                        {"key": "@hrx2.shape.add4d.src0_ne3", "source": "tensor.src0.dimensions.d3.size"},
+                        {"key": "@hrx2.shape.add4d.src1_ne0", "source": "tensor.src1.dimensions.d0.size"},
+                        {"key": "@hrx2.shape.add4d.src1_ne1", "source": "tensor.src1.dimensions.d1.size"},
+                        {"key": "@hrx2.shape.add4d.src1_ne2", "source": "tensor.src1.dimensions.d2.size"},
+                        {"key": "@hrx2.shape.add4d.src1_ne3", "source": "tensor.src1.dimensions.d3.size"},
+                        {"key": "@hrx2.stride.add4d.src0_nb0", "source": "tensor.src0.dimensions.d0.stride"},
+                        {"key": "@hrx2.stride.add4d.src0_nb1", "source": "tensor.src0.dimensions.d1.stride"},
+                        {"key": "@hrx2.stride.add4d.src0_nb2", "source": "tensor.src0.dimensions.d2.stride"},
+                        {"key": "@hrx2.stride.add4d.src0_nb3", "source": "tensor.src0.dimensions.d3.stride"},
+                        {"key": "@hrx2.stride.add4d.src1_nb0", "source": "tensor.src1.dimensions.d0.stride"},
+                        {"key": "@hrx2.stride.add4d.src1_nb1", "source": "tensor.src1.dimensions.d1.stride"},
+                        {"key": "@hrx2.stride.add4d.src1_nb2", "source": "tensor.src1.dimensions.d2.stride"},
+                        {"key": "@hrx2.stride.add4d.src1_nb3", "source": "tensor.src1.dimensions.d3.stride"},
+                        {"key": "@hrx2.stride.add4d.dst_nb0", "source": "tensor.dst.dimensions.d0.stride"},
+                        {"key": "@hrx2.stride.add4d.dst_nb1", "source": "tensor.dst.dimensions.d1.stride"},
+                        {"key": "@hrx2.stride.add4d.dst_nb2", "source": "tensor.dst.dimensions.d2.stride"},
+                        {"key": "@hrx2.stride.add4d.dst_nb3", "source": "tensor.dst.dimensions.d3.stride"},
+                        {"key": "@hrx2.tuning.add4d.workgroup_size", "value": "256"},
+                    ]
+                },
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
 
 
 def _write_kernel(kernel_dir: Path) -> None:
-    kernel_dir.mkdir(parents=True, exist_ok=True)
-    (kernel_dir / "add_f32.loom").write_text(
+    add_dir = kernel_dir / "add"
+    add_dir.mkdir(parents=True, exist_ok=True)
+    (add_dir / "contiguous_1d.loom").write_text(
         'kernel.def export("hrx2_add_f32_contiguous_1d") @hrx2_add_f32_contiguous_1d\n',
+        encoding="utf-8",
+    )
+    (add_dir / "generic_4d.loom").write_text(
+        'kernel.def export("hrx2_add_f32_generic_4d") @hrx2_add_f32_generic_4d\n',
         encoding="utf-8",
     )
 
@@ -128,12 +210,16 @@ def test_v2_router_returns_contiguous_add_candidate(tmp_path: Path) -> None:
 
     candidates = router.candidates(CandidateQuery())
 
-    assert len(candidates) == 1
-    candidate = candidates[0]
-    assert candidate.family == "add_f32"
-    assert candidate.route_id == "add_f32_contiguous_1d"
-    assert candidate.root_symbol == "@hrx2_add_f32_contiguous_1d"
-    assert candidate.shape == {"ncols": 256, "nrows": 1, "cols": 256, "rows": 1}
+    assert len(candidates) == 2
+    contiguous = candidates[0]
+    generic = candidates[1]
+    assert contiguous.family == "add_f32"
+    assert contiguous.route_id == "add_f32_contiguous_1d"
+    assert contiguous.root_symbol == "@hrx2_add_f32_contiguous_1d"
+    assert contiguous.shape == {"ncols": 256, "nrows": 1, "cols": 256, "rows": 1}
+    assert generic.route_id == "add_f32_generic_4d"
+    assert generic.root_symbol == "@hrx2_add_f32_generic_4d"
+    assert generic.shape == {"d0": 1, "d1": 1, "d2": 1, "d3": 1}
 
 
 def test_v2_manifest_includes_original_root_metadata(tmp_path: Path) -> None:
@@ -142,9 +228,13 @@ def test_v2_manifest_includes_original_root_metadata(tmp_path: Path) -> None:
     original_root = tmp_path / "original"
     _write_kernel(kernel_dir)
     _write_v2_descriptor(routing_dir)
-    (original_root / "kernels").mkdir(parents=True, exist_ok=True)
-    (original_root / "kernels" / "add_f32.loom").write_text(
+    (original_root / "kernels" / "add").mkdir(parents=True, exist_ok=True)
+    (original_root / "kernels" / "add" / "contiguous_1d.loom").write_text(
         'kernel.def export("hrx2_add_f32_contiguous_1d") @hrx2_add_f32_contiguous_1d\n',
+        encoding="utf-8",
+    )
+    (original_root / "kernels" / "add" / "generic_4d.loom").write_text(
+        'kernel.def export("hrx2_add_f32_generic_4d") @hrx2_add_f32_generic_4d\n',
         encoding="utf-8",
     )
 
@@ -152,13 +242,19 @@ def test_v2_manifest_includes_original_root_metadata(tmp_path: Path) -> None:
 
     manifest = router.manifest(original_root=original_root)
 
-    assert manifest["route_count"] == 1
-    assert len(manifest["entries"]) == 1
-    entry = manifest["entries"][0]
-    assert entry["original_path"] == str(original_root / "kernels" / "add_f32.loom")
-    assert entry["original_sha256"] is not None
-    assert entry["imported_sha256"] is not None
-    assert entry["mechanical_rewrites"] == []
+    assert manifest["route_count"] == 2
+    assert len(manifest["entries"]) == 2
+    by_path = {Path(entry["path"]).relative_to(kernel_dir).as_posix(): entry for entry in manifest["entries"]}
+    contiguous = by_path["add/contiguous_1d.loom"]
+    generic = by_path["add/generic_4d.loom"]
+    assert contiguous["original_path"] == str(original_root / "kernels" / "add" / "contiguous_1d.loom")
+    assert generic["original_path"] == str(original_root / "kernels" / "add" / "generic_4d.loom")
+    assert contiguous["original_sha256"] is not None
+    assert generic["original_sha256"] is not None
+    assert contiguous["imported_sha256"] is not None
+    assert generic["imported_sha256"] is not None
+    assert contiguous["mechanical_rewrites"] == []
+    assert generic["mechanical_rewrites"] == []
 
 
 def test_v2_catalog_objects_are_immutable(tmp_path: Path) -> None:
@@ -198,6 +294,46 @@ def test_v2_candidate_route_payload_uses_capture_lists(tmp_path: Path) -> None:
     ]
 
 
+def test_v2_generic_4d_candidate_binds_dimension_sizes_and_strides(tmp_path: Path) -> None:
+    kernel_dir = tmp_path / "kernels"
+    routing_dir = tmp_path / "routing"
+    _write_kernel(kernel_dir)
+    _write_v2_descriptor(routing_dir)
+    router = create_router(version="v2", kernel_dir=kernel_dir, routing_dir=routing_dir)
+
+    generic = next(
+        candidate for candidate in router.candidates(CandidateQuery()) if candidate.route_id == "add_f32_generic_4d"
+    )
+
+    assert generic.config == {
+        "@hrx2.shape.add4d.ne0": "1",
+        "@hrx2.shape.add4d.ne1": "1",
+        "@hrx2.shape.add4d.ne2": "1",
+        "@hrx2.shape.add4d.ne3": "1",
+        "@hrx2.shape.add4d.src0_ne0": "1",
+        "@hrx2.shape.add4d.src0_ne1": "1",
+        "@hrx2.shape.add4d.src0_ne2": "1",
+        "@hrx2.shape.add4d.src0_ne3": "1",
+        "@hrx2.shape.add4d.src1_ne0": "1",
+        "@hrx2.shape.add4d.src1_ne1": "1",
+        "@hrx2.shape.add4d.src1_ne2": "1",
+        "@hrx2.shape.add4d.src1_ne3": "1",
+        "@hrx2.stride.add4d.src0_nb0": "1",
+        "@hrx2.stride.add4d.src0_nb1": "1",
+        "@hrx2.stride.add4d.src0_nb2": "1",
+        "@hrx2.stride.add4d.src0_nb3": "1",
+        "@hrx2.stride.add4d.src1_nb0": "1",
+        "@hrx2.stride.add4d.src1_nb1": "1",
+        "@hrx2.stride.add4d.src1_nb2": "1",
+        "@hrx2.stride.add4d.src1_nb3": "1",
+        "@hrx2.stride.add4d.dst_nb0": "1",
+        "@hrx2.stride.add4d.dst_nb1": "1",
+        "@hrx2.stride.add4d.dst_nb2": "1",
+        "@hrx2.stride.add4d.dst_nb3": "1",
+        "@hrx2.tuning.add4d.workgroup_size": "256",
+    }
+
+
 def test_v2_helpers_require_catalog_or_routing_dir(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="routing_dir or catalog is required"):
         build_manifest(kernel_dir=tmp_path / "kernels")
@@ -207,7 +343,7 @@ def test_v2_helpers_require_catalog_or_routing_dir(tmp_path: Path) -> None:
         )
 
 
-def test_v2_router_maps_only_matching_contiguous_add_cases(tmp_path: Path) -> None:
+def test_v2_router_maps_contiguous_and_generic_add_cases(tmp_path: Path) -> None:
     kernel_dir = tmp_path / "kernels"
     routing_dir = tmp_path / "routing"
     _write_kernel(kernel_dir)
@@ -240,6 +376,15 @@ def test_v2_router_maps_only_matching_contiguous_add_cases(tmp_path: Path) -> No
                         source_group_index=0,
                         source_case_index=1,
                     ),
+                    ImportedCase(
+                        op="ADD",
+                        dtype={"type": "f32"},
+                        raw_case={"ne": [10, 5, 4, 3], "nr": [1, 1, 1, 1], "nf": 1, "perm1": 1},
+                        normalized_params={"ne": [10, 5, 4, 3], "nr": [1, 1, 1, 1], "nf": 1, "perm1": 1},
+                        source_path="test.yaml",
+                        source_group_index=0,
+                        source_case_index=2,
+                    ),
                 ),
             )
         ],
@@ -247,13 +392,17 @@ def test_v2_router_maps_only_matching_contiguous_add_cases(tmp_path: Path) -> No
 
     resolved = router.resolve_imported_suite(suite)
 
-    assert len(resolved.resolved) == 1
+    assert len(resolved.resolved) == 2
     assert resolved.resolved[0].kernel_family == "add_f32"
     assert resolved.resolved[0].route_id == "add_f32_contiguous_1d"
     assert resolved.resolved[0].params == ["ncols", "nrows", "cols", "rows"]
     assert resolved.resolved[0].values == [16, 64, 16, 64]
+    assert resolved.resolved[1].route_id == "add_f32_generic_4d"
+    assert resolved.resolved[1].params == ["d0", "d1", "d2", "d3"]
+    assert resolved.resolved[1].values == [10, 5, 1, 2]
     assert len(resolved.unmapped) == 1
     assert resolved.unmapped[0].reason == UnmappedReason.SHAPE_LOWERING_NOT_IMPLEMENTED
+    assert resolved.unmapped[0].imported.source_case_index == 2
 
 
 def test_v2_router_executes_matching_case(tmp_path: Path, monkeypatch) -> None:
@@ -272,7 +421,7 @@ def test_v2_router_executes_matching_case(tmp_path: Path, monkeypatch) -> None:
 
     def fake_run_candidate_row(args, bench_config, candidate, *, sanitizer):
         assert sanitizer == "none"
-        assert candidate.source_path == kernel_dir / "add_f32.loom"
+        assert candidate.source_path == kernel_dir / "add" / "contiguous_1d.loom"
         assert candidate.root_symbol == "@hrx2_add_f32_contiguous_1d"
         assert candidate.config == {
             "@hrx2.shape.pointwise.total_size": "1024",

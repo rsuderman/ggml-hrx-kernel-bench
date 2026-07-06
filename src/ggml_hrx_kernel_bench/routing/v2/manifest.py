@@ -22,7 +22,7 @@ def build_manifest(
     for route in resolved_catalog.routes:
         routes_by_kernel.setdefault(route.kernel_path, []).append(route)
     entries = []
-    kernel_files = sorted(path.name for path in kernel_dir.glob("*.loom"))
+    kernel_files = sorted(str(path.relative_to(kernel_dir)) for path in kernel_dir.rglob("*.loom"))
     for kernel_name in kernel_files:
         kernel_path = kernel_dir / kernel_name
         matching = routes_by_kernel.get(kernel_name, [])

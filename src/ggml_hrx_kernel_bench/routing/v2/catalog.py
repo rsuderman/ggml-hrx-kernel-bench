@@ -132,6 +132,15 @@ def _parse_equals_constraint(path: Path, route_index: Any, raw: Any) -> Constrai
     return ConstraintCheck(equals=tuple(str(name) for name in names))
 
 
+def _parse_divides_constraint(path: Path, route_index: Any, raw: Any) -> ConstraintCheck:
+    names = raw.get("divides")
+    if not isinstance(names, list) or len(names) < 2:
+        raise RuntimeError(
+            f"v2 route {route_index} divides constraints must be arrays with at least two names: {path}"
+        )
+    return ConstraintCheck(divides=tuple(str(name) for name in names))
+
+
 def _parse_capture_constraint(path: Path, route_index: Any, raw: Any) -> ConstraintCheck:
     name = str(raw.get("name") or "").strip()
     if not name:
@@ -171,6 +180,9 @@ def _parse_constraints(path: Path, route_index: Any, raw: Any) -> RouteConstrain
             raise RuntimeError(f"v2 route constraints entries must be JSON objects: {path}")
         if "equals" in entry:
             checks.append(_parse_equals_constraint(path, route_index, entry))
+            continue
+        if "divides" in entry:
+            checks.append(_parse_divides_constraint(path, route_index, entry))
             continue
         checks.append(_parse_capture_constraint(path, route_index, entry))
     return RouteConstraints(checks=tuple(checks))

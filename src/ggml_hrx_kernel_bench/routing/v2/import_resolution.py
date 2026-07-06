@@ -33,7 +33,7 @@ def _unmapped_case(
     )
 
 
-def lower_contiguous_pointwise_shape(case: ImportedCase) -> dict[str, int]:
+def _parse_pointwise_parameters(case: ImportedCase) -> tuple[list[int], list[int], int, int]:
     ne = case.normalized_params.get("ne")
     nr = case.normalized_params.get("nr")
     nf = case.normalized_params.get("nf", 0)
@@ -46,38 +46,115 @@ def lower_contiguous_pointwise_shape(case: ImportedCase) -> dict[str, int]:
         raise ValueError("pointwise lowering requires integer extents")
     if not isinstance(nf, int) or not isinstance(perm1, int):
         raise ValueError("pointwise lowering requires integer nf and perm1")
+    return [int(value) for value in ne], [int(value) for value in nr], int(nf), int(perm1)
+
+
+def _dimensions_from_extents(extents: list[int]) -> tuple[ConcreteTensorDimension, ...]:
+    dimensions: list[ConcreteTensorDimension] = []
+    stride = 1
+    for index, extent in enumerate(extents):
+        dimensions.append(
+            ConcreteTensorDimension(name=f"d{index}", size=int(extent), stride=stride)
+        )
+        stride *= int(extent)
+    return tuple(dimensions)
+
+
+def _fallback_shape_from_extents(extents: list[int]) -> dict[str, int]:
+    return normalize_shape(
+        {
+            "ncols": int(extents[0]),
+            "nrows": int(extents[1]) * int(extents[2]) * int(extents[3]),
+        }
+    )
+
+
+def lower_contiguous_pointwise_shape(case: ImportedCase) -> dict[str, int]:
+    ne, nr, nf, perm1 = _parse_pointwise_parameters(case)
     if nf != 1:
         raise ValueError("contiguous pointwise routing requires nf=1")
     if perm1 != 0:
         raise ValueError("contiguous pointwise routing requires perm1=0")
     if any(int(value) != 1 for value in nr):
         raise ValueError("contiguous pointwise routing requires same-shape inputs")
-    shape = {"ncols": int(ne[0]), "nrows": int(ne[1]) * int(ne[2]) * int(ne[3])}
-    return normalize_shape(shape)
+    return _fallback_shape_from_extents(ne)
 
 
 def lower_contiguous_pointwise_tensors(
     case: ImportedCase,
 ) -> tuple[dict[str, ConcreteTensor], dict[str, int]]:
     shape = lower_contiguous_pointwise_shape(case)
-    ne = case.normalized_params.get("ne")
-    if not isinstance(ne, list) or len(ne) != 4:
-        raise ValueError("pointwise lowering requires 4-D extents")
-    if any(not isinstance(value, int) for value in ne):
-        raise ValueError("pointwise lowering requires integer extents")
+    ne, _, _, _ = _parse_pointwise_parameters(case)
     dtype = str(case.dtype.get("type", "")).upper()
-    dimensions: list[ConcreteTensorDimension] = []
-    stride = 1
-    for index, extent in enumerate(ne):
-        dimensions.append(
-            ConcreteTensorDimension(name=f"d{index}", size=int(extent), stride=stride)
-        )
-        stride *= int(extent)
+    dimensions = _dimensions_from_extents(ne)
     tensors = {
-        tensor_name: ConcreteTensor(dtype=dtype, dimensions=tuple(dimensions))
+        tensor_name: ConcreteTensor(dtype=dtype, dimensions=dimensions)
         for tensor_name in ("src0", "src1", "dst")
     }
     return tensors, shape
+
+
+def lower_generic_pointwise_tensors(
+    case: ImportedCase,
+) -> tuple[dict[str, ConcreteTensor], dict[str, int]]:
+    ne, nr, nf, perm1 = _parse_pointwise_parameters(case)
+    if nf != 1:
+        raise ValueError("generic pointwise routing requires nf=1")
+    if perm1 != 0:
+        raise ValueError("generic pointwise routing requires perm1=0")
+    dst_extents = [int(extent) * int(repeat) for extent, repeat in zip(ne, nr)]
+    dtype = str(case.dtype.get("type", "")).upper()
+    tensors = {
+        "src0": ConcreteTensor(dtype=dtype, dimensions=_dimensions_from_extents(dst_extents)),
+        "src1": ConcreteTensor(dtype=dtype, dimensions=_dimensions_from_extents(ne)),
+        "dst": ConcreteTensor(dtype=dtype, dimensions=_dimensions_from_extents(dst_extents)),
+    }
+    return tensors, _fallback_shape_from_extents(dst_extents)
+
+
+def lower_tensors_for_route(
+    case: ImportedCase,
+    route: V2Route,
+) -> tuple[dict[str, ConcreteTensor], dict[str, int]]:
+    if route.id == "add_f32_generic_4d":
+        return lower_generic_pointwise_tensors(case)
+    return lower_contiguous_pointwise_tensors(case)
+
+
+def shape_for_resolved_route(route: V2Route, tensors: dict[str, ConcreteTensor], fallback_shape: dict[str, int]) -> dict[str, int]:
+    if not route.tensors:
+        return fallback_shape
+    ranked_capture = next(
+        (
+            descriptor.dimensions_capture
+            for descriptor in route.tensors.values()
+            for check in route.constraints.checks
+            if check.name == descriptor.dimensions_capture and check.length is not None
+        ),
+        None,
+    )
+    rank = next(
+        (
+            int(check.length)
+            for check in route.constraints.checks
+            if check.name == ranked_capture and check.length is not None
+        ),
+        None,
+    )
+    if rank is None:
+        return fallback_shape
+    if rank == 4:
+        tensor_name = "dst" if "dst" in tensors else next(iter(route.tensors))
+        first_tensor = tensors[tensor_name]
+        return {
+            dimension.name: int(dimension.size)
+            for dimension in first_tensor.dimensions
+        }
+    if rank == 2:
+        return fallback_shape
+    raise ValueError(
+        f"v2 route {route.id!r} resolved unsupported rank {rank!r} for capture {ranked_capture!r}"
+    )
 
 
 def resolve_route_for_case(
@@ -93,22 +170,31 @@ def resolve_route_for_case(
             "matching v2 op mapping exists, but not for this dtype combination",
         )
 
-    try:
-        tensors, shape = lower_contiguous_pointwise_tensors(case)
-    except ValueError as exc:
-        return None, None, UnmappedReason.SHAPE_LOWERING_NOT_IMPLEMENTED, str(exc)
-
-    matching = [route for route in dtype_matching if route_accepts_tensors(route, tensors)]
-    if not matching:
+    lowering_errors: list[str] = []
+    lowered_any = False
+    for route in dtype_matching:
+        try:
+            tensors, shape = lower_tensors_for_route(case, route)
+        except ValueError as exc:
+            lowering_errors.append(str(exc))
+            continue
+        lowered_any = True
+        if not route_accepts_tensors(route, tensors):
+            continue
+        return route, shape_for_resolved_route(route, tensors, shape), None, None
+    if lowered_any:
         return (
             None,
             None,
             UnmappedReason.NO_ROUTE_MATCH,
             "lowered tensor descriptors did not satisfy any v2 route",
         )
-    if len(matching) > 1:
-        return None, None, UnmappedReason.AMBIGUOUS_ROUTE_MATCH, None
-    return matching[0], shape, None, None
+    return (
+        None,
+        None,
+        UnmappedReason.SHAPE_LOWERING_NOT_IMPLEMENTED,
+        lowering_errors[0] if lowering_errors else "pointwise lowering is not implemented for this route set",
+    )
 
 
 def resolve_imported_suite(
