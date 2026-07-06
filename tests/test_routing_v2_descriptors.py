@@ -1,6 +1,10 @@
 from __future__ import annotations
 
-from ggml_hrx_kernel_bench.routing.v2.matching import route_accepts_tensors, tensor_accepts_descriptor
+from ggml_hrx_kernel_bench.routing.v2.matching import (
+    materialize_route_tensors,
+    route_accepts_tensors,
+    tensor_accepts_descriptor,
+)
 from ggml_hrx_kernel_bench.routing.v2.models import (
     ConcreteTensor,
     ConcreteTensorDimension,
@@ -351,3 +355,67 @@ def test_generic_4d_route_accepts_transposed_src0_and_dst() -> None:
     }
 
     assert route_accepts_tensors(route, tensors) is True
+
+
+def test_materialize_rank2_tensors_models_rhs_row_broadcast_route() -> None:
+    route = V2Route(
+        id="add_f32_rhs_row_broadcast_2d_r64_1048576_wg256",
+        family="add_f32",
+        op="ADD",
+        source_id="add_pointwise_f32",
+        kernel_path="add/rhs_row_broadcast_2d.loom",
+        root_symbol="@hrx2_add_f32_rhs_row_broadcast_2d",
+        export_name="hrx2_add_f32_rhs_row_broadcast_2d",
+        tensors={
+            "src0": TensorDescriptor(dtype="F32", dimensions_capture="src0_dimensions", strides_capture="src0_strides"),
+            "src1": TensorDescriptor(dtype="F32", dimensions_capture="src1_dimensions", strides_capture="src1_strides"),
+            "dst": TensorDescriptor(dtype="F32", dimensions_capture="dst_dimensions", strides_capture="dst_strides"),
+        },
+        values=(),
+        constraints=RouteConstraints(
+            checks=(
+                ConstraintCheck(name="dst_dimensions", length=2),
+                ConstraintCheck(name="src1_dimensions", index=1, min=1, max=1),
+                ConstraintCheck(name="src1_strides", index=0, min=1, max=1),
+                ConstraintCheck(name="src1_strides", index=1, min=0, max=0),
+            )
+        ),
+        launch={"workgroup_size": [256, 1, 1]},
+        bindings=(),
+    )
+
+    tensors = materialize_route_tensors(route, {"d0": 128, "d1": 64, "src1_d1": 1, "src1_d1_stride": 0})
+
+    assert tuple(dimension.size for dimension in tensors["src1"].dimensions) == (128, 1)
+    assert tuple(dimension.stride for dimension in tensors["src1"].dimensions) == (1, 0)
+
+
+def test_materialize_rank2_tensors_models_explicit_row_stride_hints() -> None:
+    route = V2Route(
+        id="add_f32_row_strided_rhs_wg256",
+        family="add_f32",
+        op="ADD",
+        source_id="add_pointwise_f32",
+        kernel_path="add/generic_2d.loom",
+        root_symbol="@hrx2_add_f32",
+        export_name="hrx2_add_f32",
+        tensors={
+            "src0": TensorDescriptor(dtype="F32", dimensions_capture="src0_dimensions", strides_capture="src0_strides"),
+            "src1": TensorDescriptor(dtype="F32", dimensions_capture="src1_dimensions", strides_capture="src1_strides"),
+            "dst": TensorDescriptor(dtype="F32", dimensions_capture="dst_dimensions", strides_capture="dst_strides"),
+        },
+        values=(),
+        constraints=RouteConstraints(
+            checks=(
+                ConstraintCheck(name="dst_dimensions", length=2),
+            )
+        ),
+        launch={"workgroup_size": [256, 1, 1]},
+        bindings=(),
+    )
+
+    tensors = materialize_route_tensors(route, {"d0": 20, "d1": 60, "src0_d1_stride": 20, "src1_d0": 10, "src1_d1_stride": 10})
+
+    assert tuple(dimension.stride for dimension in tensors["src0"].dimensions) == (1, 20)
+    assert tuple(dimension.size for dimension in tensors["src1"].dimensions) == (10, 60)
+    assert tuple(dimension.stride for dimension in tensors["src1"].dimensions) == (1, 10)

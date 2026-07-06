@@ -8,6 +8,7 @@ from .matching import (
     materialize_route_tensors,
     route_dispatch,
     route_values,
+    shape_overrides_from_tensors,
     shape_from_tensors,
     value_from_route_source,
     value_from_tensor_source,
@@ -55,7 +56,7 @@ def candidate_from_shape(
     message: str | None = None,
 ) -> Candidate:
     tensors = materialize_route_tensors(route, shape)
-    shape = shape_from_tensors(tensors)
+    shape = {**shape_from_tensors(tensors), **shape_overrides_from_tensors(tensors), **shape}
     resolved_values = route_values(route, tensors)
     if resolved_values is None:
         raise RuntimeError(f"v2 route {route.id!r} failed to resolve route values for shape {shape!r}")

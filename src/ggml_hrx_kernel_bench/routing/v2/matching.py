@@ -229,6 +229,21 @@ def shape_from_tensors(tensors: Mapping[str, ConcreteTensor]) -> dict[str, int]:
     return normalize_shape(shape)
 
 
+def shape_overrides_from_tensors(tensors: Mapping[str, ConcreteTensor]) -> dict[str, int]:
+    shape = shape_from_tensors(tensors)
+    overrides: dict[str, int] = {}
+    for tensor_name, tensor in tensors.items():
+        sizes = [int(dimension.size) for dimension in tensor.dimensions]
+        default_strides = _contiguous_strides(tuple(sizes))
+        for index, dimension in enumerate(tensor.dimensions):
+            base_key = f"{tensor_name}_{dimension.name}"
+            if int(dimension.size) != int(shape[dimension.name]):
+                overrides[base_key] = int(dimension.size)
+            if int(dimension.stride) != int(default_strides[index]):
+                overrides[f"{base_key}_stride"] = int(dimension.stride)
+    return overrides
+
+
 def _constraint_for_capture(
     route: V2Route,
     capture_name: str,
@@ -265,6 +280,10 @@ def _scalar_constraint_min(route: V2Route, capture_name: str) -> int | None:
     return minimum
 
 
+def _rank_dimension_names(rank: int) -> tuple[str, ...]:
+    return tuple(f"d{index}" for index in range(rank))
+
+
 def default_shape_for_route(route: V2Route) -> dict[str, int]:
     if not route.tensors:
         return {}
@@ -274,27 +293,19 @@ def default_shape_for_route(route: V2Route) -> dict[str, int]:
         total_size_min = _scalar_constraint_min(route, "total_size")
         default_cols = total_size_min if total_size_min is not None else int(route.launch.get("workgroup_size", [1])[0] or 1)
         return normalize_shape({"ncols": default_cols, "nrows": 1})
-    if rank == 4:
-        return {f"d{index}": 1 if bounds.get(index, (None, None))[0] is None else int(bounds[index][0]) for index in range(rank)}
-    if rank != 2:
+    if rank <= 0:
         raise RuntimeError(f"v2 route {route.id!r} requires unsupported rank {rank!r} for default shape")
-    ncols_min = bounds.get(0, (None, None))[0]
-    nrows_min = bounds.get(1, (None, None))[0]
-    return normalize_shape(
-        {
-            "ncols": 1 if ncols_min is None else int(ncols_min),
-            "nrows": 1 if nrows_min is None else int(nrows_min),
-        }
-    )
+    return {
+        name: 1 if bounds.get(index, (None, None))[0] is None else int(bounds[index][0])
+        for index, name in enumerate(_rank_dimension_names(rank))
+    }
 
 
 def materialize_route_tensors(route: V2Route, sizes: Mapping[str, int]) -> dict[str, ConcreteTensor]:
+    normalized_sizes = normalize_shape({str(name): int(value) for name, value in sizes.items()})
     try:
         _, rank, _ = _shape_capture_for_route(route)
     except RuntimeError:
-        rank = 2
-    normalized_sizes = normalize_shape({str(name): int(value) for name, value in sizes.items()})
-    if rank == 2:
         if "ncols" not in normalized_sizes or "nrows" not in normalized_sizes:
             raise KeyError("ncols/nrows")
         dimensions = (
@@ -305,24 +316,35 @@ def materialize_route_tensors(route: V2Route, sizes: Mapping[str, int]) -> dict[
                 stride=int(normalized_sizes["ncols"]),
             ),
         )
-    elif rank == 4:
-        required = tuple(f"d{index}" for index in range(rank))
-        missing = [name for name in required if name not in normalized_sizes]
-        if missing:
-            raise KeyError(",".join(missing))
-        dimensions_list: list[ConcreteTensorDimension] = []
-        stride = 1
-        for name in required:
-            size = int(normalized_sizes[name])
-            dimensions_list.append(ConcreteTensorDimension(name=name, size=size, stride=stride))
-            stride *= size
-        dimensions = tuple(dimensions_list)
-    else:
+        return {
+            tensor_name: ConcreteTensor(dtype=descriptor.dtype or "", dimensions=dimensions)
+            for tensor_name, descriptor in route.tensors.items()
+        }
+    if rank <= 0:
         raise RuntimeError(f"v2 route {route.id!r} requires unsupported rank {rank!r} for materialization")
-    return {
-        tensor_name: ConcreteTensor(dtype=descriptor.dtype or "", dimensions=dimensions)
-        for tensor_name, descriptor in route.tensors.items()
-    }
+    dimension_names = _rank_dimension_names(rank)
+    missing = [name for name in dimension_names if name not in normalized_sizes]
+    if missing:
+        raise KeyError(",".join(missing))
+    tensors: dict[str, ConcreteTensor] = {}
+    for tensor_name, descriptor in route.tensors.items():
+        sizes_for_tensor = [
+            int(normalized_sizes.get(f"{tensor_name}_{dimension_name}", normalized_sizes[dimension_name]))
+            for dimension_name in dimension_names
+        ]
+        default_strides = _contiguous_strides(tuple(sizes_for_tensor))
+        dimensions: list[ConcreteTensorDimension] = []
+        for index, dimension_name in enumerate(dimension_names):
+            stride = int(normalized_sizes.get(f"{tensor_name}_{dimension_name}_stride", default_strides[index]))
+            dimensions.append(
+                ConcreteTensorDimension(
+                    name=dimension_name,
+                    size=sizes_for_tensor[index],
+                    stride=stride,
+                )
+            )
+        tensors[tensor_name] = ConcreteTensor(dtype=descriptor.dtype or "", dimensions=tuple(dimensions))
+    return tensors
 
 
 def value_from_tensor_source(
@@ -383,8 +405,12 @@ def route_dispatch(
     else:
         rows_per_workgroup = int(route.launch.get("rows_per_workgroup", 1) or 1)
         cols_per_workgroup = int(route.launch.get("cols_per_workgroup", 1) or 1)
-        nrows = int(normalized_shape.get("nrows", normalized_shape.get("rows", 1)))
-        ncols = int(normalized_shape.get("ncols", normalized_shape.get("cols", 1)))
+        if "d0" in normalized_shape and "d1" in normalized_shape:
+            ncols = int(normalized_shape["d0"])
+            nrows = int(normalized_shape["d1"])
+        else:
+            nrows = int(normalized_shape.get("nrows", normalized_shape.get("rows", 1)))
+            ncols = int(normalized_shape.get("ncols", normalized_shape.get("cols", 1)))
         workgroup_count = [
             _ceil_div(nrows, rows_per_workgroup),
             _ceil_div(ncols, cols_per_workgroup),

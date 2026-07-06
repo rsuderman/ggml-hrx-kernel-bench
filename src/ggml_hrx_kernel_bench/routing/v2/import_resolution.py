@@ -8,7 +8,7 @@ from ...import_models import (
     UnmappedCase,
     UnmappedReason,
 )
-from .matching import route_accepts_dtype, route_accepts_tensors
+from .matching import route_accepts_dtype, route_accepts_tensors, shape_overrides_from_tensors
 from .models import ConcreteTensor, ConcreteTensorDimension, V2Route
 from .query import RouteCatalog, require_route_catalog, routes_for_op
 from .shape import normalize_shape
@@ -244,7 +244,13 @@ def shape_for_resolved_route(route: V2Route, tensors: dict[str, ConcreteTensor],
             for dimension in first_tensor.dimensions
         }
     if rank == 2:
-        return fallback_shape
+        return {
+            **{
+                dimension.name: int(dimension.size)
+                for dimension in tensors["dst" if "dst" in tensors else next(iter(route.tensors))].dimensions
+            },
+            **shape_overrides_from_tensors(tensors),
+        }
     raise ValueError(
         f"v2 route {route.id!r} resolved unsupported rank {rank!r} for capture {ranked_capture!r}"
     )

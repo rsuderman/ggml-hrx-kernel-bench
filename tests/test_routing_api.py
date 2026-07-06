@@ -26,7 +26,7 @@ def _write_v2_descriptor(routing_dir: Path) -> None:
         json.dumps(
             {
                 "schema": "ggml_hrx_kernel_bench.routing_descriptors.v2",
-                "routes": {"ADD": ["add_f32.json", "add_f32_generic_4d.json"]},
+                "routes": {"ADD": ["add_f32_contiguous_1d.json", "add_f32_generic_4d.json"]},
             },
             indent=2,
             sort_keys=True,
@@ -34,7 +34,7 @@ def _write_v2_descriptor(routing_dir: Path) -> None:
         + "\n",
         encoding="utf-8",
     )
-    (routing_dir / "add_f32.json").write_text(
+    (routing_dir / "add_f32_contiguous_1d.json").write_text(
         json.dumps(
             {
                 "id": "add_f32_contiguous_1d",
