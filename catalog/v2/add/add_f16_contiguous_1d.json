@@ -4,8 +4,8 @@
   "kernel": {
     "source_id": "add_f16",
     "path": "add/contiguous_1d.loom",
-    "root_symbol": "@hrx2_add_f16_contiguous_1d",
-    "export_name": "hrx2_add_f16_contiguous_1d"
+    "root_symbol": "@add_f16_contiguous_1d",
+    "export_name": "add_f16_contiguous_1d"
   },
   "tensors": {
     "src0": {

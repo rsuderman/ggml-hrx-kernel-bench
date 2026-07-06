@@ -1,7 +1,7 @@
 config.decl @hrx2.shape.copy.n : %value: index where [range(%value, 1, 1073741824)]
 config.decl @hrx2.tuning.copy.workgroup_size : %value: index where [range(%value, 32, 1024), mul(%value, 32)]
 
-kernel.def export("hrx2_copy_f16_f16_contiguous_1d") @hrx2_copy_f16_f16_contiguous_1d() {
+kernel.def export("copy_f16_f16_contiguous_1d") @copy_f16_f16_contiguous_1d() {
   %unit = index.constant 1 : index
   %minus_one = index.constant -1 : index
   %n = config.get @hrx2.shape.copy.n : index
@@ -38,7 +38,7 @@ kernel.def export("hrx2_copy_f16_f16_contiguous_1d") @hrx2_copy_f16_f16_contiguo
   kernel.return
 }
 
-kernel.def export("hrx2_copy_f32_f32_contiguous_1d") @hrx2_copy_f32_f32_contiguous_1d() {
+kernel.def export("copy_f32_f32_contiguous_1d") @copy_f32_f32_contiguous_1d() {
   %unit = index.constant 1 : index
   %minus_one = index.constant -1 : index
   %n = config.get @hrx2.shape.copy.n : index
@@ -75,7 +75,7 @@ kernel.def export("hrx2_copy_f32_f32_contiguous_1d") @hrx2_copy_f32_f32_contiguo
   kernel.return
 }
 
-kernel.def export("hrx2_copy_f16_f32_contiguous_1d") @hrx2_copy_f16_f32_contiguous_1d() {
+kernel.def export("copy_f16_f32_contiguous_1d") @copy_f16_f32_contiguous_1d() {
   %unit = index.constant 1 : index
   %minus_one = index.constant -1 : index
   %n = config.get @hrx2.shape.copy.n : index
@@ -113,7 +113,7 @@ kernel.def export("hrx2_copy_f16_f32_contiguous_1d") @hrx2_copy_f16_f32_contiguo
   kernel.return
 }
 
-kernel.def export("hrx2_copy_f32_f16_contiguous_1d") @hrx2_copy_f32_f16_contiguous_1d() {
+kernel.def export("copy_f32_f16_contiguous_1d") @copy_f32_f16_contiguous_1d() {
   %unit = index.constant 1 : index
   %minus_one = index.constant -1 : index
   %n = config.get @hrx2.shape.copy.n : index

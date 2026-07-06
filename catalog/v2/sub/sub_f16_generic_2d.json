@@ -4,8 +4,8 @@
   "kernel": {
     "source_id": "sub_pointwise_f16",
     "path": "sub/generic_2d.loom",
-    "root_symbol": "@hrx2_sub_f16",
-    "export_name": "hrx2_sub_f16"
+    "root_symbol": "@sub_f16",
+    "export_name": "sub_f16"
   },
   "tensors": {
     "src0": {

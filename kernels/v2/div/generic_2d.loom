@@ -5,7 +5,7 @@ config.decl @hrx2.shape.pointwise.src1_d1_stride : %value: index where [range(%v
 config.decl @hrx2.shape.pointwise.src1_d0 : %value: index where [range(%value, 1, 65536)]
 config.decl @hrx2.tuning.pointwise.workgroup_size : %value: index where [range(%value, 32, 1024), mul(%value, 32)]
 
-kernel.def export("hrx2_div_f32") @hrx2_div_f32() {
+kernel.def export("div_f32") @div_f32() {
   %unit = index.constant 1 : index
   %minus_one = index.constant -1 : index
   %d0 = config.get @hrx2.shape.pointwise.d0 : index
@@ -66,7 +66,7 @@ kernel.def export("hrx2_div_f32") @hrx2_div_f32() {
   kernel.return
 }
 
-kernel.def export("hrx2_div_f16") @hrx2_div_f16() {
+kernel.def export("div_f16") @div_f16() {
   %unit = index.constant 1 : index
   %minus_one = index.constant -1 : index
   %d0 = config.get @hrx2.shape.pointwise.d0 : index

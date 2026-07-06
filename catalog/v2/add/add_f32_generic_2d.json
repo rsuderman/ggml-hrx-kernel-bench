@@ -4,8 +4,8 @@
   "kernel": {
     "source_id": "add_pointwise_f32",
     "path": "add/generic_2d.loom",
-    "root_symbol": "@hrx2_add_f32",
-    "export_name": "hrx2_add_f32"
+    "root_symbol": "@add_f32",
+    "export_name": "add_f32"
   },
   "tensors": {
     "src0": {

@@ -4,8 +4,8 @@
   "kernel": {
     "source_id": "add_pointwise_f16",
     "path": "add/generic_2d.loom",
-    "root_symbol": "@hrx2_add_f16",
-    "export_name": "hrx2_add_f16"
+    "root_symbol": "@add_f16",
+    "export_name": "add_f16"
   },
   "tensors": {
     "src0": {

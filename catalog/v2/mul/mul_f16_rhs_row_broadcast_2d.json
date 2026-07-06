@@ -4,8 +4,8 @@
   "kernel": {
     "source_id": "mul_pointwise_f16",
     "path": "mul/rhs_row_broadcast_2d.loom",
-    "root_symbol": "@hrx2_mul_f16_rhs_row_broadcast_2d",
-    "export_name": "hrx2_mul_f16_rhs_row_broadcast_2d"
+    "root_symbol": "@mul_f16_rhs_row_broadcast_2d",
+    "export_name": "mul_f16_rhs_row_broadcast_2d"
   },
   "tensors": {
     "src0": {

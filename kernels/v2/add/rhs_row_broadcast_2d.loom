@@ -2,7 +2,7 @@ config.decl @hrx2.shape.pointwise.d0 : %value: index where [range(%value, 1, 655
 config.decl @hrx2.shape.pointwise.d1 : %value: index where [range(%value, 1, 1048576)]
 config.decl @hrx2.tuning.pointwise.workgroup_size : %value: index where [range(%value, 32, 1024), mul(%value, 32)]
 
-kernel.def export("hrx2_add_f32_rhs_row_broadcast_2d") @hrx2_add_f32_rhs_row_broadcast_2d() {
+kernel.def export("add_f32_rhs_row_broadcast_2d") @add_f32_rhs_row_broadcast_2d() {
   %unit = index.constant 1 : index
   %minus_one = index.constant -1 : index
   %d0 = config.get @hrx2.shape.pointwise.d0 : index
@@ -51,7 +51,7 @@ kernel.def export("hrx2_add_f32_rhs_row_broadcast_2d") @hrx2_add_f32_rhs_row_bro
   kernel.return
 }
 
-kernel.def export("hrx2_add_f16_rhs_row_broadcast_2d") @hrx2_add_f16_rhs_row_broadcast_2d() {
+kernel.def export("add_f16_rhs_row_broadcast_2d") @add_f16_rhs_row_broadcast_2d() {
   %unit = index.constant 1 : index
   %minus_one = index.constant -1 : index
   %d0 = config.get @hrx2.shape.pointwise.d0 : index

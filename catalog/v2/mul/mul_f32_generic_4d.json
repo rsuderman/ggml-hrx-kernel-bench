@@ -4,8 +4,8 @@
   "kernel": {
     "source_id": "mul_f32",
     "path": "mul/generic_4d.loom",
-    "root_symbol": "@hrx2_mul_f32_generic_4d",
-    "export_name": "hrx2_mul_f32_generic_4d"
+    "root_symbol": "@mul_f32_generic_4d",
+    "export_name": "mul_f32_generic_4d"
   },
   "tensors": {
     "src0": {

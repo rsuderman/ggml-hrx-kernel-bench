@@ -4,8 +4,8 @@
   "kernel": {
     "source_id": "div_f16",
     "path": "div/generic_4d.loom",
-    "root_symbol": "@hrx2_div_f16_generic_4d",
-    "export_name": "hrx2_div_f16_generic_4d"
+    "root_symbol": "@div_f16_generic_4d",
+    "export_name": "div_f16_generic_4d"
   },
   "tensors": {
     "src0": {

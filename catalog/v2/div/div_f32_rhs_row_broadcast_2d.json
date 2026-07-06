@@ -4,8 +4,8 @@
   "kernel": {
     "source_id": "div_pointwise_f32",
     "path": "div/rhs_row_broadcast_2d.loom",
-    "root_symbol": "@hrx2_div_f32_rhs_row_broadcast_2d",
-    "export_name": "hrx2_div_f32_rhs_row_broadcast_2d"
+    "root_symbol": "@div_f32_rhs_row_broadcast_2d",
+    "export_name": "div_f32_rhs_row_broadcast_2d"
   },
   "tensors": {
     "src0": {

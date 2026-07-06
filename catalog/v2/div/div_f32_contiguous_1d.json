@@ -4,8 +4,8 @@
   "kernel": {
     "source_id": "div_f32",
     "path": "div/contiguous_1d.loom",
-    "root_symbol": "@hrx2_div_f32_contiguous_1d",
-    "export_name": "hrx2_div_f32_contiguous_1d"
+    "root_symbol": "@div_f32_contiguous_1d",
+    "export_name": "div_f32_contiguous_1d"
   },
   "tensors": {
     "src0": {

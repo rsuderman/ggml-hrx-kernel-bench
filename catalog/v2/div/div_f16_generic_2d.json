@@ -4,8 +4,8 @@
   "kernel": {
     "source_id": "div_pointwise_f16",
     "path": "div/generic_2d.loom",
-    "root_symbol": "@hrx2_div_f16",
-    "export_name": "hrx2_div_f16"
+    "root_symbol": "@div_f16",
+    "export_name": "div_f16"
   },
   "tensors": {
     "src0": {

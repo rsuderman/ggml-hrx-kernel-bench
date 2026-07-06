@@ -4,8 +4,8 @@
   "kernel": {
     "source_id": "sub_pointwise_f32",
     "path": "sub/contiguous_2d.loom",
-    "root_symbol": "@hrx2_sub_f32_contiguous_2d",
-    "export_name": "hrx2_sub_f32_contiguous_2d"
+    "root_symbol": "@sub_f32_contiguous_2d",
+    "export_name": "sub_f32_contiguous_2d"
   },
   "tensors": {
     "src0": {
