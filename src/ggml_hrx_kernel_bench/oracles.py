@@ -293,8 +293,7 @@ def _mul_mat_q4_k_f32(np: Any, candidate: Candidate, fixture_dir: Path, seed: in
 
 
 def _rms_norm_f32(np: Any, candidate: Candidate, fixture_dir: Path, seed: int) -> OracleResult:
-    ncols = int(candidate.shape.get("ncols", candidate.shape.get("cols", 1)))
-    nrows = int(candidate.shape.get("nrows", candidate.shape.get("rows", 1)))
+    ncols, nrows, _ = _dims(candidate)
     eps = np.float32(0.0)
     src = f32_pattern(np, (nrows, ncols), seed=seed)
     scale = np.reciprocal(np.sqrt(np.mean(src * src, axis=1, keepdims=True) + eps)).astype(np.float32)
@@ -311,7 +310,7 @@ def _rms_norm_f32(np: Any, candidate: Candidate, fixture_dir: Path, seed: int) -
 
 
 def _copy_f32_f16(np: Any, candidate: Candidate, fixture_dir: Path, seed: int) -> OracleResult:
-    n = int(candidate.values.get("shape.copy.n") or candidate.shape.get("ncols", 1) * candidate.shape.get("nrows", 1))
+    n = int(candidate.values.get("shape.copy.n") or _element_count(candidate))
     src = f32_pattern(np, (n,), seed=seed)
     expected = src.astype(np.float16).view(np.uint16)
     dst_init = np.zeros((n,), dtype=np.uint16)
@@ -325,9 +324,7 @@ def _copy_f32_f16(np: Any, candidate: Candidate, fixture_dir: Path, seed: int) -
 
 
 def _cont_f32(np: Any, candidate: Candidate, fixture_dir: Path, seed: int) -> OracleResult:
-    ncols = int(candidate.shape.get("ncols", candidate.shape.get("cols", 1)))
-    nrows = int(candidate.shape.get("nrows", candidate.shape.get("rows", 1)))
-    element_count = ncols * nrows
+    element_count = _element_count(candidate)
     src = f32_pattern(np, (element_count,), seed=seed)
     dst_init = f32_pattern(np, (element_count,), seed=seed + 2, scale=0.25)
     np.save(fixture_dir / "src0.npy", src, allow_pickle=False)
@@ -339,24 +336,181 @@ def _cont_f32(np: Any, candidate: Candidate, fixture_dir: Path, seed: int) -> Or
     return OracleResult("fixtures_ready", meta["oracle"], fixture_dir, meta_path, fixture_dir / "expected.npy", meta["tolerance"])
 
 
+def _ranked_shape(candidate: Candidate) -> tuple[int, ...] | None:
+    ranked: list[tuple[int, int]] = []
+    for name, value in candidate.shape.items():
+        key = str(name)
+        if not key.startswith("d") or not key[1:].isdigit():
+            continue
+        ranked.append((int(key[1:]), int(value)))
+    if not ranked:
+        return None
+    ranked.sort()
+    expected = list(range(len(ranked)))
+    indices = [index for index, _ in ranked]
+    if indices != expected:
+        return None
+    return tuple(value for _, value in ranked)
+
+
+def _product(values: tuple[int, ...]) -> int:
+    total = 1
+    for value in values:
+        total *= int(value)
+    return total
+
+
+def _contiguous_strides(dimensions: tuple[int, ...]) -> tuple[int, ...]:
+    stride = 1
+    strides: list[int] = []
+    for size in dimensions:
+        strides.append(stride)
+        stride *= int(size)
+    return tuple(strides)
+
+
+def _element_count(candidate: Candidate) -> int:
+    ranked = _ranked_shape(candidate)
+    if ranked is not None:
+        return _product(ranked)
+    return int(candidate.shape.get("ncols", candidate.shape.get("cols", 1))) * int(
+        candidate.shape.get("nrows", candidate.shape.get("rows", 1))
+    )
+
+
 def _dims(candidate: Candidate) -> tuple[int, int, int]:
+    ranked = _ranked_shape(candidate)
+    if ranked is not None:
+        ncols = int(ranked[0])
+        nrows = _product(ranked[1:]) if len(ranked) > 1 else 1
+        return ncols, nrows, _product(ranked)
     ncols = int(candidate.shape.get("ncols", candidate.shape.get("cols", candidate.shape.get("k", 1))))
     nrows = int(candidate.shape.get("nrows", candidate.shape.get("rows", 1)))
     return ncols, nrows, ncols * nrows
+
+
+def _pointwise_common_dims(candidate: Candidate) -> tuple[int, ...] | None:
+    return _ranked_shape(candidate)
+
+
+def _pointwise_tensor_dims(
+    candidate: Candidate,
+    tensor_name: str,
+    common_dims: tuple[int, ...],
+) -> tuple[int, ...]:
+    return tuple(
+        int(candidate.shape.get(f"{tensor_name}_d{index}", common_dims[index]))
+        for index in range(len(common_dims))
+    )
+
+
+def _pointwise_tensor_strides(
+    candidate: Candidate,
+    tensor_name: str,
+    tensor_dims: tuple[int, ...],
+) -> tuple[int, ...]:
+    defaults = _contiguous_strides(tensor_dims)
+    return tuple(
+        int(candidate.shape.get(f"{tensor_name}_d{index}_stride", defaults[index]))
+        for index in range(len(tensor_dims))
+    )
+
+
+def _buffer_length(dims: tuple[int, ...], strides: tuple[int, ...]) -> int:
+    return 1 + sum((int(dim) - 1) * int(stride) for dim, stride in zip(dims, strides, strict=True))
+
+
+def _pointwise_logical_indices(
+    np: Any,
+    logical_dims: tuple[int, ...],
+    tensor_dims: tuple[int, ...],
+    tensor_strides: tuple[int, ...],
+) -> Any:
+    indices = np.indices(logical_dims, dtype=np.int64)
+    linear = np.zeros(logical_dims, dtype=np.int64)
+    for axis, (dim, stride) in enumerate(zip(tensor_dims, tensor_strides, strict=True)):
+        linear += (indices[axis] % np.int64(dim)) * np.int64(stride)
+    return linear
+
+
+def _pointwise_buffers_and_views(
+    np: Any,
+    candidate: Candidate,
+    *,
+    src0_seed: int,
+    src1_seed: int,
+    dst_seed: int,
+    src1_positive: bool = False,
+) -> tuple[Any, Any, Any, Any, Any]:
+    common_dims = _pointwise_common_dims(candidate)
+    if common_dims is None:
+        ncols, nrows, elems = _dims(candidate)
+        src0_buffer = f32_pattern(np, (elems,), seed=src0_seed)
+        src1_buffer = (
+            positive_f32_pattern(np, (elems,), seed=src1_seed)
+            if src1_positive
+            else f32_pattern(np, (elems,), seed=src1_seed)
+        )
+        dst_init = f32_pattern(np, (elems,), seed=dst_seed, scale=0.25)
+        src0_view = src0_buffer.reshape(nrows, ncols)
+        src1_view = _pointwise_src1_view(np, candidate, src1_buffer)
+        dst_indices = np.arange(elems, dtype=np.int64).reshape(nrows, ncols)
+        return src0_buffer, src0_view, src1_buffer, src1_view, (dst_init, dst_indices)
+
+    src0_dims = _pointwise_tensor_dims(candidate, "src0", common_dims)
+    src1_dims = _pointwise_tensor_dims(candidate, "src1", common_dims)
+    dst_dims = _pointwise_tensor_dims(candidate, "dst", common_dims)
+    src0_strides = _pointwise_tensor_strides(candidate, "src0", src0_dims)
+    src1_strides = _pointwise_tensor_strides(candidate, "src1", src1_dims)
+    dst_strides = _pointwise_tensor_strides(candidate, "dst", dst_dims)
+    src0_buffer = f32_pattern(np, (_buffer_length(src0_dims, src0_strides),), seed=src0_seed)
+    src1_pattern = positive_f32_pattern if src1_positive else f32_pattern
+    src1_buffer = src1_pattern(np, (_buffer_length(src1_dims, src1_strides),), seed=src1_seed)
+    dst_init = f32_pattern(np, (_buffer_length(dst_dims, dst_strides),), seed=dst_seed, scale=0.25)
+    src0_indices = _pointwise_logical_indices(np, common_dims, src0_dims, src0_strides)
+    src1_indices = _pointwise_logical_indices(np, common_dims, src1_dims, src1_strides)
+    dst_indices = _pointwise_logical_indices(np, common_dims, dst_dims, dst_strides)
+    src0_view = src0_buffer[src0_indices]
+    src1_view = src1_buffer[src1_indices]
+    return src0_buffer, src0_view, src1_buffer, src1_view, (dst_init, dst_indices)
+
+
+def _pointwise_buffer_lengths(candidate: Candidate) -> tuple[int, int, int]:
+    common_dims = _pointwise_common_dims(candidate)
+    if common_dims is None:
+        _, _, elems = _dims(candidate)
+        return elems, elems, elems
+    src0_dims = _pointwise_tensor_dims(candidate, "src0", common_dims)
+    src1_dims = _pointwise_tensor_dims(candidate, "src1", common_dims)
+    dst_dims = _pointwise_tensor_dims(candidate, "dst", common_dims)
+    src0_strides = _pointwise_tensor_strides(candidate, "src0", src0_dims)
+    src1_strides = _pointwise_tensor_strides(candidate, "src1", src1_dims)
+    dst_strides = _pointwise_tensor_strides(candidate, "dst", dst_dims)
+    return (
+        _buffer_length(src0_dims, src0_strides),
+        _buffer_length(src1_dims, src1_strides),
+        _buffer_length(dst_dims, dst_strides),
+    )
 
 
 def _pointwise_src1_view(np: Any, candidate: Candidate, src1_buffer: Any) -> Any:
     ncols, nrows, elems = _dims(candidate)
     src1_row_stride = int(
         candidate.values.get(
-            "shape.pointwise.src1_row_stride",
-            candidate.shape.get("src1_row_stride", ncols),
+            "shape.pointwise.src1_d1_stride",
+            candidate.values.get(
+                "shape.pointwise.src1_row_stride",
+                candidate.shape.get("src1_d1_stride", candidate.shape.get("src1_row_stride", ncols)),
+            ),
         )
     )
     src1_ncols = int(
         candidate.values.get(
-            "shape.pointwise.src1_ncols",
-            candidate.shape.get("src1_ncols", ncols),
+            "shape.pointwise.src1_d0",
+            candidate.values.get(
+                "shape.pointwise.src1_ncols",
+                candidate.shape.get("src1_d0", candidate.shape.get("src1_ncols", ncols)),
+            ),
         )
     )
     row_ids = np.arange(nrows, dtype=np.int64).reshape(nrows, 1)
@@ -445,16 +599,21 @@ def _read_i16(workbench_path: Path, fixture_dir: Path, name: str, elems: int) ->
 
 def _binary_arrays(op: Callable[[Any, Any], Any]) -> Callable[[Any, Candidate, int], dict[str, Any]]:
     def build(np: Any, candidate: Candidate, seed: int) -> dict[str, Any]:
-        ncols, nrows, elems = _dims(candidate)
-        src0 = f32_pattern(np, (nrows, ncols), seed=seed)
-        src1_buffer, src1 = _pointwise_src1_values(np, candidate, seed + 1)
-        expected = op(src0, src1).astype(np.float32)
+        src0_buffer, src0, src1_buffer, src1, (dst_init, dst_indices) = _pointwise_buffers_and_views(
+            np,
+            candidate,
+            src0_seed=seed,
+            src1_seed=seed + 1,
+            dst_seed=seed + 2,
+        )
+        expected = dst_init.copy()
+        expected[dst_indices] = op(src0, src1).astype(np.float32)
         return {
             "arrays": {
-                "src0": src0.reshape(elems),
-                "src1": src1_buffer.reshape(elems),
-                "dst_init": f32_pattern(np, (elems,), seed=seed + 2, scale=0.25),
-                "expected": expected.reshape(elems),
+                "src0": src0_buffer.reshape(-1),
+                "src1": src1_buffer.reshape(-1),
+                "dst_init": dst_init.reshape(-1),
+                "expected": expected.reshape(-1),
             }
         }
 
@@ -462,17 +621,22 @@ def _binary_arrays(op: Callable[[Any, Any], Any]) -> Callable[[Any, Candidate, i
 
 
 def _div_arrays(np: Any, candidate: Candidate, seed: int) -> dict[str, Any]:
-    ncols, nrows, elems = _dims(candidate)
-    src0 = f32_pattern(np, (nrows, ncols), seed=seed)
-    src1_buffer = positive_f32_pattern(np, (elems,), seed=seed + 1)
-    src1 = _pointwise_src1_view(np, candidate, src1_buffer)
-    expected = (src0 / src1).astype(np.float32)
+    src0_buffer, src0, src1_buffer, src1, (dst_init, dst_indices) = _pointwise_buffers_and_views(
+        np,
+        candidate,
+        src0_seed=seed,
+        src1_seed=seed + 1,
+        dst_seed=seed + 2,
+        src1_positive=True,
+    )
+    expected = dst_init.copy()
+    expected[dst_indices] = (src0 / src1).astype(np.float32)
     return {
         "arrays": {
-            "src0": src0.reshape(elems),
-            "src1": src1_buffer.reshape(elems),
-            "dst_init": f32_pattern(np, (elems,), seed=seed + 2, scale=0.25),
-            "expected": expected.reshape(elems),
+            "src0": src0_buffer.reshape(-1),
+            "src1": src1_buffer.reshape(-1),
+            "dst_init": dst_init.reshape(-1),
+            "expected": expected.reshape(-1),
         }
     }
 
@@ -1079,9 +1243,7 @@ check.benchmark<{case_name}> {bench_name}
 
 
 def _write_cont_workbench(candidate: Candidate, linked_source: Path, workbench_path: Path, fixture_dir: Path) -> tuple[str, dict[str, Any]]:
-    ncols = int(candidate.shape.get("ncols", candidate.shape.get("cols", 1)))
-    nrows = int(candidate.shape.get("nrows", candidate.shape.get("rows", 1)))
-    elems = ncols * nrows
+    elems = _element_count(candidate)
     case_name = f"@case_{candidate.id}"
     bench_name = f"@bench_{candidate.id}"
     suffix = f"""
@@ -1127,33 +1289,33 @@ def _write_abs_workbench(candidate: Candidate, linked_source: Path, workbench_pa
 
 
 def _write_pointwise_workbench(candidate: Candidate, linked_source: Path, workbench_path: Path, fixture_dir: Path) -> tuple[str, dict[str, Any]]:
-    ncols, nrows, elems = _dims(candidate)
+    src0_elems, src1_elems, dst_elems = _pointwise_buffer_lengths(candidate)
     case_name, bench_name = _case_names(candidate)
     lines = [
-        _read_f32(workbench_path, fixture_dir, "src0", elems),
-        _read_f32(workbench_path, fixture_dir, "dst_init", elems).replace("%dst_init", "%dst"),
-        _read_f32(workbench_path, fixture_dir, "expected", elems),
+        _read_f32(workbench_path, fixture_dir, "src0", src0_elems),
+        _read_f32(workbench_path, fixture_dir, "dst_init", dst_elems).replace("%dst_init", "%dst"),
+        _read_f32(workbench_path, fixture_dir, "expected", dst_elems),
     ]
     if candidate.family in {"add_f32", "mul_f32", "div_f32"}:
-        lines.insert(1, _read_f32(workbench_path, fixture_dir, "src1", elems))
+        lines.insert(1, _read_f32(workbench_path, fixture_dir, "src1", src1_elems))
         call_args = "%src0, %src1, %dst"
-        call_types = f"tensor<{elems}xf32>, tensor<{elems}xf32>, tensor<{elems}xf32>"
+        call_types = f"tensor<{src0_elems}xf32>, tensor<{src1_elems}xf32>, tensor<{dst_elems}xf32>"
     elif candidate.family == "scale_f32":
         lines.insert(0, "  %scale = check.literal value(0.625) : f32")
         lines.insert(1, "  %bias = check.literal value(-0.125) : f32")
         call_args = "%scale, %bias, %src0, %dst"
-        call_types = f"f32, f32, tensor<{elems}xf32>, tensor<{elems}xf32>"
+        call_types = f"f32, f32, tensor<{src0_elems}xf32>, tensor<{dst_elems}xf32>"
     elif candidate.family == "clamp_f32":
         lines.insert(0, "  %min = check.literal value(-0.45) : f32")
         lines.insert(1, "  %max = check.literal value(0.55) : f32")
         call_args = "%min, %max, %src0, %dst"
-        call_types = f"f32, f32, tensor<{elems}xf32>, tensor<{elems}xf32>"
+        call_types = f"f32, f32, tensor<{src0_elems}xf32>, tensor<{dst_elems}xf32>"
     else:
         return _logical_workbench(candidate, linked_source, workbench_path, fixture_dir)
     lines.extend(
         [
             f"  func.call {candidate.root_symbol}({call_args}) : ({call_types})",
-            f"  check.expect.close actual(%dst) expected(%expected) atol(0.00001) rtol(0.00001) nan(same) : tensor<{elems}xf32>",
+            f"  check.expect.close actual(%dst) expected(%expected) atol(0.00001) rtol(0.00001) nan(same) : tensor<{dst_elems}xf32>",
         ]
     )
     return _emit_case(linked_source, workbench_path, case_name, bench_name, "\n".join(lines))

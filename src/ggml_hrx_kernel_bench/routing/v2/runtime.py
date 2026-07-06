@@ -12,16 +12,13 @@ from ..models import ExecutedCase, RuntimeCaseRequest
 from .candidates import candidate_from_shape
 from .matching import materialize_route_tensors, route_accepts_tensors
 from .query import RouteCatalog, select_route
-from .shape import normalize_shape, validate_shape_aliases
 
 
 def shape_for_case(config: dict[str, Any], values: list[int]) -> dict[str, int]:
     params = list(config["params"])
     if len(params) != len(values):
         raise RuntimeError("params and case values must have the same length")
-    shape = normalize_shape(dict(zip(params, values, strict=True)))
-    validate_shape_aliases(shape, context="v2 contiguous pointwise routes")
-    return shape
+    return {str(name): int(value) for name, value in zip(params, values, strict=True)}
 
 
 def build_bench_config(

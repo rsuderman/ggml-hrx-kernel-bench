@@ -11,7 +11,6 @@ from ...import_models import (
 from .matching import route_accepts_dtype, route_accepts_tensors, shape_overrides_from_tensors
 from .models import ConcreteTensor, ConcreteTensorDimension, V2Route
 from .query import RouteCatalog, require_route_catalog, routes_for_op
-from .shape import normalize_shape
 
 POINTWISE_BASE_PERMUTATION = (0, 1, 2, 3)
 POINTWISE_SRC1_PERMUTATION = (1, 2, 0, 3)
@@ -106,13 +105,8 @@ def _permuted_dimensions_from_extents(
     return _dimensions_from_extents_and_strides(extents, logical_strides)
 
 
-def _fallback_shape_from_extents(extents: list[int]) -> dict[str, int]:
-    return normalize_shape(
-        {
-            "ncols": int(extents[0]),
-            "nrows": int(extents[1]) * int(extents[2]) * int(extents[3]),
-        }
-    )
+def _shape_from_extents(extents: list[int]) -> dict[str, int]:
+    return {f"d{index}": int(extent) for index, extent in enumerate(extents)}
 
 
 def lower_contiguous_pointwise_shape(case: ImportedCase) -> dict[str, int]:
@@ -123,7 +117,7 @@ def lower_contiguous_pointwise_shape(case: ImportedCase) -> dict[str, int]:
         raise ValueError("contiguous pointwise routing requires perm1=[0, 1, 2, 3]")
     if any(int(value) != 1 for value in nr):
         raise ValueError("contiguous pointwise routing requires same-shape inputs")
-    return _fallback_shape_from_extents(ne)
+    return _shape_from_extents(ne)
 
 
 def lower_contiguous_pointwise_tensors(
@@ -169,7 +163,7 @@ def lower_generic_pointwise_tensors(
             permutation=POINTWISE_BASE_PERMUTATION,
         ),
     }
-    return tensors, _fallback_shape_from_extents(dst_extents)
+    return tensors, _shape_from_extents(dst_extents)
 
 
 def _parse_unary_parameters(case: ImportedCase) -> tuple[list[int], int]:
@@ -217,43 +211,14 @@ def lower_tensors_for_route(
 def shape_for_resolved_route(route: V2Route, tensors: dict[str, ConcreteTensor], fallback_shape: dict[str, int]) -> dict[str, int]:
     if not route.tensors:
         return fallback_shape
-    ranked_capture = next(
-        (
-            descriptor.dimensions_capture
-            for descriptor in route.tensors.values()
-            for check in route.constraints.checks
-            if check.name == descriptor.dimensions_capture and check.length is not None
-        ),
-        None,
-    )
-    rank = next(
-        (
-            int(check.length)
-            for check in route.constraints.checks
-            if check.name == ranked_capture and check.length is not None
-        ),
-        None,
-    )
-    if rank is None:
-        return fallback_shape
-    if rank == 4:
-        tensor_name = "dst" if "dst" in tensors else next(iter(route.tensors))
-        first_tensor = tensors[tensor_name]
-        return {
+    tensor_name = "dst" if "dst" in tensors else next(iter(route.tensors))
+    return {
+        **{
             dimension.name: int(dimension.size)
-            for dimension in first_tensor.dimensions
-        }
-    if rank == 2:
-        return {
-            **{
-                dimension.name: int(dimension.size)
-                for dimension in tensors["dst" if "dst" in tensors else next(iter(route.tensors))].dimensions
-            },
-            **shape_overrides_from_tensors(tensors),
-        }
-    raise ValueError(
-        f"v2 route {route.id!r} resolved unsupported rank {rank!r} for capture {ranked_capture!r}"
-    )
+            for dimension in tensors[tensor_name].dimensions
+        },
+        **shape_overrides_from_tensors(tensors),
+    }
 
 
 def resolve_route_for_case(

@@ -419,3 +419,30 @@ def test_materialize_rank2_tensors_models_explicit_row_stride_hints() -> None:
     assert tuple(dimension.stride for dimension in tensors["src0"].dimensions) == (1, 20)
     assert tuple(dimension.size for dimension in tensors["src1"].dimensions) == (10, 60)
     assert tuple(dimension.stride for dimension in tensors["src1"].dimensions) == (1, 10)
+
+
+def test_materialize_rankless_route_preserves_all_ranked_dimensions() -> None:
+    route = V2Route(
+        id="add_f32_contiguous_1d",
+        family="add_f32",
+        op="ADD",
+        source_id="add_f32",
+        kernel_path="add/contiguous_1d.loom",
+        root_symbol="@hrx2_add_f32_contiguous_1d",
+        export_name="hrx2_add_f32_contiguous_1d",
+        tensors={
+            "src0": TensorDescriptor(dtype="F32", dimensions_capture="src0_dimensions", strides_capture="src0_strides"),
+            "src1": TensorDescriptor(dtype="F32", dimensions_capture="src1_dimensions", strides_capture="src1_strides"),
+            "dst": TensorDescriptor(dtype="F32", dimensions_capture="dst_dimensions", strides_capture="dst_strides"),
+        },
+        values=(),
+        constraints=RouteConstraints(checks=()),
+        launch={"workgroup_size": [256, 1, 1]},
+        bindings=(),
+    )
+
+    tensors = materialize_route_tensors(route, {"d0": 16, "d1": 64, "d2": 1, "d3": 1})
+
+    assert tuple(dimension.name for dimension in tensors["dst"].dimensions) == ("d0", "d1", "d2", "d3")
+    assert tuple(dimension.size for dimension in tensors["dst"].dimensions) == (16, 64, 1, 1)
+    assert tuple(dimension.stride for dimension in tensors["dst"].dimensions) == (1, 16, 1024, 1024)

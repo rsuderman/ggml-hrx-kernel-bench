@@ -215,7 +215,7 @@ def test_v2_router_returns_contiguous_add_candidate(tmp_path: Path) -> None:
     assert contiguous.family == "add_f32"
     assert contiguous.route_id == "add_f32_contiguous_1d"
     assert contiguous.root_symbol == "@hrx2_add_f32_contiguous_1d"
-    assert contiguous.shape == {"ncols": 256, "nrows": 1, "cols": 256, "rows": 1}
+    assert contiguous.shape == {"d0": 256, "d1": 1}
     assert generic.route_id == "add_f32_generic_4d"
     assert generic.root_symbol == "@hrx2_add_f32_generic_4d"
     assert generic.shape == {"d0": 1, "d1": 1, "d2": 1, "d3": 1}
@@ -377,8 +377,8 @@ def test_v2_router_lowers_permuted_rhs_add_case(tmp_path: Path) -> None:
 
     assert len(resolved.resolved) == 1
     assert resolved.resolved[0].route_id == "add_f32_generic_4d"
-    assert resolved.resolved[0].params == ["d0", "d1", "d2", "d3"]
-    assert resolved.resolved[0].values == [10, 5, 4, 3]
+    assert resolved.resolved[0].params == ["d0", "d1", "d2", "d3", "src1_d0_stride", "src1_d1_stride", "src1_d2_stride"]
+    assert resolved.resolved[0].values == [10, 5, 4, 3, 20, 1, 5]
     assert resolved.unmapped == []
 
 
@@ -443,14 +443,14 @@ def test_v2_router_maps_contiguous_and_generic_add_cases(tmp_path: Path) -> None
     assert len(resolved.resolved) == 3
     assert resolved.resolved[0].kernel_family == "add_f32"
     assert resolved.resolved[0].route_id == "add_f32_contiguous_1d"
-    assert resolved.resolved[0].params == ["ncols", "nrows", "cols", "rows"]
-    assert resolved.resolved[0].values == [16, 64, 16, 64]
+    assert resolved.resolved[0].params == ["d0", "d1", "d2", "d3"]
+    assert resolved.resolved[0].values == [16, 64, 1, 1]
     assert resolved.resolved[1].route_id == "add_f32_generic_4d"
-    assert resolved.resolved[1].params == ["d0", "d1", "d2", "d3"]
-    assert resolved.resolved[1].values == [10, 5, 1, 2]
+    assert resolved.resolved[1].params == ["d0", "d1", "d2", "d3", "src1_d3"]
+    assert resolved.resolved[1].values == [10, 5, 1, 2, 1]
     assert resolved.resolved[2].route_id == "add_f32_generic_4d"
-    assert resolved.resolved[2].params == ["d0", "d1", "d2", "d3"]
-    assert resolved.resolved[2].values == [10, 5, 4, 3]
+    assert resolved.resolved[2].params == ["d0", "d1", "d2", "d3", "src1_d0_stride", "src1_d1_stride", "src1_d2_stride"]
+    assert resolved.resolved[2].values == [10, 5, 4, 3, 20, 1, 5]
     assert resolved.unmapped == []
 
 
@@ -464,8 +464,8 @@ def test_v2_router_executes_matching_case(tmp_path: Path, monkeypatch) -> None:
     config = {
         "kernel": "add_f32",
         "route_id": "add_f32_contiguous_1d",
-        "params": ["ncols", "nrows", "cols", "rows"],
-        "cases": [[16, 64, 16, 64]],
+        "params": ["d0", "d1", "d2", "d3"],
+        "cases": [[16, 64, 1, 1]],
     }
 
     def fake_run_candidate_row(args, bench_config, candidate, *, sanitizer):
@@ -495,8 +495,8 @@ def test_v2_router_executes_matching_case(tmp_path: Path, monkeypatch) -> None:
             kernel_dir=kernel_dir,
             routing_dir=routing_dir,
             config_data=config,
-            current_case_id="ncols16_nrows64_cols16_rows64",
-            current_case_values=[16, 64, 16, 64],
+            current_case_id="d016_d164_d21_d31",
+            current_case_values=[16, 64, 1, 1],
             tool_dir=None,
             target="gfx1100",
             rocm_path=None,
@@ -512,4 +512,4 @@ def test_v2_router_executes_matching_case(tmp_path: Path, monkeypatch) -> None:
 
     assert result["status"] == "ran"
     assert result["correctness_ok"] is True
-    assert result["shape"] == {"ncols": 16, "nrows": 64, "cols": 16, "rows": 64}
+    assert result["shape"] == {"d0": 16, "d1": 64, "d2": 1, "d3": 1}
