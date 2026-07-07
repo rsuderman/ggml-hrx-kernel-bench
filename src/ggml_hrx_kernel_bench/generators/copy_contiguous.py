@@ -11,6 +11,25 @@ KERNEL_PREAMBLE = (
     "config.decl @hrx2.shape.copy.n : %value: index where [range(%value, 1, 1073741824)]\n"
     "config.decl @hrx2.tuning.copy.workgroup_size : %value: index where [range(%value, 32, 1024), mul(%value, 32)]\n"
 )
+LOAD_WRITE_TEMPLATE = Template(
+    "    %value = view.load %src0_view[%linear] : view<1073741824x$src_type, #dense> -> $src_type\n"
+    "    view.store %value, %dst_view[%linear] : $dst_type, view<1073741824x$dst_type, #dense>"
+)
+LOAD_VALUE_TEMPLATE = Template(
+    "    %value_$src_type = view.load %src0_view[%linear] : view<1073741824x$src_type, #dense> -> $src_type"
+)
+LOAD_F32_VALUE_TEMPLATE = Template(
+    "    %value_f32 = view.load %src0_view[%linear] : view<1073741824x$src_type, #dense> -> $src_type"
+)
+EXTEND_TO_F32_TEMPLATE = Template(
+    "    %value_f32 = scalar.extf %value_$src_type : $src_type to f32"
+)
+TRUNCATE_FROM_F32_TEMPLATE = Template(
+    "    %value = scalar.fptrunc %value_f32 : f32 to $dst_type"
+)
+STORE_VALUE_TEMPLATE = Template(
+    "    view.store $value_name, %dst_view[%linear] : $dst_type, view<1073741824x$dst_type, #dense>"
+)
 
 
 @dataclass(frozen=True)
@@ -52,15 +71,13 @@ class CopyKernelVariant:
             return None
         if self.src.loom_type == self.dst.loom_type:
             return "identity"
-        if self.src.domain == "float":
-            if self.src.precision_rank < self.dst.precision_rank:
-                return "extend"
-            if self.src.precision_rank > self.dst.precision_rank:
-                return "truncate"
+        if self.src.domain == "float" and self.dst.domain == "float":
+            return "cast_via_f32"
         return None
 
 
 SCALAR_DTYPES: tuple[ScalarDType, ...] = (
+    ScalarDType(name="bf16", route_dtype="BF16", loom_type="bf16", domain="float", precision_rank=16),
     ScalarDType(name="f16", route_dtype="F16", loom_type="f16", domain="float", precision_rank=16),
     ScalarDType(name="f32", route_dtype="F32", loom_type="f32", domain="float", precision_rank=32),
 )
@@ -84,16 +101,19 @@ def _kernel_body(variant: CopyKernelVariant) -> str:
     if conversion is None:
         raise ValueError(f"unsupported contiguous copy conversion: {variant.src.name} -> {variant.dst.name}")
     if conversion == "identity":
-        compute = f"""    %value = view.load %src0_view[%linear] : view<1073741824x{src_type}, #dense> -> {src_type}
-    view.store %value, %dst_view[%linear] : {dst_type}, view<1073741824x{dst_type}, #dense>"""
-    elif conversion == "extend":
-        compute = f"""    %value_{src_type} = view.load %src0_view[%linear] : view<1073741824x{src_type}, #dense> -> {src_type}
-    %value = scalar.extf %value_{src_type} : {src_type} to {dst_type}
-    view.store %value, %dst_view[%linear] : {dst_type}, view<1073741824x{dst_type}, #dense>"""
-    elif conversion == "truncate":
-        compute = f"""    %value = view.load %src0_view[%linear] : view<1073741824x{src_type}, #dense> -> {src_type}
-    %half = scalar.fptrunc %value : {src_type} to {dst_type}
-    view.store %half, %dst_view[%linear] : {dst_type}, view<1073741824x{dst_type}, #dense>"""
+        compute = LOAD_WRITE_TEMPLATE.substitute(src_type=src_type, dst_type=dst_type)
+    elif conversion == "cast_via_f32":
+        if src_type == "f32":
+            compute_lines = [LOAD_F32_VALUE_TEMPLATE.substitute(src_type=src_type)]
+        else:
+            compute_lines = [LOAD_VALUE_TEMPLATE.substitute(src_type=src_type)]
+            compute_lines.append(EXTEND_TO_F32_TEMPLATE.substitute(src_type=src_type))
+        if dst_type == "f32":
+            compute_lines.append(STORE_VALUE_TEMPLATE.substitute(value_name="%value_f32", dst_type=dst_type))
+        else:
+            compute_lines.append(TRUNCATE_FROM_F32_TEMPLATE.substitute(dst_type=dst_type))
+            compute_lines.append(STORE_VALUE_TEMPLATE.substitute(value_name="%value", dst_type=dst_type))
+        compute = "\n".join(compute_lines)
     else:
         raise AssertionError(f"unexpected conversion kind: {conversion}")
     return _load_kernel_template().substitute(
@@ -191,3 +211,17 @@ def render_catalog_artifacts() -> dict[Path, str]:
     for variant in supported_variants():
         artifacts[variant.route_path.relative_to(Path("catalog") / "v2")] = render_route_json(variant)
     return artifacts
+
+
+def generated_catalog_route_paths() -> tuple[str, ...]:
+    return tuple(relative_path.as_posix() for relative_path in render_catalog_artifacts())
+
+
+def write_catalog_artifacts(catalog_root: Path) -> tuple[Path, ...]:
+    written_paths: list[Path] = []
+    for relative_path, contents in render_catalog_artifacts().items():
+        path = catalog_root / relative_path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(contents, encoding="utf-8")
+        written_paths.append(path)
+    return tuple(written_paths)

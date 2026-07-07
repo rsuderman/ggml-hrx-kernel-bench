@@ -1,9 +1,14 @@
 from __future__ import annotations
 
+import json
 import shutil
 from pathlib import Path
 
-from .generators.copy_contiguous import render_catalog_artifacts, render_kernel_artifacts
+from .generators.copy_contiguous import (
+    generated_catalog_route_paths,
+    render_catalog_artifacts,
+    render_kernel_artifacts,
+)
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -34,6 +39,10 @@ def _generated_kernel_paths() -> tuple[Path, ...]:
 
 def _generated_catalog_paths() -> tuple[Path, ...]:
     return tuple(Path("catalog") / "v2" / relative_path for relative_path in render_catalog_artifacts())
+
+
+def _v2_router_path(output_root: Path) -> Path:
+    return output_root / "catalog" / "v2" / "router.json"
 
 
 def _materialization_inputs() -> list[Path]:
@@ -106,8 +115,22 @@ def materialize_asset_root(output_root: Path, *, force: bool = False) -> Path:
         destination_path.parent.mkdir(parents=True, exist_ok=True)
         destination_path.write_text(contents, encoding="utf-8")
 
+    _write_materialized_v2_router(destination_root)
     _asset_stamp_path(destination_root).write_text("materialized\n", encoding="utf-8")
     return destination_root
+
+
+def _write_materialized_v2_router(destination_root: Path) -> None:
+    router_path = _v2_router_path(destination_root)
+    payload = json.loads(router_path.read_text(encoding="utf-8"))
+    routes = payload.get("routes")
+    if not isinstance(routes, dict):
+        raise RuntimeError(f"invalid v2 router payload at {router_path}")
+    handwritten_copy_routes = routes.get("CPY")
+    if not isinstance(handwritten_copy_routes, list):
+        raise RuntimeError(f"invalid CPY route list at {router_path}")
+    routes["CPY"] = list(generated_catalog_route_paths()) + list(handwritten_copy_routes)
+    router_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 
 
 def version_dir_name(version: str) -> str:

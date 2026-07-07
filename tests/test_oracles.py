@@ -95,8 +95,13 @@ def test_add_oracle_and_workbench_support_ranked_src1_overrides(tmp_path: Path) 
 @pytest.mark.parametrize(
     ("family", "op", "root_symbol", "export_name", "src_dtype", "dst_dtype"),
     (
+        ("copy_bf16_bf16", "CPY", "@copy_bf16_bf16_contiguous_1d", "copy_bf16_bf16_contiguous_1d", np.int16, np.int16),
+        ("copy_bf16_f16", "CPY", "@copy_bf16_f16_contiguous_1d", "copy_bf16_f16_contiguous_1d", np.int16, np.int16),
+        ("copy_bf16_f32", "CPY", "@copy_bf16_f32_contiguous_1d", "copy_bf16_f32_contiguous_1d", np.int16, np.float32),
+        ("copy_f16_bf16", "CPY", "@copy_f16_bf16_contiguous_1d", "copy_f16_bf16_contiguous_1d", np.int16, np.int16),
         ("copy_f16_f16", "CPY", "@hrx2_copy_f16_f16_contiguous_1d", "hrx2_copy_f16_f16_contiguous_1d", np.int16, np.int16),
         ("copy_f16_f32", "CPY", "@hrx2_copy_f16_f32_contiguous_1d", "hrx2_copy_f16_f32_contiguous_1d", np.int16, np.float32),
+        ("copy_f32_bf16", "CPY", "@copy_f32_bf16_contiguous_1d", "copy_f32_bf16_contiguous_1d", np.float32, np.int16),
         ("copy_f32_f16", "CPY", "@hrx2_copy_f32_f16_contiguous_1d", "hrx2_copy_f32_f16_contiguous_1d", np.float32, np.int16),
         ("copy_f32_f32", "CPY", "@hrx2_copy_f32_f32_contiguous_1d", "hrx2_copy_f32_f32_contiguous_1d", np.float32, np.float32),
     ),

@@ -13,12 +13,14 @@ function(add_materialized_asset_target)
   endif()
 
   file(GLOB_RECURSE ggml_hrx_exact_kernel_sources
+    CONFIGURE_DEPENDS
     RELATIVE ${CMAKE_SOURCE_DIR}
     ${CMAKE_SOURCE_DIR}/kernels/hrx2/*.loom
     ${CMAKE_SOURCE_DIR}/kernels/v2/*.loom
   )
   list(TRANSFORM ggml_hrx_exact_kernel_sources PREPEND ${CMAKE_SOURCE_DIR}/)
   file(GLOB_RECURSE ggml_hrx_route_sources
+    CONFIGURE_DEPENDS
     RELATIVE ${CMAKE_SOURCE_DIR}
     ${CMAKE_SOURCE_DIR}/catalog/hrx2/*.json
     ${CMAKE_SOURCE_DIR}/catalog/v2/*.json
