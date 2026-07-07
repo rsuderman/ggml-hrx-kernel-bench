@@ -14,7 +14,7 @@ def main() -> int:
     parser.add_argument("tool_name", choices=REQUIRED_TOOL_NAMES)
     parser.add_argument(
         "--tool-dir",
-        help="optional directory containing loom-link, loom-compile, and iree-benchmark-loom",
+        help="optional PATH-style search list containing loom-link, loom-compile, iree-test-loom, and iree-benchmark-loom",
     )
     args = parser.parse_args()
     path = require_tool(args.tool_name, tool_dir=args.tool_dir)

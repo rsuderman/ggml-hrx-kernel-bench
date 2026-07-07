@@ -53,6 +53,10 @@ def _validate_generated_kernel_tests(path: Path, generated_config_paths: list[st
     _expect(isinstance(entries, list), "generated kernel test entries must be a list")
     manifest_paths = [str(entry.get("config_path")) for entry in entries]
     _expect(
+        len(set(manifest_paths)) == len(manifest_paths),
+        "generated-kernel-tests.json contains duplicate config paths",
+    )
+    _expect(
         sorted(manifest_paths) == sorted(str(Path(raw_path)) for raw_path in generated_config_paths),
         "generated-kernel-tests.json does not match generated config paths",
     )
@@ -71,6 +75,10 @@ def _validate_bundle_artifacts(payload: dict) -> None:
 
     generated_config_paths = payload.get("generated_config_paths", [])
     _expect(isinstance(generated_config_paths, list), "generated_config_paths must be a list")
+    _expect(
+        len(set(str(Path(raw_path)) for raw_path in generated_config_paths)) == len(generated_config_paths),
+        "generated_config_paths contains duplicates",
+    )
     mapped_case_count = int(payload.get("mapped_case_count", 0))
     if mapped_case_count > 0:
         _expect(generated_config_paths, "expected generated configs for mapped cases")
@@ -89,7 +97,10 @@ def main() -> int:
     parser.add_argument("yaml_path")
     parser.add_argument("output_dir")
     parser.add_argument("--expected-coverage", required=True)
-    parser.add_argument("--tool-dir", help="optional directory containing loom-link, loom-compile, and iree-benchmark-loom")
+    parser.add_argument(
+        "--tool-dir",
+        help="optional PATH-style search list containing loom-link, loom-compile, iree-test-loom, and iree-benchmark-loom",
+    )
     parser.add_argument("--split-by-op", action="store_true")
     parser.add_argument(
         "--routing-version",

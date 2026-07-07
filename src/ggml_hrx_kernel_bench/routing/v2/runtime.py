@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from ...cli import run_candidate_row
+from ...cli import run_candidate_test_row
 from ...config import BenchConfig, ToolPaths
 from ...reporting import correctness_ok
 from ..models import ExecutedCase, RuntimeCaseRequest
@@ -32,7 +32,7 @@ def build_bench_config(
         target=target,
         tools=ToolPaths(
             loom_link=Path(require_tool("loom-link", tool_dir=tool_dir)),
-            iree_benchmark_loom=Path(require_tool("iree-benchmark-loom", tool_dir=tool_dir)),
+            iree_test_loom=Path(require_tool("iree-test-loom", tool_dir=tool_dir)),
         ),
         rocm_path=Path(rocm_path).resolve() if rocm_path else None,
     )
@@ -88,8 +88,8 @@ def execute_case(request: RuntimeCaseRequest, *, catalog: RouteCatalog, kernel_d
         warmup_iterations=request.warmup_iterations,
         max_batches=request.max_batches,
     )
-    row = run_candidate_row(run_args, bench_config, candidate, sanitizer="none")
-    summary = (row.get("benchmark") or {}).get("summary") or {}
+    row = run_candidate_test_row(run_args, bench_config, candidate, sanitizer="none")
+    summary = (row.get("test") or {}).get("summary") or {}
     return ExecutedCase(
         candidate=candidate,
         row=row,
@@ -101,7 +101,7 @@ def execute_case(request: RuntimeCaseRequest, *, catalog: RouteCatalog, kernel_d
 
 
 def case_result(execution: ExecutedCase) -> dict[str, object]:
-    benchmark = execution.row.get("benchmark") or {}
+    test = execution.row.get("test") or {}
     return {
         "case_id": execution.current_case_id,
         "values": list(execution.current_case_values),
@@ -118,7 +118,9 @@ def case_result(execution: ExecutedCase) -> dict[str, object]:
             "physical_dispatches_per_logical_operation"
         ),
         "failure": execution.summary.get("failure"),
-        "results_path": benchmark.get("results_path"),
-        "artifact_bundle_dir": benchmark.get("artifact_bundle_dir"),
+        "results_path": test.get("results_path"),
+        "stderr_path": test.get("stderr_path"),
+        "stdout_path": test.get("stdout_path"),
+        "artifact_bundle_dir": None,
         "output_dir": str(execution.output_dir),
     }

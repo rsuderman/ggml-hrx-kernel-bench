@@ -240,7 +240,7 @@ def is_issue(row: dict[str, Any]) -> bool:
     status = str(row.get("status", "unknown"))
     if status not in SUCCESS_STATUSES:
         return True
-    for key in ("link", "compile", "benchmark"):
+    for key in ("link", "compile", "benchmark", "test"):
         evidence = row.get(key)
         if isinstance(evidence, dict) and evidence.get("returncode") not in (None, 0):
             return True
@@ -287,11 +287,14 @@ def candidate_dispatch(row: dict[str, Any] | None) -> Any:
 
 
 def benchmark_summary(row: dict[str, Any]) -> dict[str, Any]:
-    benchmark = row.get("benchmark")
-    if not isinstance(benchmark, dict):
-        return {}
-    summary = benchmark.get("summary")
-    return summary if isinstance(summary, dict) else {}
+    for key in ("benchmark", "test"):
+        payload = row.get(key)
+        if not isinstance(payload, dict):
+            continue
+        summary = payload.get("summary")
+        if isinstance(summary, dict):
+            return summary
+    return {}
 
 
 def compile_summary(row: dict[str, Any]) -> dict[str, Any]:
@@ -352,7 +355,7 @@ def issue_message(row: dict[str, Any]) -> str:
     summary = benchmark_summary(row)
     if summary.get("failure"):
         return short_json(summary["failure"], limit=180)
-    for key in ("benchmark", "compile", "link"):
+    for key in ("test", "benchmark", "compile", "link"):
         evidence = row.get(key)
         if isinstance(evidence, dict) and evidence.get("stderr_path"):
             return str(evidence["stderr_path"])
@@ -360,7 +363,7 @@ def issue_message(row: dict[str, Any]) -> str:
 
 
 def evidence_link(row: dict[str, Any]) -> str:
-    for key in ("benchmark", "compile", "link"):
+    for key in ("test", "benchmark", "compile", "link"):
         evidence = row.get(key)
         if isinstance(evidence, dict):
             path = evidence.get("stderr_path") or evidence.get("stdout_path")

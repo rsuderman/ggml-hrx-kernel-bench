@@ -27,7 +27,7 @@ def main() -> int:
     )
     parser.add_argument(
         "--tool-dir",
-        help="optional directory containing loom-link, loom-compile, and iree-benchmark-loom",
+        help="optional PATH-style search list containing loom-link, loom-compile, iree-test-loom, and iree-benchmark-loom",
     )
     parser.add_argument(
         "--routing-version",

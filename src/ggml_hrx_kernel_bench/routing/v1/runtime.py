@@ -4,7 +4,7 @@ import argparse
 from pathlib import Path
 from typing import Any
 
-from ...cli import run_candidate_row
+from ...cli import run_candidate_test_row
 from ...config import BenchConfig, ToolPaths
 from .family_specs import normalize_shape
 from ...kernel_test_config import expect
@@ -107,9 +107,7 @@ def build_bench_config(
         target=target,
         tools=ToolPaths(
             loom_link=Path(require_tool("loom-link", tool_dir=tool_dir)),
-            iree_benchmark_loom=Path(
-                require_tool("iree-benchmark-loom", tool_dir=tool_dir)
-            ),
+            iree_test_loom=Path(require_tool("iree-test-loom", tool_dir=tool_dir)),
         ),
         rocm_path=Path(rocm_path).resolve() if rocm_path else None,
     )
@@ -175,8 +173,8 @@ def execute_case(
         warmup_iterations=warmup_iterations,
         max_batches=max_batches,
     )
-    row = run_candidate_row(run_args, bench_config, candidate, sanitizer="none")
-    summary = (row.get("benchmark") or {}).get("summary") or {}
+    row = run_candidate_test_row(run_args, bench_config, candidate, sanitizer="none")
+    summary = (row.get("test") or {}).get("summary") or {}
     return candidate, row, summary
 
 
@@ -189,7 +187,7 @@ def case_result(
     summary: dict[str, Any],
     output_dir: Path,
 ) -> dict[str, Any]:
-    benchmark = row.get("benchmark") or {}
+    test = row.get("test") or {}
     return {
         "case_id": current_case_id,
         "values": list(current_case_values),
@@ -206,7 +204,9 @@ def case_result(
             "physical_dispatches_per_logical_operation"
         ),
         "failure": summary.get("failure"),
-        "results_path": benchmark.get("results_path"),
-        "artifact_bundle_dir": benchmark.get("artifact_bundle_dir"),
+        "results_path": test.get("results_path"),
+        "stderr_path": test.get("stderr_path"),
+        "stdout_path": test.get("stdout_path"),
+        "artifact_bundle_dir": None,
         "output_dir": str(output_dir),
     }

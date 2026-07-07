@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from collections import Counter, defaultdict
 from pathlib import Path
@@ -48,6 +49,26 @@ def _safe_name(name: str) -> str:
     return "".join(
         char if char.isalnum() or char in ("-", "_") else "_" for char in name
     )
+
+
+def _params_signature(params_key: tuple[str, ...]) -> str:
+    payload = json.dumps(list(params_key), separators=(",", ":"))
+    return hashlib.sha1(payload.encode("utf-8")).hexdigest()[:12]
+
+
+def _config_filename(
+    kernel_family: str,
+    route_id: str | None,
+    params_key: tuple[str, ...],
+    *,
+    require_params_suffix: bool,
+) -> str:
+    parts = [_safe_name(kernel_family)]
+    if route_id:
+        parts.append(_safe_name(route_id))
+    if require_params_suffix:
+        parts.append(_params_signature(params_key))
+    return ".".join(parts) + ".json"
 
 
 def load_grouped_yaml_suite(path: Path) -> ImportedSuite:
@@ -137,8 +158,10 @@ def emit_compact_configs(suite: ImportedSuite, output_dir: Path) -> list[Path]:
     grouped: dict[tuple[str, str | None, tuple[str, ...]], list[ResolvedBenchmarkCase]] = defaultdict(list)
     for row in suite.resolved:
         grouped[(row.kernel_family, row.route_id, tuple(row.params))].append(row)
+    base_key_counts = Counter((kernel_family, route_id) for kernel_family, route_id, _ in grouped)
 
     emitted: list[Path] = []
+    seen_paths: set[Path] = set()
     for (kernel_family, route_id, params_key), rows in sorted(
         grouped.items(),
         key=lambda item: (item[0][0], item[0][1] or "", item[0][2]),
@@ -158,10 +181,15 @@ def emit_compact_configs(suite: ImportedSuite, output_dir: Path) -> list[Path]:
         }
         if route_id:
             payload["route_id"] = route_id
-        filename = (
-            f"{kernel_family}.{route_id}.json" if route_id else f"{kernel_family}.json"
+        filename = _config_filename(
+            kernel_family,
+            route_id,
+            params_key,
+            require_params_suffix=base_key_counts[(kernel_family, route_id)] > 1,
         )
         path = output_dir / filename
+        _expect(path not in seen_paths, f"generated config path collision for {path}")
+        seen_paths.add(path)
         path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
         emitted.append(path)
     return emitted

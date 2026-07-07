@@ -10,6 +10,14 @@ is:
 
 Use that workflow unless the user explicitly asks for a different process.
 
+## Materialized Markdown Outputs
+
+- Do not store newly materialized markdown outputs under this repository's
+  `docs/` tree unless the user explicitly asks for an in-repo document.
+- Repository `docs/` files remain the source for standing workflow and design
+  references. Materialized run outputs belong in the Codex workspace folder
+  above.
+
 ## Required Starting Point
 
 - Start from `build/tests/kernels/artifacts/grouped-yaml-import/import-coverage.json`.

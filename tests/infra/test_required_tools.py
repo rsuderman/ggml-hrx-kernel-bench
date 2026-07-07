@@ -17,6 +17,9 @@ class RequiredToolAvailabilityTest(unittest.TestCase):
     def test_loom_compile_available(self) -> None:
         self.assertTrue(require_tool("loom-compile"))
 
+    def test_iree_test_loom_available(self) -> None:
+        self.assertTrue(require_tool("iree-test-loom"))
+
     def test_iree_benchmark_loom_available(self) -> None:
         self.assertTrue(require_tool("iree-benchmark-loom"))
 
@@ -27,6 +30,18 @@ class RequiredToolAvailabilityTest(unittest.TestCase):
                 handle.write("#!/bin/sh\n")
             with mock.patch.dict(os.environ, {"GGML_HRX_TOOL_DIR": tmpdir}, clear=False):
                 self.assertEqual(require_tool("loom-link"), tool_path)
+
+    def test_env_tool_dir_path_list_is_used_in_order(self) -> None:
+        with tempfile.TemporaryDirectory() as first_tmpdir, tempfile.TemporaryDirectory() as second_tmpdir:
+            tool_path = os.path.join(second_tmpdir, "iree-test-loom")
+            with open(tool_path, "w", encoding="utf-8") as handle:
+                handle.write("#!/bin/sh\n")
+            with mock.patch.dict(
+                os.environ,
+                {"GGML_HRX_TOOL_DIR": os.pathsep.join((first_tmpdir, second_tmpdir))},
+                clear=False,
+            ):
+                self.assertEqual(require_tool("iree-test-loom"), tool_path)
 
     def test_configured_tool_dir_does_not_fall_back_to_path(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

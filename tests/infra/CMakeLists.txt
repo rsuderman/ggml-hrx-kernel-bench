@@ -1,5 +1,6 @@
 add_required_tool_test(loom-link)
 add_required_tool_test(loom-compile)
+add_required_tool_test(iree-test-loom)
 add_required_tool_test(iree-benchmark-loom)
 
 add_grouped_yaml_import_validation_target(

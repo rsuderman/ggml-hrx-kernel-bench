@@ -9,6 +9,7 @@ from pathlib import Path
 class ToolPaths:
     loom_link: Path | None = None
     loom_compile: Path | None = None
+    iree_test_loom: Path | None = None
     iree_benchmark_loom: Path | None = None
 
     def require_loom_link(self) -> Path:
@@ -16,6 +17,9 @@ class ToolPaths:
 
     def require_loom_compile(self) -> Path:
         return _require_path(self.loom_compile, "loom-compile")
+
+    def require_iree_test_loom(self) -> Path:
+        return _require_path(self.iree_test_loom, "iree-test-loom")
 
     def require_iree_benchmark_loom(self) -> Path:
         return _require_path(self.iree_benchmark_loom, "iree-benchmark-loom")

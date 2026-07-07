@@ -763,7 +763,7 @@ def test_v2_router_executes_matching_case(tmp_path: Path, monkeypatch) -> None:
         "cases": [[16, 64, 1, 1]],
     }
 
-    def fake_run_candidate_row(args, bench_config, candidate, *, sanitizer):
+    def fake_run_candidate_test_row(args, bench_config, candidate, *, sanitizer):
         assert sanitizer == "none"
         assert candidate.source_path == kernel_dir / "add" / "contiguous_1d.loom"
         assert candidate.root_symbol == "@hrx2_add_f32_contiguous_1d"
@@ -773,7 +773,7 @@ def test_v2_router_executes_matching_case(tmp_path: Path, monkeypatch) -> None:
         }
         return {
             "status": "ran",
-            "benchmark": {
+            "test": {
                 "summary": {
                     "correctness": {"state": "ok"},
                     "operation_timing_ns": {"mean": 1.0},
@@ -782,8 +782,8 @@ def test_v2_router_executes_matching_case(tmp_path: Path, monkeypatch) -> None:
         }
 
     monkeypatch.setattr(
-        "ggml_hrx_kernel_bench.routing.v2.runtime.run_candidate_row",
-        fake_run_candidate_row,
+        "ggml_hrx_kernel_bench.routing.v2.runtime.run_candidate_test_row",
+        fake_run_candidate_test_row,
     )
     execution = router.execute_case(
         RuntimeCaseRequest(

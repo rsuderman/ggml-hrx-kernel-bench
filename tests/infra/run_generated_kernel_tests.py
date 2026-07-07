@@ -23,14 +23,13 @@ def _safe_name(value: str) -> str:
 def _runtime_environment_blocked(result: dict) -> bool:
     if result.get("status") != "run_failed":
         return False
-    results_path = result.get("results_path")
-    if not isinstance(results_path, str) or not results_path:
+    stderr_path = result.get("stderr_path")
+    if not isinstance(stderr_path, str) or not stderr_path:
         return False
-    run_dir = Path(results_path).resolve().parent
-    stderr_path = run_dir / "benchmark.stderr.txt"
-    if not stderr_path.is_file():
+    stderr_file = Path(stderr_path).resolve()
+    if not stderr_file.is_file():
         return False
-    stderr = stderr_path.read_text(encoding="utf-8", errors="replace")
+    stderr = stderr_file.read_text(encoding="utf-8", errors="replace")
     markers = (
         "HSA_STATUS_ERROR_OUT_OF_RESOURCES",
         "creating driver for device 'amdgpu'",
@@ -124,7 +123,10 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Run generated kernel tests listed in a manifest.")
     parser.add_argument("manifest_path")
     parser.add_argument("--case-selector", default="0")
-    parser.add_argument("--tool-dir", help="optional directory containing loom-link and iree-benchmark-loom")
+    parser.add_argument(
+        "--tool-dir",
+        help="optional PATH-style search list containing loom-link and iree-test-loom",
+    )
     parser.add_argument("--output-dir", required=True)
     parser.add_argument("--target", default="gfx1100")
     parser.add_argument("--rocm-path")

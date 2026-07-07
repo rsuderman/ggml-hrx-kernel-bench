@@ -49,7 +49,7 @@ def main() -> int:
     parser.add_argument("case_selector")
     parser.add_argument(
         "--tool-dir",
-        help="optional directory containing loom-link and iree-benchmark-loom",
+        help="optional PATH-style search list containing loom-link and iree-test-loom",
     )
     parser.add_argument("--output-dir", required=True)
     parser.add_argument("--target", default="gfx1100")

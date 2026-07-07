@@ -652,6 +652,131 @@ def run_candidate_row(args: argparse.Namespace, config: BenchConfig, candidate: 
     return row
 
 
+def _case_symbol(candidate: Candidate) -> str:
+    return f"@case_{candidate.id}"
+
+
+def test_report_summary(path: Path) -> dict[str, Any]:
+    if not path.exists():
+        return {
+            "state": "parse_error",
+            "correctness": {"parse_error": f"missing test report: {path}"},
+            "failure": {"parse_error": f"missing test report: {path}"},
+        }
+    try:
+        report = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        message = f"failed to parse test report: {exc}"
+        return {
+            "state": "parse_error",
+            "correctness": {"parse_error": message},
+            "failure": {"parse_error": message},
+        }
+    if not isinstance(report, dict):
+        message = "test report must be a JSON object"
+        return {
+            "state": "parse_error",
+            "correctness": {"parse_error": message},
+            "failure": {"parse_error": message},
+        }
+    try:
+        failed_sample_count = int(report.get("failed_sample_count") or 0)
+        planning_issue_count = int(report.get("planning_issue_count") or 0)
+        skipped_case_count = int(report.get("skipped_case_count") or 0)
+    except (TypeError, ValueError) as exc:
+        message = f"invalid test report counters: {exc}"
+        return {
+            "state": "parse_error",
+            "correctness": {"parse_error": message},
+            "failure": {"parse_error": message},
+        }
+    failure = None
+    if failed_sample_count != 0 or planning_issue_count != 0:
+        failure = {
+            "failed_sample_count": failed_sample_count,
+            "planning_issue_count": planning_issue_count,
+            "skipped_case_count": skipped_case_count,
+            "samples": report.get("samples"),
+            "planning_issues": report.get("planning_issues"),
+        }
+    return {
+        "state": "ok" if failure is None else "failed",
+        "correctness": report,
+        "failure": failure,
+        "operation_timing_ns": report.get("operation_timing_ns"),
+        "mean_physical_dispatch_duration_ns": report.get(
+            "mean_physical_dispatch_duration_ns"
+        ),
+        "physical_dispatches_per_logical_operation": report.get(
+            "physical_dispatches_per_logical_operation"
+        ),
+    }
+
+
+def run_candidate_test_row(args: argparse.Namespace, config: BenchConfig, candidate: Candidate, *, sanitizer: str) -> dict[str, Any]:
+    row = corpus_row(args, candidate, action="run")
+    row["sanitizer"] = sanitizer
+    if candidate.status != "planned":
+        return row
+    out_dir = candidate_dir(args, candidate, "run", sanitizer)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    fixture = generate_oracle(candidate, out_dir / "fixtures")
+    row["oracle"] = fixture.to_ledger()
+    if fixture.status != "fixtures_ready" or fixture.fixture_dir is None:
+        row["status"] = fixture.status
+        return row
+
+    linked = out_dir / "linked.loom"
+    link_result = run_command(
+        [
+            config.tools.require_loom_link(),
+            candidate.source_path,
+            "--mode=link",
+            "--to=text",
+            "--require-resolved-config",
+            f"--root={candidate.root_symbol}",
+            f"--output={linked}",
+            *config_args(candidate.config),
+        ],
+        env=config.command_env(),
+    )
+    row["link"] = command_evidence(link_result, out_dir, prefix="link")
+    if link_result.returncode != 0:
+        row["status"] = "link_failed"
+        return row
+
+    workbench = out_dir / "workbench.loom"
+    _, workbench_meta = write_workbench(candidate, linked, workbench, fixture.fixture_dir)
+    row["workbench"] = workbench_meta
+    if workbench_meta.get("status") != "ok":
+        row["status"] = workbench_meta.get("status", "unsupported_golden")
+        return row
+
+    report_path = out_dir / "test-report.json"
+    cmd: list[str | Path] = [
+        config.tools.require_iree_test_loom().resolve(),
+        workbench.resolve(),
+        "--device=amdgpu",
+        f"--case={_case_symbol(candidate)}",
+    ]
+    if sanitizer != "none":
+        cmd.append(f"--sanitizer={sanitizer}")
+    result = run_command(cmd, env=config.command_env(), cwd=out_dir)
+    report_path.write_text(result.stdout, encoding="utf-8")
+    row["test"] = command_evidence(result, out_dir, prefix="test")
+    summary = test_report_summary(report_path)
+    row["test"].update(
+        {
+            "results_path": str(report_path),
+            "summary": summary,
+        }
+    )
+    row["status"] = (
+        "ran" if result.returncode == 0 and summary.get("state") == "ok" else "run_failed"
+    )
+    return row
+
+
 def tune_rows(args: argparse.Namespace, config: BenchConfig, candidates: list[Candidate]) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for sanitizer in sanitizer_list(args):
