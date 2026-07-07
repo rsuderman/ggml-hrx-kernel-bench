@@ -507,6 +507,31 @@ def _clamp_arrays(np: Any, candidate: Candidate, seed: int) -> dict[str, Any]:
     }
 
 
+def _abs_arrays(np: Any, candidate: Candidate, seed: int) -> dict[str, Any]:
+    ncols, nrows, elems = _dims(candidate)
+    src = f32_pattern(np, (nrows, ncols), seed=seed)
+    if candidate.family == "abs_f16":
+        # f16 is carried through the workbench as raw int16 bit patterns; abs on
+        # a half is exact (it clears the sign bit), so the golden is bit-exact.
+        src0 = src.astype(np.float16)
+        return {
+            "arrays": {
+                "src0": src0.reshape(elems).view(np.int16),
+                "dst_init": np.zeros((elems,), dtype=np.int16),
+                "expected": np.abs(src0).reshape(elems).view(np.int16),
+            },
+            "metadata": {"dst_type": "i16"},
+        }
+    src0 = src.astype(np.float32)
+    return {
+        "arrays": {
+            "src0": src0.reshape(elems),
+            "dst_init": f32_pattern(np, (elems,), seed=seed + 2, scale=0.25),
+            "expected": np.abs(src0).astype(np.float32).reshape(elems),
+        },
+    }
+
+
 def _rms_norm_mul_arrays(np: Any, candidate: Candidate, seed: int) -> dict[str, Any]:
     ncols, nrows, elems = _dims(candidate)
     src = f32_pattern(np, (nrows, ncols), seed=seed)
@@ -1075,6 +1100,32 @@ check.benchmark<{case_name}> {bench_name}
     return bench_name, {"status": "ok", "workbench_path": str(workbench_path)}
 
 
+def _write_abs_workbench(candidate: Candidate, linked_source: Path, workbench_path: Path, fixture_dir: Path) -> tuple[str, dict[str, Any]]:
+    ncols, nrows, elems = _dims(candidate)
+    case_name, bench_name = _case_names(candidate)
+    if candidate.family == "abs_f16":
+        body = "\n".join(
+            [
+                _read_i16(workbench_path, fixture_dir, "src0", elems),
+                _read_i16(workbench_path, fixture_dir, "dst_init", elems).replace("%dst_init", "%dst"),
+                _read_i16(workbench_path, fixture_dir, "expected", elems),
+                f"  func.call {candidate.root_symbol}(%src0, %dst) : (tensor<{elems}xi16>, tensor<{elems}xi16>)",
+                f"  check.expect.equal actual(%dst) expected(%expected) : tensor<{elems}xi16>",
+            ]
+        )
+    else:
+        body = "\n".join(
+            [
+                _read_f32(workbench_path, fixture_dir, "src0", elems),
+                _read_f32(workbench_path, fixture_dir, "dst_init", elems).replace("%dst_init", "%dst"),
+                _read_f32(workbench_path, fixture_dir, "expected", elems),
+                f"  func.call {candidate.root_symbol}(%src0, %dst) : (tensor<{elems}xf32>, tensor<{elems}xf32>)",
+                f"  check.expect.close actual(%dst) expected(%expected) atol(0.0) rtol(0.0) nan(same) : tensor<{elems}xf32>",
+            ]
+        )
+    return _emit_case(linked_source, workbench_path, case_name, bench_name, body)
+
+
 def _write_pointwise_workbench(candidate: Candidate, linked_source: Path, workbench_path: Path, fixture_dir: Path) -> tuple[str, dict[str, Any]]:
     ncols, nrows, elems = _dims(candidate)
     case_name, bench_name = _case_names(candidate)
@@ -1439,6 +1490,11 @@ ORACLE_SPECS: tuple[OracleSpec, ...] = (
         family_ids=("rope_f32", "rope_neox_f32", "rope_scale_f32"),
         generate=_logical_generate(LogicalOracleSpec(("rope_f32", "rope_neox_f32", "rope_scale_f32"), "rope_f32_numpy", {"atol": 5e-4, "rtol": 5e-4}, _rope_arrays, exact_kernel_abi=True)),
         write_workbench=_write_rope_workbench,
+    ),
+    OracleSpec(
+        family_ids=("abs_f32", "abs_f16"),
+        generate=_logical_generate(LogicalOracleSpec(("abs_f32", "abs_f16"), "abs_numpy", {"atol": 0.0, "rtol": 0.0}, _abs_arrays, exact_kernel_abi=True)),
+        write_workbench=_write_abs_workbench,
     ),
 )
 

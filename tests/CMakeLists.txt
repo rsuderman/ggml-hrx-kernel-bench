@@ -6,7 +6,11 @@ if(DEFINED ENV{GGML_HRX_TOOL_DIR} AND NOT "$ENV{GGML_HRX_TOOL_DIR}" STREQUAL "")
   set(_ggml_hrx_tool_dir_default $ENV{GGML_HRX_TOOL_DIR})
 endif()
 set(GGML_HRX_TOOL_DIR "${_ggml_hrx_tool_dir_default}" CACHE PATH "Optional directory containing loom-link, loom-compile, and iree-benchmark-loom")
-set(GGML_HRX_ROCM_PATH "" CACHE PATH "Optional ROCm root for runtime tests")
+set(_ggml_hrx_rocm_path_default "")
+if(DEFINED ENV{GGML_HRX_ROCM_PATH} AND NOT "$ENV{GGML_HRX_ROCM_PATH}" STREQUAL "")
+  set(_ggml_hrx_rocm_path_default $ENV{GGML_HRX_ROCM_PATH})
+endif()
+set(GGML_HRX_ROCM_PATH "${_ggml_hrx_rocm_path_default}" CACHE PATH "Optional ROCm root for runtime tests")
 
 include(GgmlHrxTests)
 

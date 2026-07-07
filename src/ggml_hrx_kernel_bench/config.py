@@ -33,11 +33,20 @@ class BenchConfig:
         if self.rocm_path is not None:
             env.setdefault("ROCM_PATH", str(self.rocm_path))
             env.setdefault("GGML_HRX_ROCM_PATH", str(self.rocm_path))
-            lib_paths = [self.rocm_path / "lib", self.rocm_path / "lib64"]
+            lib_paths = [
+                self.rocm_path / "lib",
+                self.rocm_path / "lib" / "rocm_sysdeps" / "lib",
+                self.rocm_path / "lib64",
+            ]
             existing = env.get("LD_LIBRARY_PATH")
             additions = [str(path) for path in lib_paths if path.exists()]
             if additions:
                 env["LD_LIBRARY_PATH"] = ":".join(additions + ([existing] if existing else []))
+            for candidate in ("libhsa-runtime64.so.1", "libhsa-runtime64.so"):
+                libhsa = self.rocm_path / "lib" / candidate
+                if libhsa.exists():
+                    env.setdefault("IREE_HAL_AMDGPU_LIBHSA_PATH", str(libhsa))
+                    break
         return env
 
 

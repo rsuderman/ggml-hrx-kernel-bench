@@ -112,10 +112,43 @@ def lower_generic_pointwise_tensors(
     return tensors, _fallback_shape_from_extents(dst_extents)
 
 
+def _parse_unary_parameters(case: ImportedCase) -> tuple[list[int], int]:
+    # ggml unary-op params: ne_a = input tensor's 4-D shape [ne0..ne3];
+    # v = view flag (0 = contiguous input, 1 = non-contiguous strided view).
+    ne = case.normalized_params.get("ne_a")
+    v = case.normalized_params.get("v", 0)
+    if not isinstance(ne, list):
+        raise ValueError("unary lowering requires ne_a array")
+    if len(ne) != 4:
+        raise ValueError("unary lowering requires 4-D extents")
+    if any(not isinstance(value, int) for value in ne):
+        raise ValueError("unary lowering requires integer extents")
+    if not isinstance(v, int):
+        raise ValueError("unary lowering requires integer v")
+    return [int(value) for value in ne], int(v)
+
+
+def lower_contiguous_unary_tensors(
+    case: ImportedCase,
+) -> tuple[dict[str, ConcreteTensor], dict[str, int]]:
+    ne, v = _parse_unary_parameters(case)
+    if v != 0:
+        raise ValueError("contiguous unary routing requires contiguous input (v=0)")
+    dtype = str(case.dtype.get("type", "")).upper()
+    dimensions = _dimensions_from_extents(ne)
+    tensors = {
+        tensor_name: ConcreteTensor(dtype=dtype, dimensions=dimensions)
+        for tensor_name in ("src0", "dst")
+    }
+    return tensors, _fallback_shape_from_extents(ne)
+
+
 def lower_tensors_for_route(
     case: ImportedCase,
     route: V2Route,
 ) -> tuple[dict[str, ConcreteTensor], dict[str, int]]:
+    if route.op == "ABS":
+        return lower_contiguous_unary_tensors(case)
     if route.id == "add_f32_generic_4d":
         return lower_generic_pointwise_tensors(case)
     return lower_contiguous_pointwise_tensors(case)

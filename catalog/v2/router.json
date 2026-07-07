@@ -1,6 +1,10 @@
 {
   "schema": "ggml_hrx_kernel_bench.routing_descriptors.v2",
   "routes": {
+    "ABS": [
+      "abs_f16.json",
+      "abs_f32.json"
+    ],
     "ADD": [
       "add_f32.json",
       "add_f32_generic_4d.json"
