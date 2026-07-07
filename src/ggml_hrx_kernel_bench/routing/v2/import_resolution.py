@@ -248,7 +248,7 @@ def lower_contiguous_unary_tensors(
         tensor_name: ConcreteTensor(dtype=dtype, dimensions=dimensions)
         for tensor_name in ("src0", "dst")
     }
-    return tensors, _fallback_shape_from_extents(ne)
+    return tensors, _shape_from_extents(ne)
 
 
 def lower_contiguous_copy_tensors(
