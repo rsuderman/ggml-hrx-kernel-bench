@@ -43,7 +43,6 @@ def main() -> int:
     parser.add_argument('--python-executable', required=True)
     parser.add_argument('--runner-script', required=True)
     parser.add_argument('--runtime-output-dir', required=True)
-    parser.add_argument('--case-selector', default='0')
     parser.add_argument('--routing-version')
     parser.add_argument('--routing-dir')
     parser.add_argument('--kernel-dir')
@@ -65,8 +64,6 @@ def main() -> int:
             _cmake_quote(args.python_executable),
             _cmake_quote(str(Path(args.runner_script).resolve())),
             _cmake_quote(str(manifest_path)),
-            '--case-selector',
-            _cmake_quote(args.case_selector),
             '--output-dir',
             _cmake_quote(str(op_output_dir)),
         ]

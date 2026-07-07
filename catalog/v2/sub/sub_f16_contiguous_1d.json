@@ -36,6 +36,11 @@
   ],
   "constraints": [
     {
+      "name": "total_size",
+      "min": 1,
+      "max": 16776960
+    },
+    {
       "equals": [
         "src0_dimensions",
         "src1_dimensions",

@@ -29,7 +29,7 @@
       "ncols_min": 1,
       "ncols_max": 65536,
       "nrows_min": 64,
-      "nrows_max": 1048576
+      "nrows_max": 65535
     },
     "shape_guards": {
       "pointwise_src0_row_stride_eq_ncols": true,
@@ -94,7 +94,7 @@
       "ncols_min": 1,
       "ncols_max": 65536,
       "nrows_min": 64,
-      "nrows_max": 1048576
+      "nrows_max": 65535
     },
     "shape_guards": {
       "pointwise_src0_row_stride_eq_ncols": true,

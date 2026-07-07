@@ -19,7 +19,10 @@ from ggml_hrx_kernel_bench.routing.api import (
     RuntimeCaseRequest,
     create_router,
 )
+from ggml_hrx_kernel_bench.import_route_resolution import resolve_case_routes
 from ggml_hrx_kernel_bench.routing.v2.import_resolution import resolve_imported_suite, resolve_route_for_case
+from ggml_hrx_kernel_bench.routing.v1.routes import DEFAULT_V1_ROUTING_DIR, iter_routes
+from ggml_hrx_kernel_bench.routing.v2.query import load_route_catalog
 from ggml_hrx_kernel_bench.routing.v2.models import (
     ConstraintCheck,
     RouteConstraints,
@@ -808,3 +811,68 @@ def test_v2_router_executes_matching_case(tmp_path: Path, monkeypatch) -> None:
     assert result["status"] == "ran"
     assert result["correctness_ok"] is True
     assert result["shape"] == {"d0": 16, "d1": 64, "d2": 1, "d3": 1}
+
+
+def test_v1_oversized_contiguous_add_case_falls_back_to_generic_route() -> None:
+    case = ImportedCase(
+        op="ADD",
+        dtype={"type": "f32"},
+        raw_case={
+            "ne": [1, 102400, 1, 1],
+            "nr": [1, 1, 1, 1],
+            "nf": 1,
+            "perm1": [0, 1, 2, 3],
+        },
+        normalized_params={
+            "ne": [1, 102400, 1, 1],
+            "nr": [1, 1, 1, 1],
+            "nf": 1,
+            "perm1": [0, 1, 2, 3],
+        },
+        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_group_index=0,
+        source_case_index=0,
+    )
+    add_routes = [
+        route for route in iter_routes(DEFAULT_V1_ROUTING_DIR) if str(route.get("op") or "") == "ADD"
+    ]
+
+    resolution, _, reason, detail = resolve_case_routes(case, add_routes)
+
+    assert reason is None
+    assert detail is None
+    assert resolution is not None
+    assert resolution.route["id"] == "add_f32_generic_wg256"
+    assert resolution.shape == {"ncols": 1, "nrows": 102400, "cols": 1, "rows": 102400}
+
+
+def test_v2_oversized_contiguous_pointwise_case_becomes_unmapped() -> None:
+    case = ImportedCase(
+        op="ADD",
+        dtype={"type": "f16"},
+        raw_case={
+            "ne": [64, 262144, 1, 1],
+            "nr": [1, 1, 1, 1],
+            "nf": 1,
+            "perm1": [0, 1, 2, 3],
+        },
+        normalized_params={
+            "ne": [64, 262144, 1, 1],
+            "nr": [1, 1, 1, 1],
+            "nf": 1,
+            "perm1": [0, 1, 2, 3],
+        },
+        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_group_index=0,
+        source_case_index=0,
+    )
+    catalog = load_route_catalog(Path("catalog/v2"))
+    add_routes = list(routes_for_op(catalog, "ADD"))
+
+    resolved_route, shape, reason, detail = resolve_route_for_case(case, add_routes)
+
+    assert resolved_route is None
+    assert shape is None
+    assert reason is not None
+    assert reason.value == "no_route_match"
+    assert detail == "lowered tensor descriptors did not satisfy any v2 route"

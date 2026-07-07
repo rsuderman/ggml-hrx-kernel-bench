@@ -104,7 +104,7 @@ endfunction()
 
 function(add_generated_kernel_runtime_tests)
   set(options)
-  set(one_value_args NAME GENERATED_IMPORT_DIR GROUPED_YAML CASE_SELECTOR RUNTIME_OUTPUT_DIR ROUTING_VERSION ROUTING_DIR KERNEL_DIR)
+  set(one_value_args NAME GENERATED_IMPORT_DIR GROUPED_YAML RUNTIME_OUTPUT_DIR ROUTING_VERSION ROUTING_DIR KERNEL_DIR)
   cmake_parse_arguments(GGML_HRX_GKRT "${options}" "${one_value_args}" "" ${ARGN})
 
   if(NOT GGML_HRX_GKRT_NAME)
@@ -115,11 +115,6 @@ function(add_generated_kernel_runtime_tests)
   endif()
   if(NOT GGML_HRX_GKRT_GROUPED_YAML)
     message(FATAL_ERROR "add_generated_kernel_runtime_tests requires GROUPED_YAML")
-  endif()
-
-  set(kernel_case_selector 0)
-  if(GGML_HRX_GKRT_CASE_SELECTOR)
-    set(kernel_case_selector ${GGML_HRX_GKRT_CASE_SELECTOR})
   endif()
 
   set(runtime_output_dir ${GGML_HRX_GKRT_RUNTIME_OUTPUT_DIR})
@@ -138,7 +133,6 @@ function(add_generated_kernel_runtime_tests)
     --python-executable ${Python3_EXECUTABLE}
     --runner-script ${GGML_HRX_TESTS_ROOT}/infra/run_generated_kernel_tests.py
     --runtime-output-dir ${runtime_output_dir}
-    --case-selector ${kernel_case_selector}
   )
   if(GGML_HRX_GKRT_ROUTING_VERSION)
     list(APPEND generate_tests_command --routing-version ${GGML_HRX_GKRT_ROUTING_VERSION})
