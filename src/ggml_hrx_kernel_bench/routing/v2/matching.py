@@ -74,6 +74,41 @@ def _product(dimensions: tuple[int, ...]) -> int:
     return total
 
 
+def _inverse_permutation(permutation: tuple[int, ...]) -> tuple[int, ...] | None:
+    if tuple(sorted(permutation)) != tuple(range(len(permutation))):
+        return None
+    inverse = [0] * len(permutation)
+    for index, value in enumerate(permutation):
+        inverse[int(value)] = int(index)
+    return tuple(inverse)
+
+
+def _chain_permutations(first: tuple[int, ...], second: tuple[int, ...]) -> tuple[int, ...] | None:
+    if len(first) != len(second):
+        return None
+    if tuple(sorted(first)) != tuple(range(len(first))):
+        return None
+    if tuple(sorted(second)) != tuple(range(len(second))):
+        return None
+    return tuple(int(second[index]) for index in first)
+
+
+def _permuted_contiguous_strides(
+    dimensions: tuple[int, ...],
+    permutation: tuple[int, ...],
+) -> tuple[int, ...] | None:
+    if len(dimensions) != len(permutation):
+        return None
+    if tuple(sorted(permutation)) != tuple(range(len(permutation))):
+        return None
+    base_extents = [int(dimensions[axis]) for axis in permutation]
+    base_strides = _contiguous_strides(tuple(base_extents))
+    logical_strides = [0] * len(permutation)
+    for base_axis, logical_axis in enumerate(permutation):
+        logical_strides[int(logical_axis)] = int(base_strides[base_axis])
+    return tuple(logical_strides)
+
+
 def _store_capture(
     captures: dict[str, CapturedValue],
     name: str,
@@ -114,18 +149,53 @@ def _resolve_values(
     captures: Mapping[str, CapturedValue],
 ) -> dict[str, CapturedValue] | None:
     resolved: dict[str, CapturedValue] = {}
+
+    def lookup(name: str) -> CapturedValue | None:
+        if name in resolved:
+            return resolved[name]
+        return captures.get(name)
+
     for definition in definitions:
         if definition.contiguous_strides is not None:
-            source = captures.get(definition.contiguous_strides)
+            source = lookup(definition.contiguous_strides)
             if not isinstance(source, tuple):
                 return None
             resolved[definition.name] = _contiguous_strides(source)
             continue
         if definition.product is not None:
-            source = captures.get(definition.product)
+            source = lookup(definition.product)
             if not isinstance(source, tuple):
                 return None
             resolved[definition.name] = _product(source)
+            continue
+        if definition.inverse_permutation is not None:
+            source = lookup(definition.inverse_permutation)
+            if not isinstance(source, tuple):
+                return None
+            inverse = _inverse_permutation(source)
+            if inverse is None:
+                return None
+            resolved[definition.name] = inverse
+            continue
+        if definition.chain_permutations is not None:
+            first = lookup(definition.chain_permutations[0])
+            second = lookup(definition.chain_permutations[1])
+            if not isinstance(first, tuple) or not isinstance(second, tuple):
+                return None
+            chained = _chain_permutations(first, second)
+            if chained is None:
+                return None
+            resolved[definition.name] = chained
+            continue
+        if definition.permuted_contiguous_strides_dimensions is not None:
+            dimensions = lookup(definition.permuted_contiguous_strides_dimensions)
+            permutation = lookup(definition.permuted_contiguous_strides_permutation or "")
+            if not isinstance(dimensions, tuple) or not isinstance(permutation, tuple):
+                return None
+            strides = _permuted_contiguous_strides(dimensions, permutation)
+            if strides is None:
+                return None
+            resolved[definition.name] = strides
             continue
         if definition.name:
             return None
@@ -243,6 +313,24 @@ def shape_overrides_from_tensors(tensors: Mapping[str, ConcreteTensor]) -> dict[
     return overrides
 
 
+def shape_permutations_for_route(
+    route: V2Route,
+    tensors: Mapping[str, ConcreteTensor],
+) -> dict[str, int]:
+    overrides: dict[str, int] = {}
+    for tensor_name, descriptor in route.tensors.items():
+        if descriptor.permutation_capture is None:
+            continue
+        tensor = tensors.get(tensor_name)
+        if tensor is None or tensor.permutation is None:
+            continue
+        if tensor.permutation == tuple(range(len(tensor.permutation))):
+            continue
+        for index, axis in enumerate(tensor.permutation):
+            overrides[f"{tensor_name}_perm{index}"] = int(axis)
+    return overrides
+
+
 def _constraint_for_capture(
     route: V2Route,
     capture_name: str,
@@ -353,7 +441,20 @@ def materialize_route_tensors(route: V2Route, sizes: Mapping[str, int]) -> dict[
                     stride=stride,
                 )
             )
-        tensors[tensor_name] = ConcreteTensor(dtype=descriptor.dtype or "", dimensions=tuple(dimensions))
+        permutation = None
+        if descriptor.permutation_capture is not None:
+            permutation_keys = [f"{tensor_name}_perm{index}" for index in range(rank)]
+            present_keys = [key for key in permutation_keys if key in normalized_sizes]
+            if present_keys:
+                missing_permutation_keys = [key for key in permutation_keys if key not in normalized_sizes]
+                if missing_permutation_keys:
+                    raise KeyError(",".join(missing_permutation_keys))
+                permutation = tuple(int(normalized_sizes[key]) for key in permutation_keys)
+        tensors[tensor_name] = ConcreteTensor(
+            dtype=descriptor.dtype or "",
+            dimensions=tuple(dimensions),
+            permutation=permutation,
+        )
     return tensors
 
 
@@ -389,7 +490,17 @@ def value_from_route_source(
 ) -> int | tuple[int, ...] | None:
     if not source.startswith("value."):
         return None
-    return values.get(source.removeprefix("value."))
+    path = source.removeprefix("value.")
+    parts = path.split(".")
+    if len(parts) == 1:
+        return values.get(parts[0])
+    if len(parts) == 2 and parts[1].isdigit():
+        value = values.get(parts[0])
+        index = int(parts[1])
+        if not isinstance(value, tuple) or index < 0 or index >= len(value):
+            return None
+        return int(value[index])
+    return None
 
 
 def _ceil_div(lhs: int, rhs: int) -> int:

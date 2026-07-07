@@ -8,13 +8,20 @@ from ...import_models import (
     UnmappedCase,
     UnmappedReason,
 )
-from .matching import route_accepts_dtype, route_accepts_tensors, shape_overrides_from_tensors
+from .matching import (
+    route_accepts_dtype,
+    route_accepts_tensors,
+    shape_overrides_from_tensors,
+    shape_permutations_for_route,
+)
 from .models import ConcreteTensor, ConcreteTensorDimension, V2Route
 from .query import RouteCatalog, require_route_catalog, routes_for_op
 
 POINTWISE_BASE_PERMUTATION = (0, 1, 2, 3)
 POINTWISE_SRC1_PERMUTATION = (1, 2, 0, 3)
+COPY_BASE_PERMUTATION = (0, 1, 2, 3)
 COPY_IDENTITY_PERMUTATION = (0, 0, 0, 0)
+COPY_TRANSPOSE_01_PERMUTATION = (1, 0, 2, 3)
 
 
 def _unmapped_case(
@@ -108,6 +115,53 @@ def _permuted_dimensions_from_extents(
 
 def _shape_from_extents(extents: list[int]) -> dict[str, int]:
     return {f"d{index}": int(extent) for index, extent in enumerate(extents)}
+
+
+def _normalize_copy_permutation(
+    permutation: tuple[int, int, int, int],
+    *,
+    name: str,
+) -> tuple[int, int, int, int]:
+    if permutation == COPY_IDENTITY_PERMUTATION:
+        return COPY_BASE_PERMUTATION
+    if tuple(sorted(permutation)) != COPY_BASE_PERMUTATION:
+        raise ValueError(f"copy lowering requires {name} to be [0, 0, 0, 0] or a permutation of [0, 1, 2, 3]")
+    return permutation
+
+
+def _inverse_permutation(permutation: tuple[int, int, int, int]) -> tuple[int, int, int, int]:
+    inverse = [0] * len(permutation)
+    for index, value in enumerate(permutation):
+        inverse[int(value)] = int(index)
+    return (inverse[0], inverse[1], inverse[2], inverse[3])
+
+
+def _chain_permutations(
+    first: tuple[int, int, int, int],
+    second: tuple[int, int, int, int],
+) -> tuple[int, int, int, int]:
+    return (
+        int(second[first[0]]),
+        int(second[first[1]]),
+        int(second[first[2]]),
+        int(second[first[3]]),
+    )
+
+
+def _permuted_contiguous_strides(
+    extents: list[int],
+    permutation: tuple[int, int, int, int],
+) -> list[int]:
+    base_extents = [int(extents[axis]) for axis in permutation]
+    base_strides: list[int] = []
+    stride = 1
+    for extent in base_extents:
+        base_strides.append(stride)
+        stride *= extent
+    logical_strides = [0, 0, 0, 0]
+    for base_axis, logical_axis in enumerate(permutation):
+        logical_strides[logical_axis] = base_strides[base_axis]
+    return logical_strides
 
 
 def _parse_copy_parameters(
@@ -228,9 +282,11 @@ def lower_contiguous_copy_tensors(
     case: ImportedCase,
 ) -> tuple[dict[str, ConcreteTensor], dict[str, int]]:
     ne, src_transpose, permute_src, permute_dst = _parse_copy_parameters(case)
-    if permute_src != COPY_IDENTITY_PERMUTATION:
+    normalized_src = _normalize_copy_permutation(permute_src, name="permute_src")
+    normalized_dst = _normalize_copy_permutation(permute_dst, name="permute_dst")
+    if normalized_src != COPY_BASE_PERMUTATION:
         raise ValueError("copy lowering requires permute_src=[0, 0, 0, 0]")
-    if permute_dst != COPY_IDENTITY_PERMUTATION:
+    if normalized_dst != COPY_BASE_PERMUTATION:
         raise ValueError("copy lowering requires permute_dst=[0, 0, 0, 0]")
     if src_transpose != 0:
         raise ValueError("copy lowering requires _src_transpose=0")
@@ -248,31 +304,36 @@ def lower_transposed_copy_tensors(
     case: ImportedCase,
 ) -> tuple[dict[str, ConcreteTensor], dict[str, int]]:
     ne, src_transpose, permute_src, permute_dst = _parse_copy_parameters(case)
-    if permute_src != COPY_IDENTITY_PERMUTATION:
-        raise ValueError("copy lowering requires permute_src=[0, 0, 0, 0]")
-    if permute_dst != COPY_IDENTITY_PERMUTATION:
-        raise ValueError("copy lowering requires permute_dst=[0, 0, 0, 0]")
-    if src_transpose != 1:
-        raise ValueError("copy transpose lowering requires _src_transpose=1")
-
+    normalized_src = _normalize_copy_permutation(permute_src, name="permute_src")
+    normalized_dst = _normalize_copy_permutation(permute_dst, name="permute_dst")
+    if src_transpose not in {0, 1}:
+        raise ValueError("copy lowering requires _src_transpose to be 0 or 1")
+    if src_transpose == 1 and normalized_dst != COPY_BASE_PERMUTATION:
+        raise ValueError("copy transpose lowering requires permute_dst=[0, 0, 0, 0]")
     src_dtype = str(case.dtype.get("type_src", "")).upper()
     dst_dtype = str(case.dtype.get("type_dst", "")).upper()
-    if src_dtype != "F32" or dst_dtype != "F32":
-        raise ValueError("copy transpose lowering currently requires type_src=f32 and type_dst=f32")
-
-    transposed_extents = [ne[1], ne[0], ne[2], ne[3]]
-    src0_strides = [ne[0], 1, ne[0] * ne[1], ne[0] * ne[1] * ne[2]]
+    destination_permutation = (
+        COPY_TRANSPOSE_01_PERMUTATION if src_transpose == 1 else normalized_dst
+    )
+    canonical_extents = [int(ne[axis]) for axis in destination_permutation]
+    effective_src_permutation = _chain_permutations(
+        normalized_src,
+        _inverse_permutation(destination_permutation),
+    )
+    src0_strides = _permuted_contiguous_strides(canonical_extents, effective_src_permutation)
     tensors = {
         "src0": ConcreteTensor(
             dtype=src_dtype,
-            dimensions=_dimensions_from_extents_and_strides(transposed_extents, src0_strides),
+            dimensions=_dimensions_from_extents_and_strides(canonical_extents, src0_strides),
+            permutation=normalized_src,
         ),
         "dst": ConcreteTensor(
             dtype=dst_dtype,
-            dimensions=_dimensions_from_extents(transposed_extents),
+            dimensions=_dimensions_from_extents(canonical_extents),
+            permutation=destination_permutation,
         ),
     }
-    return tensors, _shape_from_extents(transposed_extents)
+    return tensors, _shape_from_extents(canonical_extents)
 
 
 def _route_uses_generic_pointwise_lowering(route: V2Route) -> bool:
@@ -369,6 +430,7 @@ def shape_for_resolved_route(route: V2Route, tensors: dict[str, ConcreteTensor],
             for dimension in tensors[tensor_name].dimensions
         },
         **shape_overrides_from_tensors(tensors),
+        **shape_permutations_for_route(route, tensors),
     }
 
 

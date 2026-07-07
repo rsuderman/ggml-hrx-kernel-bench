@@ -3,6 +3,7 @@ from __future__ import annotations
 from ggml_hrx_kernel_bench.routing.v2.matching import (
     materialize_route_tensors,
     route_accepts_tensors,
+    route_values,
     tensor_accepts_descriptor,
 )
 from ggml_hrx_kernel_bench.routing.v2.models import (
@@ -153,6 +154,82 @@ def test_tensor_descriptor_rejects_non_iota_permutation_capture() -> None:
         constraints,
         tensor,
     ) is False
+
+
+def test_route_values_can_chain_permutations_and_derive_strides() -> None:
+    route = V2Route(
+        id="copy_f32_f32_non_contiguous_4d",
+        family="copy_f32_f32",
+        op="CPY",
+        source_id="copy_f32_f32",
+        kernel_path="copy/non_contiguous_4d.loom",
+        root_symbol="@copy_f32_f32_non_contiguous_4d",
+        export_name="copy_f32_f32_non_contiguous_4d",
+        tensors={
+            "src0": TensorDescriptor(
+                dtype="F32",
+                dimensions_capture="src0_dimensions",
+                strides_capture="src0_strides",
+                permutation_capture="src0_permutation",
+            ),
+            "dst": TensorDescriptor(
+                dtype="F32",
+                dimensions_capture="dst_dimensions",
+                strides_capture="dst_strides",
+                permutation_capture="dst_permutation",
+            ),
+        },
+        values=(
+            ValueDefinition(name="dst_inverse", inverse_permutation="dst_permutation"),
+            ValueDefinition(
+                name="effective_src0_permutation",
+                chain_permutations=("src0_permutation", "dst_inverse"),
+            ),
+            ValueDefinition(
+                name="effective_src0_strides",
+                permuted_contiguous_strides_dimensions="dst_dimensions",
+                permuted_contiguous_strides_permutation="effective_src0_permutation",
+            ),
+        ),
+        constraints=RouteConstraints(
+            checks=(
+                ConstraintCheck(equals=("src0_dimensions", "dst_dimensions")),
+                ConstraintCheck(equals=("effective_src0_strides", "src0_strides")),
+            )
+        ),
+        launch={"workgroup_size": [256, 1, 1]},
+        bindings=(),
+    )
+    tensors = {
+        "src0": ConcreteTensor(
+            dtype="F32",
+            dimensions=(
+                ConcreteTensorDimension(name="d0", size=1, stride=1),
+                ConcreteTensorDimension(name="d1", size=2, stride=12),
+                ConcreteTensorDimension(name="d2", size=3, stride=4),
+                ConcreteTensorDimension(name="d3", size=4, stride=1),
+            ),
+            permutation=(0, 3, 1, 2),
+        ),
+        "dst": ConcreteTensor(
+            dtype="F32",
+            dimensions=(
+                ConcreteTensorDimension(name="d0", size=1, stride=1),
+                ConcreteTensorDimension(name="d1", size=2, stride=1),
+                ConcreteTensorDimension(name="d2", size=3, stride=2),
+                ConcreteTensorDimension(name="d3", size=4, stride=6),
+            ),
+            permutation=(0, 2, 1, 3),
+        ),
+    }
+
+    values = route_values(route, tensors)
+
+    assert values is not None
+    assert route_accepts_tensors(route, tensors) is True
+    assert values["dst_inverse"] == (0, 2, 1, 3)
+    assert values["effective_src0_permutation"] == (0, 3, 2, 1)
+    assert values["effective_src0_strides"] == (1, 12, 4, 1)
 
 
 def test_route_accepts_tensors_requires_equal_dimension_lists() -> None:
@@ -446,3 +523,61 @@ def test_materialize_rankless_route_preserves_all_ranked_dimensions() -> None:
     assert tuple(dimension.name for dimension in tensors["dst"].dimensions) == ("d0", "d1", "d2", "d3")
     assert tuple(dimension.size for dimension in tensors["dst"].dimensions) == (16, 64, 1, 1)
     assert tuple(dimension.stride for dimension in tensors["dst"].dimensions) == (1, 16, 1024, 1024)
+
+
+def test_materialize_rank4_tensors_restores_permutation_hints() -> None:
+    route = V2Route(
+        id="copy_f32_f32_non_contiguous_4d",
+        family="copy_f32_f32",
+        op="CPY",
+        source_id="copy_f32_f32",
+        kernel_path="copy/non_contiguous_4d.loom",
+        root_symbol="@copy_f32_f32_non_contiguous_4d",
+        export_name="copy_f32_f32_non_contiguous_4d",
+        tensors={
+            "src0": TensorDescriptor(
+                dtype="F32",
+                dimensions_capture="src0_dimensions",
+                strides_capture="src0_strides",
+                permutation_capture="src0_permutation",
+            ),
+            "dst": TensorDescriptor(
+                dtype="F32",
+                dimensions_capture="dst_dimensions",
+                strides_capture="dst_strides",
+                permutation_capture="dst_permutation",
+            ),
+        },
+        values=(),
+        constraints=RouteConstraints(
+            checks=(
+                ConstraintCheck(name="dst_dimensions", length=4),
+            )
+        ),
+        launch={"workgroup_size": [256, 1, 1]},
+        bindings=(),
+    )
+
+    tensors = materialize_route_tensors(
+        route,
+        {
+            "d0": 2,
+            "d1": 7,
+            "d2": 3,
+            "d3": 5,
+            "src0_d1_stride": 30,
+            "src0_d2_stride": 10,
+            "src0_d3_stride": 2,
+            "src0_perm0": 0,
+            "src0_perm1": 2,
+            "src0_perm2": 1,
+            "src0_perm3": 3,
+            "dst_perm0": 0,
+            "dst_perm1": 3,
+            "dst_perm2": 1,
+            "dst_perm3": 2,
+        },
+    )
+
+    assert tensors["src0"].permutation == (0, 2, 1, 3)
+    assert tensors["dst"].permutation == (0, 3, 1, 2)

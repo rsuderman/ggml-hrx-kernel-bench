@@ -45,6 +45,11 @@ def _materialized_copy_source_path(tmp_path: Path) -> str:
     return str(asset_root / "kernels" / "v2" / "copy" / "contiguous_1d.loom")
 
 
+def _materialized_copy_non_contiguous_source_path(tmp_path: Path) -> str:
+    asset_root = materialize_asset_root(tmp_path / "assets", force=True)
+    return str(asset_root / "kernels" / "v2" / "copy" / "non_contiguous_4d.loom")
+
+
 def test_add_oracle_uses_ranked_shape_for_fixture_size(tmp_path: Path) -> None:
     candidate = _candidate(candidate_id="add_ranked_4d", shape={"d0": 10, "d1": 5, "d2": 4, "d3": 3})
 
@@ -164,7 +169,7 @@ def test_copy_oracle_and_workbench_support_transposed_f32_source(tmp_path: Path)
         root_symbol="@copy_f32_f32_non_contiguous_4d",
         export_name="copy_f32_f32_non_contiguous_4d",
         op="CPY",
-        source_path="kernels/v2/copy/non_contiguous_4d.loom",
+        source_path=_materialized_copy_non_contiguous_source_path(tmp_path),
     )
 
     result = generate_oracle(candidate, tmp_path / "fixtures", force=True)

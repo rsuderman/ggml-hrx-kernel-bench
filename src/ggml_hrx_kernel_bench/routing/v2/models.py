@@ -44,6 +44,10 @@ class ValueDefinition:
     name: str
     contiguous_strides: str | None = None
     product: str | None = None
+    inverse_permutation: str | None = None
+    chain_permutations: tuple[str, str] | None = None
+    permuted_contiguous_strides_dimensions: str | None = None
+    permuted_contiguous_strides_permutation: str | None = None
 
 
 @dataclass(frozen=True)

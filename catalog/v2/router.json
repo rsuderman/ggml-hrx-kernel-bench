@@ -17,9 +17,6 @@
       "add/add_f32_generic_2d.json",
       "add/add_f32_generic_4d.json"
     ],
-    "CPY": [
-      "copy/copy_f32_f32_non_contiguous_4d.json"
-    ],
     "DIV": [
       "div/div_f16_contiguous_2d.json",
       "div/div_f16_rhs_row_broadcast_2d.json",

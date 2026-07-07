@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import json
 
 from ggml_hrx_kernel_bench.generators.copy_contiguous import (
     generated_catalog_route_paths,
@@ -34,6 +35,7 @@ def test_materialized_v2_kernels_include_generated_contiguous_copy(tmp_path: Pat
         artifact_path = asset_root / "catalog" / "v2" / relative_path
         assert artifact_path.read_text(encoding="utf-8") == expected_contents, str(relative_path)
 
-    router_payload = (asset_root / "catalog" / "v2" / "router.json").read_text(encoding="utf-8")
-    for route_path in generated_catalog_route_paths():
-        assert route_path in router_payload
+    router_payload = json.loads(
+        (asset_root / "catalog" / "v2" / "router.json").read_text(encoding="utf-8")
+    )
+    assert router_payload["routes"]["CPY"] == list(generated_catalog_route_paths())

@@ -81,35 +81,92 @@ import and runtime validation work.
 
 ### CPY
 
-#### Non-Identity Permutation And Transposed Copy Cases
+#### Current Support Gaps
 
 - Status: partially supported
-- Scope: grouped-YAML CPY import lowering
+- Scope: grouped-YAML CPY import lowering for the v2 catalogue
 - Correctness status: the validated v2 CPY runtime slice covers contiguous
-  copies for `f16 -> f16`, `f32 -> f32`, `f16 -> f32`, and `f32 -> f16`, plus
-  the `_src_transpose=1` `f32 -> f32` cases via a separate non-contiguous 4D
-  kernel; the remaining CPY negatives are import-only and do not currently
-  reach kernel execution
+  copies for `bf16`, `f16`, and `f32` across all current float/bfloat source
+  and destination pairs, plus `_src_transpose=1` for `f32 -> f32` via the
+  non-contiguous 4D route; the remaining CPY negatives are import-only and do
+  not currently reach kernel execution
 - Current behavior: v2 CPY lowering accepts identity-permutation contiguous
-  copies for those four dtype pairs, and also accepts `_src_transpose=1` with
-  identity source and destination permutations for `f32 -> f32`
+  copies for the 9 `bf16`/`f16`/`f32` source-destination pairs, and accepts
+  `_src_transpose=1` with identity source and destination permutations for
+  `f32 -> f32`
 - Evidence:
   - `build/tests/kernels/artifacts/llama-cpp-tests-import-v2/ops/CPY/import-summary.md`
   - `build/tests/kernels/artifacts/llama-cpp-tests-import-v2/ops/CPY/unmapped.json`
+  - `build/tests/kernels/artifacts/llama-cpp-tests-import-v2/ops/CPY/generated-kernel-tests.json`
   - `ctest --test-dir build --output-on-failure -R kernel-run-llama-cpp-tests-v2-CPY-generated`
 - Current counts:
-  - `13` mapped cases
-  - `23` `shape_lowering_not_implemented` cases for the supported f16/f32 dtype pairs
-  - `384` `no_dtype_mapping` cases for other source/destination dtype combinations
+  - `21` mapped cases
+  - `363` `no_dtype_mapping` cases
+  - `32` `shape_lowering_not_implemented` cases with
+    `copy lowering requires permute_src=[0, 0, 0, 0]`
+  - `4` `shape_lowering_not_implemented` cases with
+    `copy lowering requires _src_transpose=0`
 - Why the remaining supported-dtype cases fail:
-  - grouped-YAML permutations such as `permute_src=[0,2,1,3]`,
-    `permute_src=[1,0,2,3]`, and destination permutations such as
-    `permute_dst=[0,2,1,3]` are rejected before route matching
-  - `_src_transpose=1` remains unsupported for the other dtype pairs because
-    only the `f32 -> f32` transpose slice is lowered to the non-contiguous 4D
-    route today
+  - grouped-YAML cases with non-identity source permutations such as
+    `permute_src=[0,2,1,3]` and `permute_src=[1,0,2,3]` are rejected before
+    route matching
+  - `_src_transpose=1` remains unsupported for `bf16 -> bf16` and
+    `f16 -> f16`; only `f32 -> f32` is currently lowered to the non-contiguous
+    4D route
+  - non-float and quantized dtype combinations remain entirely unmapped as
+    `no_dtype_mapping`
 - Source references:
   - `src/ggml_hrx_kernel_bench/routing/v2/import_resolution.py`
+  - `src/ggml_hrx_kernel_bench/generators/copy_contiguous.py`
+- Loom support notes and prioritization impact:
+  - Loom already supports the required `view.load`, `view.store`,
+    `scalar.extf`, and `scalar.fptrunc` operations used by the existing COPY
+    kernels, and the generated non-contiguous 4D kernel already exists for the
+    current `bf16`/`f16`/`f32` dtype matrix
+  - That means the highest-yield remaining gaps are importer and route-surface
+    gaps, not new Loom-kernel capability gaps
+- First validation target:
+  - add one narrow source-strided COPY slice for `f32 -> f32` with
+    `_src_transpose=0`, `permute_src=[0,2,1,3]`, and
+    `permute_dst=[0,0,0,0]`
+  - expected route: a v2 non-contiguous COPY route backed by
+    `copy/non_contiguous_4d.loom`
+  - expected coverage gain: `4` grouped-YAML cases in the existing `f32 -> f32`
+    family
+  - validation:
+    - `PYTHONPATH=src pytest tests/test_copy_contiguous_codegen.py tests/test_oracles.py tests/test_routing_api.py -k copy`
+    - `cmake --build build --target kernel-llama-cpp-tests-import-coverage-v2`
+    - `ctest --test-dir build --output-on-failure -R kernel-run-llama-cpp-tests-v2-CPY-generated`
+- Prioritized workstreams:
+  - `1. Source-strided current float/bfloat copies`
+    - widen the non-contiguous 4D route and lowering path to accept
+      source-strided cases where `permute_dst` stays identity
+    - prioritize `permute_src=[0,2,1,3]` first because it is the largest
+      remaining supported-dtype family at `18` cases and is directly adjacent
+      to the existing non-contiguous route contract
+    - once the first `f32 -> f32` slice is validated, widen the same route
+      family to the remaining current dtype matrix (`bf16`, `f16`, `f32`)
+  - `2. Same-dtype transpose expansion`
+    - widen `_src_transpose=1` beyond `f32 -> f32` to the same-type `bf16` and
+      `f16` slices
+    - expected gain: `4` additional grouped-YAML cases
+  - `3. Additional source permutation families`
+    - add the smaller source-only permutation families
+      `permute_src=[1,0,2,3]` (`4` cases) and
+      `permute_src=[1,2,0,3]` (`1` case)
+    - treat these as follow-ons after the `permute_src=[0,2,1,3]` path proves
+      the generalized stride-based lowering
+  - `4. Source-and-destination permutation pairs`
+    - address cases like `permute_src=[0,3,1,2]` with
+      `permute_dst=[0,2,1,3]` (`9` cases)
+    - defer until the route contract can represent whether destination
+      permutation should be lowered as a shape transform or requires a distinct
+      non-contiguous destination path
+  - `5. Non-float and quantized dtype expansion`
+    - the remaining `363` failures are `no_dtype_mapping` cases, not layout
+      cases
+    - defer these until there is a clear plan for encode/decode behavior and
+      for avoiding quadratic hand-written kernels across quantized layouts
 
 ### MUL
 

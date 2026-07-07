@@ -38,6 +38,9 @@ function(add_materialized_asset_target)
       ${ggml_hrx_exact_kernel_sources}
       ${ggml_hrx_route_sources}
       ${CMAKE_SOURCE_DIR}/kernels/v2/copy/contiguous_1d.loom.tmpl
+      ${CMAKE_SOURCE_DIR}/kernels/v2/copy/non_contiguous_4d.loom.tmpl
+      ${CMAKE_SOURCE_DIR}/catalog/v2/copy/contiguous_1d.json.tmpl
+      ${CMAKE_SOURCE_DIR}/catalog/v2/copy/non_contiguous_4d.json.tmpl
       ${CMAKE_SOURCE_DIR}/scripts/materialize_assets.py
       ${CMAKE_SOURCE_DIR}/src/ggml_hrx_kernel_bench/materialized_assets.py
       ${CMAKE_SOURCE_DIR}/src/ggml_hrx_kernel_bench/generators/copy_contiguous.py

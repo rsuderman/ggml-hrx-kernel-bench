@@ -1,0 +1,66 @@
+{
+  "id": "$route_id",
+  "family": "$family",
+  "kernel": {
+    "source_id": "$family",
+    "path": "copy/contiguous_1d.loom",
+    "root_symbol": "$root_symbol",
+    "export_name": "$export_name"
+  },
+  "tensors": {
+    "src0": {
+      "dtype": "$src_dtype",
+      "dimensions": "src0_dimensions",
+      "strides": "src0_strides"
+    },
+    "dst": {
+      "dtype": "$dst_dtype",
+      "dimensions": "dst_dimensions",
+      "strides": "dst_strides"
+    }
+  },
+  "values": [
+    {
+      "name": "contiguous_strides",
+      "contiguous_strides": "dst_dimensions"
+    },
+    {
+      "name": "total_size",
+      "product": "dst_dimensions"
+    }
+  ],
+  "constraints": [
+    {
+      "equals": [
+        "src0_dimensions",
+        "dst_dimensions"
+      ]
+    },
+    {
+      "equals": [
+        "contiguous_strides",
+        "src0_strides",
+        "dst_strides"
+      ]
+    }
+  ],
+  "launch": {
+    "workgroup_size": [
+      $workgroup_size,
+      1,
+      1
+    ]
+  },
+  "config": {
+    "bindings": [
+      {
+        "key": "@hrx2.shape.copy.n",
+        "source": "value.total_size"
+      },
+      {
+        "key": "@hrx2.tuning.copy.workgroup_size",
+        "value": "$workgroup_size"
+      }
+    ]
+  }
+}

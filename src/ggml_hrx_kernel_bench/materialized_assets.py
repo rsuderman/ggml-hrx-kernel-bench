@@ -53,6 +53,9 @@ def _materialization_inputs() -> list[Path]:
     inputs.extend(
         [
             SOURCE_KERNEL_DIRS["v2"] / "copy" / "contiguous_1d.loom.tmpl",
+            SOURCE_KERNEL_DIRS["v2"] / "copy" / "non_contiguous_4d.loom.tmpl",
+            SOURCE_ROUTING_DIRS["v2"] / "copy" / "contiguous_1d.json.tmpl",
+            SOURCE_ROUTING_DIRS["v2"] / "copy" / "non_contiguous_4d.json.tmpl",
             Path(__file__),
             Path(__file__).resolve().parent / "generators" / "copy_contiguous.py",
         ]
@@ -126,10 +129,7 @@ def _write_materialized_v2_router(destination_root: Path) -> None:
     routes = payload.get("routes")
     if not isinstance(routes, dict):
         raise RuntimeError(f"invalid v2 router payload at {router_path}")
-    handwritten_copy_routes = routes.get("CPY")
-    if not isinstance(handwritten_copy_routes, list):
-        raise RuntimeError(f"invalid CPY route list at {router_path}")
-    routes["CPY"] = list(generated_catalog_route_paths()) + list(handwritten_copy_routes)
+    routes["CPY"] = list(generated_catalog_route_paths())
     router_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 
 

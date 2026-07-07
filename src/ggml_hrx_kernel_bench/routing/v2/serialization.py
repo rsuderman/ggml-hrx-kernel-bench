@@ -34,6 +34,17 @@ def tensor_values_json(route: V2Route) -> list[dict[str, Any]]:
                 ("name", value.name),
                 ("contiguous_strides", value.contiguous_strides),
                 ("product", value.product),
+                ("inverse_permutation", value.inverse_permutation),
+                ("chain_permutations", list(value.chain_permutations) if value.chain_permutations is not None else None),
+                (
+                    "permuted_contiguous_strides",
+                    None
+                    if value.permuted_contiguous_strides_dimensions is None
+                    else {
+                        "dimensions": value.permuted_contiguous_strides_dimensions,
+                        "permutation": value.permuted_contiguous_strides_permutation,
+                    },
+                ),
             )
             if entry is not None
         }

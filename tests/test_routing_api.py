@@ -295,14 +295,34 @@ def _write_v2_copy_descriptor(routing_dir: Path) -> None:
                         "dtype": "F32",
                         "dimensions": "src0_dimensions",
                         "strides": "src0_strides",
+                        "permutation": "src0_permutation",
                     },
                     "dst": {
                         "dtype": "F32",
                         "dimensions": "dst_dimensions",
                         "strides": "dst_strides",
+                        "permutation": "dst_permutation",
                     },
                 },
                 "values": [
+                    {
+                        "name": "dst_permutation_inverse",
+                        "inverse_permutation": "dst_permutation",
+                    },
+                    {
+                        "name": "effective_src0_permutation",
+                        "chain_permutations": [
+                            "src0_permutation",
+                            "dst_permutation_inverse",
+                        ],
+                    },
+                    {
+                        "name": "effective_src0_strides",
+                        "permuted_contiguous_strides": {
+                            "dimensions": "dst_dimensions",
+                            "permutation": "effective_src0_permutation",
+                        },
+                    },
                     {
                         "name": "contiguous_strides",
                         "contiguous_strides": "dst_dimensions",
@@ -315,6 +335,7 @@ def _write_v2_copy_descriptor(routing_dir: Path) -> None:
                 "constraints": [
                     {"name": "dst_dimensions", "length": 4},
                     {"equals": ["src0_dimensions", "dst_dimensions"]},
+                    {"equals": ["effective_src0_strides", "src0_strides"]},
                     {"equals": ["contiguous_strides", "dst_strides"]},
                 ],
                 "launch": {
@@ -340,19 +361,19 @@ def _write_v2_copy_descriptor(routing_dir: Path) -> None:
                         },
                         {
                             "key": "@hrx2.stride.copy4d.src0_nb0",
-                            "source": "tensor.src0.dimensions.d0.stride",
+                            "source": "value.effective_src0_strides.0",
                         },
                         {
                             "key": "@hrx2.stride.copy4d.src0_nb1",
-                            "source": "tensor.src0.dimensions.d1.stride",
+                            "source": "value.effective_src0_strides.1",
                         },
                         {
                             "key": "@hrx2.stride.copy4d.src0_nb2",
-                            "source": "tensor.src0.dimensions.d2.stride",
+                            "source": "value.effective_src0_strides.2",
                         },
                         {
                             "key": "@hrx2.stride.copy4d.src0_nb3",
-                            "source": "tensor.src0.dimensions.d3.stride",
+                            "source": "value.effective_src0_strides.3",
                         },
                         {
                             "key": "@hrx2.tuning.copy4d.workgroup_size",
@@ -510,8 +531,58 @@ def test_v2_resolve_copy_route_for_transposed_f32_case(tmp_path: Path) -> None:
         "d1": 256,
         "d2": 3,
         "d3": 1,
+        "dst_perm0": 1,
+        "dst_perm1": 0,
+        "dst_perm2": 2,
+        "dst_perm3": 3,
         "src0_d0_stride": 256,
         "src0_d1_stride": 1,
+    }
+
+
+def test_v2_resolve_copy_route_for_chained_source_and_destination_permutations(tmp_path: Path) -> None:
+    kernel_dir = tmp_path / "kernels"
+    routing_dir = tmp_path / "routing"
+    _write_copy_kernel(kernel_dir)
+    _write_v2_copy_descriptor(routing_dir)
+    catalog = load_route_catalog(routing_dir)
+    case = ImportedCase(
+        op="CPY",
+        dtype={"type_src": "f32", "type_dst": "f32"},
+        raw_case={},
+        normalized_params={
+            "ne": [2, 3, 5, 7],
+            "_src_transpose": 0,
+            "permute_src": [0, 2, 1, 3],
+            "permute_dst": [0, 3, 1, 2],
+        },
+        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_group_index=0,
+        source_case_index=0,
+    )
+
+    route, shape, reason, detail = resolve_route_for_case(case, list(routes_for_op(catalog, "CPY")))
+
+    assert reason is None
+    assert detail is None
+    assert route is not None
+    assert route.id == "copy_f32_f32_non_contiguous_4d"
+    assert shape == {
+        "d0": 2,
+        "d1": 7,
+        "d2": 3,
+        "d3": 5,
+        "dst_perm0": 0,
+        "dst_perm1": 3,
+        "dst_perm2": 1,
+        "dst_perm3": 2,
+        "src0_d1_stride": 30,
+        "src0_d2_stride": 10,
+        "src0_d3_stride": 2,
+        "src0_perm0": 0,
+        "src0_perm1": 2,
+        "src0_perm2": 1,
+        "src0_perm3": 3,
     }
 
 

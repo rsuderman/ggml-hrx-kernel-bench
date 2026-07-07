@@ -96,7 +96,19 @@ def _parse_value_definition(path: Path, route_index: Any, raw: Any) -> ValueDefi
         raise RuntimeError(f"v2 route {route_index} value definitions require name: {path}")
     contiguous_strides = raw.get("contiguous_strides")
     product = raw.get("product")
-    operations = sum(value is not None for value in (contiguous_strides, product))
+    inverse_permutation = raw.get("inverse_permutation")
+    chain_permutations = raw.get("chain_permutations")
+    permuted_contiguous_strides = raw.get("permuted_contiguous_strides")
+    operations = sum(
+        value is not None
+        for value in (
+            contiguous_strides,
+            product,
+            inverse_permutation,
+            chain_permutations,
+            permuted_contiguous_strides,
+        )
+    )
     if operations != 1:
         raise RuntimeError(
             f"v2 route {route_index} value definition {name!r} must define exactly one supported computation: {path}"
@@ -109,10 +121,56 @@ def _parse_value_definition(path: Path, route_index: Any, raw: Any) -> ValueDefi
         raise RuntimeError(
             f"v2 route {route_index} value definition {name!r} product must reference a capture name: {path}"
         )
+    if inverse_permutation is not None and (
+        not isinstance(inverse_permutation, str) or not inverse_permutation.strip()
+    ):
+        raise RuntimeError(
+            f"v2 route {route_index} value definition {name!r} inverse_permutation must reference a capture name: {path}"
+        )
+    if chain_permutations is not None:
+        if (
+            not isinstance(chain_permutations, list)
+            or len(chain_permutations) != 2
+            or any(not isinstance(entry, str) or not entry.strip() for entry in chain_permutations)
+        ):
+            raise RuntimeError(
+                f"v2 route {route_index} value definition {name!r} chain_permutations must reference exactly two capture names: {path}"
+            )
+    if permuted_contiguous_strides is not None:
+        if not isinstance(permuted_contiguous_strides, dict):
+            raise RuntimeError(
+                f"v2 route {route_index} value definition {name!r} permuted_contiguous_strides must be a JSON object: {path}"
+            )
+        dimensions = permuted_contiguous_strides.get("dimensions")
+        permutation = permuted_contiguous_strides.get("permutation")
+        if not isinstance(dimensions, str) or not dimensions.strip():
+            raise RuntimeError(
+                f"v2 route {route_index} value definition {name!r} permuted_contiguous_strides.dimensions must reference a capture name: {path}"
+            )
+        if not isinstance(permutation, str) or not permutation.strip():
+            raise RuntimeError(
+                f"v2 route {route_index} value definition {name!r} permuted_contiguous_strides.permutation must reference a capture name: {path}"
+            )
     return ValueDefinition(
         name=name,
         contiguous_strides=None if contiguous_strides is None else contiguous_strides.strip(),
         product=None if product is None else product.strip(),
+        inverse_permutation=None if inverse_permutation is None else inverse_permutation.strip(),
+        chain_permutations=(
+            None
+            if chain_permutations is None
+            else (str(chain_permutations[0]).strip(), str(chain_permutations[1]).strip())
+        ),
+        permuted_contiguous_strides_dimensions=(
+            None
+            if permuted_contiguous_strides is None
+            else str(permuted_contiguous_strides["dimensions"]).strip()
+        ),
+        permuted_contiguous_strides_permutation=(
+            None
+            if permuted_contiguous_strides is None
+            else str(permuted_contiguous_strides["permutation"]).strip()
+        ),
     )
 
 
