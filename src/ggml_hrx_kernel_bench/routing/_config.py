@@ -4,26 +4,14 @@ from pathlib import Path
 
 from ..materialized_assets import (
     ASSET_DIR_NAMES,
-    DEFAULT_ASSET_ROOT,
     SUPPORTED_VERSIONS,
-    materialize_asset_root,
+    default_kernel_dir,
+    default_routing_dir,
 )
 from .models import RoutingContext
 
 
 DEFAULT_ROUTING_VERSION = "v1"
-DEFAULT_KERNEL_DIRS: dict[str, Path] = {
-    version: DEFAULT_ASSET_ROOT / "kernels" / asset_dir_name
-    for version, asset_dir_name in ASSET_DIR_NAMES.items()
-}
-DEFAULT_ROUTING_DIRS: dict[str, Path] = {
-    version: DEFAULT_ASSET_ROOT / "catalog" / asset_dir_name
-    for version, asset_dir_name in ASSET_DIR_NAMES.items()
-}
-
-
-def _ensure_default_asset_root() -> None:
-    materialize_asset_root(DEFAULT_ASSET_ROOT)
 
 
 def supported_routing_versions() -> tuple[str, ...]:
@@ -53,8 +41,7 @@ def resolve_routing_dir(
     if derived_routing_dir is not None:
         return derived_routing_dir
     try:
-        _ensure_default_asset_root()
-        return DEFAULT_ROUTING_DIRS[version]
+        return default_routing_dir(version)
     except KeyError as exc:
         raise ValueError(f"unsupported routing version: {version}") from exc
 
@@ -68,8 +55,7 @@ def resolve_kernel_dir(
     if derived_kernel_dir is not None:
         return derived_kernel_dir
     try:
-        _ensure_default_asset_root()
-        return DEFAULT_KERNEL_DIRS[version]
+        return default_kernel_dir(version)
     except KeyError as exc:
         raise ValueError(f"unsupported routing version: {version}") from exc
 

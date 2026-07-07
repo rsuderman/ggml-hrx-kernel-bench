@@ -45,46 +45,6 @@ class CopyKernelVariant:
     def family(self) -> str:
         return f"copy_{self.src.name}_{self.dst.name}"
 
-    @property
-    def route_id(self) -> str:
-        return f"{self.family}_contiguous_1d"
-
-    @property
-    def non_contiguous_route_id(self) -> str:
-        return f"{self.family}_non_contiguous_4d"
-
-    @property
-    def root_symbol(self) -> str:
-        return f"@{self.route_id}"
-
-    @property
-    def non_contiguous_root_symbol(self) -> str:
-        return f"@{self.non_contiguous_route_id}"
-
-    @property
-    def export_name(self) -> str:
-        return self.route_id
-
-    @property
-    def non_contiguous_export_name(self) -> str:
-        return self.non_contiguous_route_id
-
-    @property
-    def kernel_path(self) -> Path:
-        return Path("copy") / f"{self.route_id}.loom"
-
-    @property
-    def non_contiguous_kernel_path(self) -> Path:
-        return Path("copy") / f"{self.non_contiguous_route_id}.loom"
-
-    @property
-    def route_path(self) -> Path:
-        return Path("catalog") / "v2" / "copy" / f"{self.route_id}.json"
-
-    @property
-    def non_contiguous_route_path(self) -> Path:
-        return Path("catalog") / "v2" / "copy" / f"{self.non_contiguous_route_id}.json"
-
     def conversion_kind(self) -> str | None:
         if self.src.domain != self.dst.domain:
             return None
@@ -99,6 +59,48 @@ SCALAR_DTYPES: tuple[ScalarDType, ...] = (
     ScalarDType(name="bf16", route_dtype="BF16", loom_type="bf16", domain="float", precision_rank=16),
     ScalarDType(name="f16", route_dtype="F16", loom_type="f16", domain="float", precision_rank=16),
     ScalarDType(name="f32", route_dtype="F32", loom_type="f32", domain="float", precision_rank=32),
+)
+
+
+@dataclass(frozen=True)
+class CopyRouteFlavor:
+    name: str
+    route_suffix: str
+    kernel_template_name: str
+    route_template_name: str
+    src_index_name: str
+
+    def route_id_for(self, variant: CopyKernelVariant) -> str:
+        return f"{variant.family}_{self.route_suffix}"
+
+    def root_symbol_for(self, variant: CopyKernelVariant) -> str:
+        return f"@{self.route_id_for(variant)}"
+
+    def export_name_for(self, variant: CopyKernelVariant) -> str:
+        return self.route_id_for(variant)
+
+    def kernel_relative_path_for(self, variant: CopyKernelVariant) -> Path:
+        return Path("copy") / f"{self.route_id_for(variant)}.loom"
+
+    def catalog_relative_path_for(self, variant: CopyKernelVariant) -> Path:
+        return Path("copy") / f"{self.route_id_for(variant)}.json"
+
+# Route order defines router preference. Keep the preferred flavors first.
+COPY_ROUTE_FLAVORS: tuple[CopyRouteFlavor, ...] = (
+    CopyRouteFlavor(
+        name="contiguous",
+        route_suffix="contiguous_1d",
+        kernel_template_name="contiguous_1d.loom.tmpl",
+        route_template_name="contiguous_1d.json.tmpl",
+        src_index_name="%linear",
+    ),
+    CopyRouteFlavor(
+        name="non_contiguous",
+        route_suffix="non_contiguous_4d",
+        kernel_template_name="non_contiguous_4d.loom.tmpl",
+        route_template_name="non_contiguous_4d.json.tmpl",
+        src_index_name="%src0_idx",
+    ),
 )
 
 
@@ -178,4 +180,3 @@ def load_kernel_template(name: str) -> Template:
 
 def load_route_template(name: str) -> Template:
     return Template((repo_root() / "catalog" / "v2" / "copy" / name).read_text(encoding="utf-8"))
-
