@@ -211,6 +211,7 @@ def test_runtime_assets_cmake_target_publishes_metadata_for_default_asset_discov
             str(materialized_assets.PROJECT_ROOT),
             "-B",
             str(build_dir),
+            "-DGGML_HRX_BUILD_LOOM_TOOLS=OFF",
             f"-DGGML_HRX_ASSET_ROOT={asset_root}",
             f"-DGGML_HRX_ACTIVE_ASSET_ROOT_METADATA_PATH={metadata_path}",
         ],

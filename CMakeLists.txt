@@ -1,10 +1,13 @@
 cmake_minimum_required(VERSION 3.20)
 
-project(ggml_hrx_kernel_bench LANGUAGES NONE)
+project(ggml_hrx_kernel_bench LANGUAGES C CXX)
 
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
+
+include(GgmlHrxLoomTools)
+ggml_hrx_configure_loom_tools()
 
 set(
   GGML_HRX_ASSET_ROOT

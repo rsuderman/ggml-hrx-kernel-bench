@@ -33,6 +33,9 @@ function(add_grouped_yaml_import_validation_target)
   if(NOT GGML_HRX_GYI_EXPECTED_COVERAGE)
     message(FATAL_ERROR "add_grouped_yaml_import_validation_target requires EXPECTED_COVERAGE")
   endif()
+  if(GGML_HRX_TOOL_BUILD_TARGET)
+    list(APPEND GGML_HRX_GYI_DEPENDS ${GGML_HRX_TOOL_BUILD_TARGET})
+  endif()
 
   set(stamp_path ${GGML_HRX_GYI_OUTPUT_DIR}/import-coverage.stamp)
   set(check_command

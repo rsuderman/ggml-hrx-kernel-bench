@@ -72,6 +72,30 @@ For fixture and golden generation:
 python3 -m pip install -e ".[numpy]"
 ```
 
+## CMake Build
+
+The default CMake build now materializes this repo's runtime assets and pulls
+the Loom utilities into the same build graph from an `hrx-systems` checkout.
+Configure CMake with a reference to the source tree that contains the HRX CMake
+project and its `loom/` subtree:
+
+```bash
+cmake -S . -B build \
+  -DGGML_HRX_HRX_SYSTEMS_SOURCE_DIR=/path/to/hrx-systems
+cmake --build build
+```
+
+That build produces `loom-link`, `loom-compile`, `iree-test-loom`, and
+`iree-benchmark-loom` under `build/tools`, and the bench
+tests/import validation targets use that in-tree directory automatically.
+
+If you only need the Python/materialized-asset targets and do not want the
+nested Loom build, disable it explicitly:
+
+```bash
+cmake -S . -B build -DGGML_HRX_BUILD_LOOM_TOOLS=OFF
+```
+
 ## Basic Usage
 
 Generate an HRX2 import manifest:
