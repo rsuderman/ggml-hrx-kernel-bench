@@ -43,7 +43,10 @@ function(add_materialized_asset_target)
       ${CMAKE_SOURCE_DIR}/catalog/v2/copy/non_contiguous_4d.json.tmpl
       ${CMAKE_SOURCE_DIR}/scripts/materialize_assets.py
       ${CMAKE_SOURCE_DIR}/src/ggml_hrx_kernel_bench/materialized_assets.py
+      ${CMAKE_SOURCE_DIR}/src/ggml_hrx_kernel_bench/generators/copy.py
+      ${CMAKE_SOURCE_DIR}/src/ggml_hrx_kernel_bench/generators/copy_common.py
       ${CMAKE_SOURCE_DIR}/src/ggml_hrx_kernel_bench/generators/copy_contiguous.py
+      ${CMAKE_SOURCE_DIR}/src/ggml_hrx_kernel_bench/generators/copy_non_contiguous.py
     COMMENT "Materializing runtime assets in ${GGML_HRX_MVA_OUTPUT_DIR}"
     VERBATIM
   )

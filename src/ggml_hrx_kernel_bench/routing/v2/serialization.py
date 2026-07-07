@@ -27,29 +27,33 @@ def tensor_descriptors_json(route: V2Route) -> dict[str, Any]:
 
 
 def tensor_values_json(route: V2Route) -> list[dict[str, Any]]:
-    return [
-        {
-            key: entry
-            for key, entry in (
-                ("name", value.name),
-                ("contiguous_strides", value.contiguous_strides),
-                ("product", value.product),
-                ("inverse_permutation", value.inverse_permutation),
-                ("chain_permutations", list(value.chain_permutations) if value.chain_permutations is not None else None),
-                (
-                    "permuted_contiguous_strides",
-                    None
-                    if value.permuted_contiguous_strides_dimensions is None
-                    else {
-                        "dimensions": value.permuted_contiguous_strides_dimensions,
-                        "permutation": value.permuted_contiguous_strides_permutation,
+    payload: list[dict[str, Any]] = []
+    for value in route.values:
+        if value.operation_kind == "contiguous_strides":
+            payload.append({"name": value.name, "contiguous_strides": value.sources[0]})
+            continue
+        if value.operation_kind == "product":
+            payload.append({"name": value.name, "product": value.sources[0]})
+            continue
+        if value.operation_kind == "inverse_permutation":
+            payload.append({"name": value.name, "inverse_permutation": value.sources[0]})
+            continue
+        if value.operation_kind == "chain_permutations":
+            payload.append({"name": value.name, "chain_permutations": list(value.sources)})
+            continue
+        if value.operation_kind == "permuted_contiguous_strides":
+            payload.append(
+                {
+                    "name": value.name,
+                    "permuted_contiguous_strides": {
+                        "dimensions": value.sources[0],
+                        "permutation": value.sources[1],
                     },
-                ),
+                }
             )
-            if entry is not None
-        }
-        for value in route.values
-    ]
+            continue
+        raise AssertionError(f"unsupported value operation kind: {value.operation_kind}")
+    return payload
 
 
 def tensor_constraints_json(route: V2Route) -> list[dict[str, Any]]:
@@ -99,7 +103,7 @@ def route_supports(route: V2Route) -> dict[str, Any]:
     }
 
 
-def route_json(route: V2Route) -> dict[str, Any]:
+def route_summary_json(route: V2Route) -> dict[str, Any]:
     return {
         "schema": "ggml_hrx_kernel_bench.routing_route.v2",
         "id": route.id,
@@ -108,6 +112,7 @@ def route_json(route: V2Route) -> dict[str, Any]:
         "source_id": route.source_id,
         "root_symbol": route.root_symbol,
         "export_name": route.export_name,
+        "lowering": route.lowering_kind,
         "tensors": tensor_descriptors_json(route),
         "values": tensor_values_json(route),
         "constraints": tensor_constraints_json(route),

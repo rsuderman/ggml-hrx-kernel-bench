@@ -8,13 +8,21 @@ from ...import_models import (
     UnmappedCase,
     UnmappedReason,
 )
-from .matching import (
-    route_accepts_dtype,
-    route_accepts_tensors,
-    shape_overrides_from_tensors,
-    shape_permutations_for_route,
+from .layout import (
+    EncodedRouteShape,
+    chain_permutations,
+    encode_route_shape,
+    inverse_permutation,
+    permuted_contiguous_strides,
 )
-from .models import ConcreteTensor, ConcreteTensorDimension, V2Route
+from .matching import route_accepts_dtype, route_accepts_tensors
+from .models import (
+    LOWERING_KIND_COPY_CONTIGUOUS,
+    LOWERING_KIND_COPY_NON_CONTIGUOUS_4D,
+    ConcreteTensor,
+    ConcreteTensorDimension,
+    V2Route,
+)
 from .query import RouteCatalog, require_route_catalog, routes_for_op
 
 POINTWISE_BASE_PERMUTATION = (0, 1, 2, 3)
@@ -127,41 +135,6 @@ def _normalize_copy_permutation(
     if tuple(sorted(permutation)) != COPY_BASE_PERMUTATION:
         raise ValueError(f"copy lowering requires {name} to be [0, 0, 0, 0] or a permutation of [0, 1, 2, 3]")
     return permutation
-
-
-def _inverse_permutation(permutation: tuple[int, int, int, int]) -> tuple[int, int, int, int]:
-    inverse = [0] * len(permutation)
-    for index, value in enumerate(permutation):
-        inverse[int(value)] = int(index)
-    return (inverse[0], inverse[1], inverse[2], inverse[3])
-
-
-def _chain_permutations(
-    first: tuple[int, int, int, int],
-    second: tuple[int, int, int, int],
-) -> tuple[int, int, int, int]:
-    return (
-        int(second[first[0]]),
-        int(second[first[1]]),
-        int(second[first[2]]),
-        int(second[first[3]]),
-    )
-
-
-def _permuted_contiguous_strides(
-    extents: list[int],
-    permutation: tuple[int, int, int, int],
-) -> list[int]:
-    base_extents = [int(extents[axis]) for axis in permutation]
-    base_strides: list[int] = []
-    stride = 1
-    for extent in base_extents:
-        base_strides.append(stride)
-        stride *= extent
-    logical_strides = [0, 0, 0, 0]
-    for base_axis, logical_axis in enumerate(permutation):
-        logical_strides[logical_axis] = base_strides[base_axis]
-    return logical_strides
 
 
 def _parse_copy_parameters(
@@ -300,7 +273,7 @@ def lower_contiguous_copy_tensors(
     return tensors, _shape_from_extents(ne)
 
 
-def lower_transposed_copy_tensors(
+def lower_non_contiguous_copy_tensors(
     case: ImportedCase,
 ) -> tuple[dict[str, ConcreteTensor], dict[str, int]]:
     ne, src_transpose, permute_src, permute_dst = _parse_copy_parameters(case)
@@ -316,15 +289,19 @@ def lower_transposed_copy_tensors(
         COPY_TRANSPOSE_01_PERMUTATION if src_transpose == 1 else normalized_dst
     )
     canonical_extents = [int(ne[axis]) for axis in destination_permutation]
-    effective_src_permutation = _chain_permutations(
+    effective_src_permutation = chain_permutations(
         normalized_src,
-        _inverse_permutation(destination_permutation),
+        inverse_permutation(destination_permutation),
     )
-    src0_strides = _permuted_contiguous_strides(canonical_extents, effective_src_permutation)
+    if effective_src_permutation is None:
+        raise ValueError("copy lowering could not chain source and destination permutations")
+    src0_strides = permuted_contiguous_strides(tuple(canonical_extents), effective_src_permutation)
+    if src0_strides is None:
+        raise ValueError("copy lowering could not derive permuted contiguous strides")
     tensors = {
         "src0": ConcreteTensor(
             dtype=src_dtype,
-            dimensions=_dimensions_from_extents_and_strides(canonical_extents, src0_strides),
+            dimensions=_dimensions_from_extents_and_strides(canonical_extents, list(src0_strides)),
             permutation=normalized_src,
         ),
         "dst": ConcreteTensor(
@@ -358,11 +335,13 @@ def _route_uses_contiguous_copy_lowering(route: V2Route) -> bool:
     dst_dimensions = route.tensors["dst"].dimensions_capture
     dst_strides = route.tensors["dst"].strides_capture
     has_total_size = any(
-        value.name == "total_size" and value.product == dst_dimensions
+        value.name == "total_size" and value.operation_kind == "product" and value.sources == (dst_dimensions,)
         for value in route.values
     )
     has_contiguous_strides = any(
-        value.name == "contiguous_strides" and value.contiguous_strides == dst_dimensions
+        value.name == "contiguous_strides"
+        and value.operation_kind == "contiguous_strides"
+        and value.sources == (dst_dimensions,)
         for value in route.values
     )
     has_equal_dimensions = any(
@@ -383,11 +362,13 @@ def _route_uses_non_contiguous_copy_lowering(route: V2Route) -> bool:
     dst_dimensions = route.tensors["dst"].dimensions_capture
     dst_strides = route.tensors["dst"].strides_capture
     has_total_size = any(
-        value.name == "total_size" and value.product == dst_dimensions
+        value.name == "total_size" and value.operation_kind == "product" and value.sources == (dst_dimensions,)
         for value in route.values
     )
     has_contiguous_strides = any(
-        value.name == "contiguous_strides" and value.contiguous_strides == dst_dimensions
+        value.name == "contiguous_strides"
+        and value.operation_kind == "contiguous_strides"
+        and value.sources == (dst_dimensions,)
         for value in route.values
     )
     has_rank4_dst = any(
@@ -411,27 +392,27 @@ def lower_tensors_for_route(
 ) -> tuple[dict[str, ConcreteTensor], dict[str, int]]:
     if route.op == "ABS":
         return lower_contiguous_unary_tensors(case)
+    if route.lowering_kind == LOWERING_KIND_COPY_CONTIGUOUS:
+        return lower_contiguous_copy_tensors(case)
+    if route.lowering_kind == LOWERING_KIND_COPY_NON_CONTIGUOUS_4D:
+        return lower_non_contiguous_copy_tensors(case)
     if _route_uses_generic_pointwise_lowering(route):
         return lower_generic_pointwise_tensors(case)
     if _route_uses_non_contiguous_copy_lowering(route):
-        return lower_transposed_copy_tensors(case)
+        return lower_non_contiguous_copy_tensors(case)
     if _route_uses_contiguous_copy_lowering(route):
         return lower_contiguous_copy_tensors(case)
     return lower_contiguous_pointwise_tensors(case)
 
 
-def shape_for_resolved_route(route: V2Route, tensors: dict[str, ConcreteTensor], fallback_shape: dict[str, int]) -> dict[str, int]:
+def shape_for_resolved_route(
+    route: V2Route,
+    tensors: dict[str, ConcreteTensor],
+    fallback_shape: dict[str, int],
+) -> EncodedRouteShape:
     if not route.tensors:
-        return fallback_shape
-    tensor_name = "dst" if "dst" in tensors else next(iter(route.tensors))
-    return {
-        **{
-            dimension.name: int(dimension.size)
-            for dimension in tensors[tensor_name].dimensions
-        },
-        **shape_overrides_from_tensors(tensors),
-        **shape_permutations_for_route(route, tensors),
-    }
+        return EncodedRouteShape(items=tuple((str(name), int(value)) for name, value in fallback_shape.items()))
+    return encode_route_shape(route, tensors)
 
 
 def resolve_route_for_case(
@@ -458,7 +439,8 @@ def resolve_route_for_case(
         lowered_any = True
         if not route_accepts_tensors(route, tensors):
             continue
-        return route, shape_for_resolved_route(route, tensors, shape), None, None
+        encoded_shape = shape_for_resolved_route(route, tensors, shape)
+        return route, encoded_shape.as_dict(), None, None
     if lowered_any:
         return (
             None,
@@ -521,7 +503,7 @@ def resolve_imported_suite(
                     kernel_family=route.family,
                     route_id=route.id,
                     params=list(shape.keys()),
-                    values=[int(shape[param]) for param in shape],
+                    values=[int(value) for value in shape.values()],
                 )
             )
     return suite

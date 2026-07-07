@@ -117,7 +117,9 @@ import and runtime validation work.
     `no_dtype_mapping`
 - Source references:
   - `src/ggml_hrx_kernel_bench/routing/v2/import_resolution.py`
+  - `src/ggml_hrx_kernel_bench/generators/copy.py`
   - `src/ggml_hrx_kernel_bench/generators/copy_contiguous.py`
+  - `src/ggml_hrx_kernel_bench/generators/copy_non_contiguous.py`
 - Loom support notes and prioritization impact:
   - Loom already supports the required `view.load`, `view.store`,
     `scalar.extf`, and `scalar.fptrunc` operations used by the existing COPY
@@ -130,7 +132,7 @@ import and runtime validation work.
     `_src_transpose=0`, `permute_src=[0,2,1,3]`, and
     `permute_dst=[0,0,0,0]`
   - expected route: a v2 non-contiguous COPY route backed by
-    `copy/non_contiguous_4d.loom`
+    `copy/copy_f32_f32_non_contiguous_4d.loom`
   - expected coverage gain: `4` grouped-YAML cases in the existing `f32 -> f32`
     family
   - validation:

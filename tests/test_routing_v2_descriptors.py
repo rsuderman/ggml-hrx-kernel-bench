@@ -29,8 +29,8 @@ def _contiguous_constraint_setup() -> tuple[TensorDescriptor, RouteConstraints, 
         )
     )
     values = (
-        ValueDefinition(name="contiguous_strides", contiguous_strides="dimensions"),
-        ValueDefinition(name="total_size", product="dimensions"),
+        ValueDefinition(name="contiguous_strides", operation_kind="contiguous_strides", sources=("dimensions",)),
+        ValueDefinition(name="total_size", operation_kind="product", sources=("dimensions",)),
     )
     return descriptor, constraints, values
 
@@ -162,7 +162,7 @@ def test_route_values_can_chain_permutations_and_derive_strides() -> None:
         family="copy_f32_f32",
         op="CPY",
         source_id="copy_f32_f32",
-        kernel_path="copy/non_contiguous_4d.loom",
+        kernel_path="copy/copy_f32_f32_non_contiguous_4d.loom",
         root_symbol="@copy_f32_f32_non_contiguous_4d",
         export_name="copy_f32_f32_non_contiguous_4d",
         tensors={
@@ -180,15 +180,16 @@ def test_route_values_can_chain_permutations_and_derive_strides() -> None:
             ),
         },
         values=(
-            ValueDefinition(name="dst_inverse", inverse_permutation="dst_permutation"),
+            ValueDefinition(name="dst_inverse", operation_kind="inverse_permutation", sources=("dst_permutation",)),
             ValueDefinition(
                 name="effective_src0_permutation",
-                chain_permutations=("src0_permutation", "dst_inverse"),
+                operation_kind="chain_permutations",
+                sources=("src0_permutation", "dst_inverse"),
             ),
             ValueDefinition(
                 name="effective_src0_strides",
-                permuted_contiguous_strides_dimensions="dst_dimensions",
-                permuted_contiguous_strides_permutation="effective_src0_permutation",
+                operation_kind="permuted_contiguous_strides",
+                sources=("dst_dimensions", "effective_src0_permutation"),
             ),
         ),
         constraints=RouteConstraints(
@@ -247,8 +248,8 @@ def test_route_accepts_tensors_requires_equal_dimension_lists() -> None:
             "dst": TensorDescriptor(dtype="F32", dimensions_capture="dst_dimensions", strides_capture="dst_strides"),
         },
         values=(
-            ValueDefinition(name="contiguous_strides", contiguous_strides="dst_dimensions"),
-            ValueDefinition(name="total_size", product="dst_dimensions"),
+            ValueDefinition(name="contiguous_strides", operation_kind="contiguous_strides", sources=("dst_dimensions",)),
+            ValueDefinition(name="total_size", operation_kind="product", sources=("dst_dimensions",)),
         ),
         constraints=RouteConstraints(
             checks=(
@@ -312,9 +313,7 @@ def test_generic_4d_route_accepts_non_contiguous_broadcast_and_repeat_tensors() 
                 strides_capture="dst_strides",
             ),
         },
-        values=(
-            ValueDefinition(name="total_size", product="dst_dimensions"),
-        ),
+        values=(ValueDefinition(name="total_size", operation_kind="product", sources=("dst_dimensions",)),),
         constraints=RouteConstraints(
             checks=(
                 ConstraintCheck(name="dst_dimensions", length=4),
@@ -387,7 +386,7 @@ def test_generic_4d_route_accepts_transposed_src0_and_dst() -> None:
                 strides_capture="dst_strides",
             ),
         },
-        values=(ValueDefinition(name="total_size", product="dst_dimensions"),),
+        values=(ValueDefinition(name="total_size", operation_kind="product", sources=("dst_dimensions",)),),
         constraints=RouteConstraints(
             checks=(
                 ConstraintCheck(name="dst_dimensions", length=4),
@@ -531,7 +530,7 @@ def test_materialize_rank4_tensors_restores_permutation_hints() -> None:
         family="copy_f32_f32",
         op="CPY",
         source_id="copy_f32_f32",
-        kernel_path="copy/non_contiguous_4d.loom",
+        kernel_path="copy/copy_f32_f32_non_contiguous_4d.loom",
         root_symbol="@copy_f32_f32_non_contiguous_4d",
         export_name="copy_f32_f32_non_contiguous_4d",
         tensors={

@@ -10,15 +10,13 @@ from ...config import BenchConfig, ToolPaths
 from ...reporting import correctness_ok
 from ..models import ExecutedCase, RuntimeCaseRequest
 from .candidates import candidate_from_shape
+from .layout import decode_shape
 from .matching import materialize_route_tensors, route_accepts_tensors
 from .query import RouteCatalog, select_route
 
 
 def shape_for_case(config: dict[str, Any], values: list[int]) -> dict[str, int]:
-    params = list(config["params"])
-    if len(params) != len(values):
-        raise RuntimeError("params and case values must have the same length")
-    return {str(name): int(value) for name, value in zip(params, values, strict=True)}
+    return decode_shape(list(config["params"]), values)
 
 
 def build_bench_config(

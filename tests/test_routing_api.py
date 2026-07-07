@@ -5,6 +5,10 @@ from pathlib import Path
 
 import pytest
 
+from ggml_hrx_kernel_bench.generators.copy import (
+    render_catalog_artifacts,
+    render_kernel_artifacts,
+)
 from ggml_hrx_kernel_bench.import_models import (
     ImportedCase,
     ImportedOpGroup,
@@ -201,16 +205,15 @@ def _write_kernel(kernel_dir: Path) -> None:
 
 def _write_v2_copy_descriptor(routing_dir: Path) -> None:
     routing_dir.mkdir(parents=True, exist_ok=True)
+    route_paths = (
+        "copy/copy_f32_f32_non_contiguous_4d.json",
+        "copy/copy_f32_f16_contiguous_1d.json",
+    )
     (routing_dir / "router.json").write_text(
         json.dumps(
             {
                 "schema": "ggml_hrx_kernel_bench.routing_descriptors.v2",
-                "routes": {
-                    "CPY": [
-                        "copy/copy_f32_f32_non_contiguous_4d.json",
-                        "copy/copy_f32_f16_contiguous_1d.json",
-                    ]
-                },
+                "routes": {"CPY": list(route_paths)},
             },
             indent=2,
             sort_keys=True,
@@ -218,189 +221,23 @@ def _write_v2_copy_descriptor(routing_dir: Path) -> None:
         + "\n",
         encoding="utf-8",
     )
-    copy_dir = routing_dir / "copy"
-    copy_dir.mkdir(parents=True, exist_ok=True)
-    (copy_dir / "copy_f32_f16_contiguous_1d.json").write_text(
-        json.dumps(
-            {
-                "id": "copy_f32_f16_contiguous_1d",
-                "family": "copy_f32_f16",
-                "kernel": {
-                    "source_id": "copy_f32_f16",
-                    "path": "copy/contiguous_1d.loom",
-                    "root_symbol": "@hrx2_copy_f32_f16_contiguous_1d",
-                    "export_name": "hrx2_copy_f32_f16_contiguous_1d",
-                },
-                "tensors": {
-                    "src0": {
-                        "dtype": "F32",
-                        "dimensions": "src0_dimensions",
-                        "strides": "src0_strides",
-                    },
-                    "dst": {
-                        "dtype": "F16",
-                        "dimensions": "dst_dimensions",
-                        "strides": "dst_strides",
-                    },
-                },
-                "values": [
-                    {
-                        "name": "contiguous_strides",
-                        "contiguous_strides": "dst_dimensions",
-                    },
-                    {
-                        "name": "total_size",
-                        "product": "dst_dimensions",
-                    },
-                ],
-                "constraints": [
-                    {"equals": ["src0_dimensions", "dst_dimensions"]},
-                    {"equals": ["contiguous_strides", "src0_strides", "dst_strides"]},
-                ],
-                "launch": {
-                    "workgroup_size": [256, 1, 1],
-                },
-                "config": {
-                    "bindings": [
-                        {
-                            "key": "@hrx2.shape.copy.n",
-                            "source": "value.total_size",
-                        },
-                        {
-                            "key": "@hrx2.tuning.copy.workgroup_size",
-                            "value": "256",
-                        },
-                    ]
-                },
-            },
-            indent=2,
-            sort_keys=True,
-        )
-        + "\n",
-        encoding="utf-8",
-    )
-    (copy_dir / "copy_f32_f32_non_contiguous_4d.json").write_text(
-        json.dumps(
-            {
-                "id": "copy_f32_f32_non_contiguous_4d",
-                "family": "copy_f32_f32",
-                "kernel": {
-                    "source_id": "copy_f32_f32",
-                    "path": "copy/non_contiguous_4d.loom",
-                    "root_symbol": "@copy_f32_f32_non_contiguous_4d",
-                    "export_name": "copy_f32_f32_non_contiguous_4d",
-                },
-                "tensors": {
-                    "src0": {
-                        "dtype": "F32",
-                        "dimensions": "src0_dimensions",
-                        "strides": "src0_strides",
-                        "permutation": "src0_permutation",
-                    },
-                    "dst": {
-                        "dtype": "F32",
-                        "dimensions": "dst_dimensions",
-                        "strides": "dst_strides",
-                        "permutation": "dst_permutation",
-                    },
-                },
-                "values": [
-                    {
-                        "name": "dst_permutation_inverse",
-                        "inverse_permutation": "dst_permutation",
-                    },
-                    {
-                        "name": "effective_src0_permutation",
-                        "chain_permutations": [
-                            "src0_permutation",
-                            "dst_permutation_inverse",
-                        ],
-                    },
-                    {
-                        "name": "effective_src0_strides",
-                        "permuted_contiguous_strides": {
-                            "dimensions": "dst_dimensions",
-                            "permutation": "effective_src0_permutation",
-                        },
-                    },
-                    {
-                        "name": "contiguous_strides",
-                        "contiguous_strides": "dst_dimensions",
-                    },
-                    {
-                        "name": "total_size",
-                        "product": "dst_dimensions",
-                    },
-                ],
-                "constraints": [
-                    {"name": "dst_dimensions", "length": 4},
-                    {"equals": ["src0_dimensions", "dst_dimensions"]},
-                    {"equals": ["effective_src0_strides", "src0_strides"]},
-                    {"equals": ["contiguous_strides", "dst_strides"]},
-                ],
-                "launch": {
-                    "workgroup_size": [256, 1, 1],
-                },
-                "config": {
-                    "bindings": [
-                        {
-                            "key": "@hrx2.shape.copy4d.ne0",
-                            "source": "tensor.dst.dimensions.d0.size",
-                        },
-                        {
-                            "key": "@hrx2.shape.copy4d.ne1",
-                            "source": "tensor.dst.dimensions.d1.size",
-                        },
-                        {
-                            "key": "@hrx2.shape.copy4d.ne2",
-                            "source": "tensor.dst.dimensions.d2.size",
-                        },
-                        {
-                            "key": "@hrx2.shape.copy4d.ne3",
-                            "source": "tensor.dst.dimensions.d3.size",
-                        },
-                        {
-                            "key": "@hrx2.stride.copy4d.src0_nb0",
-                            "source": "value.effective_src0_strides.0",
-                        },
-                        {
-                            "key": "@hrx2.stride.copy4d.src0_nb1",
-                            "source": "value.effective_src0_strides.1",
-                        },
-                        {
-                            "key": "@hrx2.stride.copy4d.src0_nb2",
-                            "source": "value.effective_src0_strides.2",
-                        },
-                        {
-                            "key": "@hrx2.stride.copy4d.src0_nb3",
-                            "source": "value.effective_src0_strides.3",
-                        },
-                        {
-                            "key": "@hrx2.tuning.copy4d.workgroup_size",
-                            "value": "256",
-                        },
-                    ]
-                },
-            },
-            indent=2,
-            sort_keys=True,
-        )
-        + "\n",
-        encoding="utf-8",
-    )
+    artifacts = render_catalog_artifacts()
+    for route_path in route_paths:
+        relative_path = Path(route_path)
+        descriptor_path = routing_dir / relative_path
+        descriptor_path.parent.mkdir(parents=True, exist_ok=True)
+        descriptor_path.write_text(artifacts[relative_path], encoding="utf-8")
 
 
 def _write_copy_kernel(kernel_dir: Path) -> None:
-    copy_dir = kernel_dir / "copy"
-    copy_dir.mkdir(parents=True, exist_ok=True)
-    (copy_dir / "contiguous_1d.loom").write_text(
-        'kernel.def export("hrx2_copy_f32_f16_contiguous_1d") @hrx2_copy_f32_f16_contiguous_1d\n',
-        encoding="utf-8",
-    )
-    (copy_dir / "non_contiguous_4d.loom").write_text(
-        'kernel.def export("copy_f32_f32_non_contiguous_4d") @copy_f32_f32_non_contiguous_4d\n',
-        encoding="utf-8",
-    )
+    artifacts = render_kernel_artifacts()
+    for relative_path in (
+        Path("copy") / "copy_f32_f16_contiguous_1d.loom",
+        Path("copy") / "copy_f32_f32_non_contiguous_4d.loom",
+    ):
+        kernel_path = kernel_dir / relative_path
+        kernel_path.parent.mkdir(parents=True, exist_ok=True)
+        kernel_path.write_text(artifacts[relative_path], encoding="utf-8")
 
 
 def test_v2_router_returns_no_candidates_without_descriptor(tmp_path: Path) -> None:
@@ -586,6 +423,73 @@ def test_v2_resolve_copy_route_for_chained_source_and_destination_permutations(t
     }
 
 
+def test_v2_copy_catalog_infers_lowering_kinds_from_generated_descriptors(tmp_path: Path) -> None:
+    routing_dir = tmp_path / "routing"
+    _write_v2_copy_descriptor(routing_dir)
+
+    catalog = load_route_catalog(routing_dir)
+    by_id = {route.id: route for route in catalog.routes}
+
+    assert by_id["copy_f32_f16_contiguous_1d"].lowering_kind == "copy_contiguous"
+    assert by_id["copy_f32_f32_non_contiguous_4d"].lowering_kind == "copy_non_contiguous_4d"
+
+
+def test_v2_catalog_rejects_binding_with_source_and_value(tmp_path: Path) -> None:
+    routing_dir = tmp_path / "routing"
+    routing_dir.mkdir(parents=True, exist_ok=True)
+    (routing_dir / "router.json").write_text(
+        json.dumps(
+            {
+                "schema": "ggml_hrx_kernel_bench.routing_descriptors.v2",
+                "routes": {"CPY": ["copy/bad.json"]},
+            },
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    copy_dir = routing_dir / "copy"
+    copy_dir.mkdir(parents=True, exist_ok=True)
+    (copy_dir / "bad.json").write_text(
+        json.dumps(
+            {
+                "id": "copy_bad",
+                "family": "copy_bad",
+                "kernel": {
+                    "source_id": "copy_bad",
+                    "path": "copy/copy_bad_contiguous_1d.loom",
+                    "root_symbol": "@copy_bad",
+                    "export_name": "copy_bad",
+                },
+                "tensors": {
+                    "src0": {"dtype": "F32", "dimensions": "src0_dimensions", "strides": "src0_strides"},
+                    "dst": {"dtype": "F32", "dimensions": "dst_dimensions", "strides": "dst_strides"},
+                },
+                "values": [{"name": "total_size", "product": "dst_dimensions"}],
+                "constraints": [{"equals": ["src0_dimensions", "dst_dimensions"]}],
+                "launch": {"workgroup_size": [256, 1, 1]},
+                "config": {
+                    "bindings": [
+                        {
+                            "key": "@hrx2.shape.copy.n",
+                            "source": "value.total_size",
+                            "value": "256",
+                        }
+                    ]
+                },
+            },
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(RuntimeError, match="must not define both source and value"):
+        load_route_catalog(routing_dir)
+
+
 def test_v2_catalog_objects_are_immutable(tmp_path: Path) -> None:
     kernel_dir = tmp_path / "kernels"
     routing_dir = tmp_path / "routing"
@@ -726,7 +630,7 @@ def test_v2_import_resolution_lowers_permuted_rhs_for_non_add_generic_route() ->
             "src1": TensorDescriptor(dtype="F32", dimensions_capture="src1_dimensions", strides_capture="src1_strides"),
             "dst": TensorDescriptor(dtype="F32", dimensions_capture="dst_dimensions", strides_capture="dst_strides"),
         },
-        values=(ValueDefinition(name="total_size", product="dst_dimensions"),),
+        values=(ValueDefinition(name="total_size", operation_kind="product", sources=("dst_dimensions",)),),
         constraints=RouteConstraints(
             checks=(
                 ConstraintCheck(name="dst_dimensions", length=4),

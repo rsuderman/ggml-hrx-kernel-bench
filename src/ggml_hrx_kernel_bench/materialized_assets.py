@@ -4,7 +4,7 @@ import json
 import shutil
 from pathlib import Path
 
-from .generators.copy_contiguous import (
+from .generators.copy import (
     generated_catalog_route_paths,
     render_catalog_artifacts,
     render_kernel_artifacts,
@@ -57,7 +57,10 @@ def _materialization_inputs() -> list[Path]:
             SOURCE_ROUTING_DIRS["v2"] / "copy" / "contiguous_1d.json.tmpl",
             SOURCE_ROUTING_DIRS["v2"] / "copy" / "non_contiguous_4d.json.tmpl",
             Path(__file__),
+            Path(__file__).resolve().parent / "generators" / "copy.py",
+            Path(__file__).resolve().parent / "generators" / "copy_common.py",
             Path(__file__).resolve().parent / "generators" / "copy_contiguous.py",
+            Path(__file__).resolve().parent / "generators" / "copy_non_contiguous.py",
         ]
     )
     return inputs

@@ -40,14 +40,14 @@ def _candidate(
     )
 
 
-def _materialized_copy_source_path(tmp_path: Path) -> str:
+def _materialized_copy_source_path(tmp_path: Path, route_id: str) -> str:
     asset_root = materialize_asset_root(tmp_path / "assets", force=True)
-    return str(asset_root / "kernels" / "v2" / "copy" / "contiguous_1d.loom")
+    return str(asset_root / "kernels" / "v2" / "copy" / f"{route_id}.loom")
 
 
-def _materialized_copy_non_contiguous_source_path(tmp_path: Path) -> str:
+def _materialized_copy_non_contiguous_source_path(tmp_path: Path, route_id: str) -> str:
     asset_root = materialize_asset_root(tmp_path / "assets", force=True)
-    return str(asset_root / "kernels" / "v2" / "copy" / "non_contiguous_4d.loom")
+    return str(asset_root / "kernels" / "v2" / "copy" / f"{route_id}.loom")
 
 
 def test_add_oracle_uses_ranked_shape_for_fixture_size(tmp_path: Path) -> None:
@@ -98,37 +98,36 @@ def test_add_oracle_and_workbench_support_ranked_src1_overrides(tmp_path: Path) 
 
 
 @pytest.mark.parametrize(
-    ("family", "op", "root_symbol", "export_name", "src_dtype", "dst_dtype"),
+    ("family", "op", "src_dtype", "dst_dtype"),
     (
-        ("copy_bf16_bf16", "CPY", "@copy_bf16_bf16_contiguous_1d", "copy_bf16_bf16_contiguous_1d", np.int16, np.int16),
-        ("copy_bf16_f16", "CPY", "@copy_bf16_f16_contiguous_1d", "copy_bf16_f16_contiguous_1d", np.int16, np.int16),
-        ("copy_bf16_f32", "CPY", "@copy_bf16_f32_contiguous_1d", "copy_bf16_f32_contiguous_1d", np.int16, np.float32),
-        ("copy_f16_bf16", "CPY", "@copy_f16_bf16_contiguous_1d", "copy_f16_bf16_contiguous_1d", np.int16, np.int16),
-        ("copy_f16_f16", "CPY", "@hrx2_copy_f16_f16_contiguous_1d", "hrx2_copy_f16_f16_contiguous_1d", np.int16, np.int16),
-        ("copy_f16_f32", "CPY", "@hrx2_copy_f16_f32_contiguous_1d", "hrx2_copy_f16_f32_contiguous_1d", np.int16, np.float32),
-        ("copy_f32_bf16", "CPY", "@copy_f32_bf16_contiguous_1d", "copy_f32_bf16_contiguous_1d", np.float32, np.int16),
-        ("copy_f32_f16", "CPY", "@hrx2_copy_f32_f16_contiguous_1d", "hrx2_copy_f32_f16_contiguous_1d", np.float32, np.int16),
-        ("copy_f32_f32", "CPY", "@hrx2_copy_f32_f32_contiguous_1d", "hrx2_copy_f32_f32_contiguous_1d", np.float32, np.float32),
+        ("copy_bf16_bf16", "CPY", np.int16, np.int16),
+        ("copy_bf16_f16", "CPY", np.int16, np.int16),
+        ("copy_bf16_f32", "CPY", np.int16, np.float32),
+        ("copy_f16_bf16", "CPY", np.int16, np.int16),
+        ("copy_f16_f16", "CPY", np.int16, np.int16),
+        ("copy_f16_f32", "CPY", np.int16, np.float32),
+        ("copy_f32_bf16", "CPY", np.float32, np.int16),
+        ("copy_f32_f16", "CPY", np.float32, np.int16),
+        ("copy_f32_f32", "CPY", np.float32, np.float32),
     ),
 )
 def test_copy_oracle_and_workbench_use_expected_buffer_types(
     tmp_path: Path,
     family: str,
     op: str,
-    root_symbol: str,
-    export_name: str,
     src_dtype: type[np.generic],
     dst_dtype: type[np.generic],
 ) -> None:
+    route_id = f"{family}_contiguous_1d"
     candidate = _candidate(
         candidate_id=f"{family}_ranked_4d",
         shape={"d0": 16, "d1": 4, "d2": 2, "d3": 2},
         family=family,
         source_id=family,
-        root_symbol=root_symbol,
-        export_name=export_name,
+        root_symbol=f"@{route_id}",
+        export_name=route_id,
         op=op,
-        source_path=_materialized_copy_source_path(tmp_path),
+        source_path=_materialized_copy_source_path(tmp_path, route_id),
     )
 
     result = generate_oracle(candidate, tmp_path / "fixtures", force=True)
@@ -139,7 +138,7 @@ def test_copy_oracle_and_workbench_use_expected_buffer_types(
     assert np.load(tmp_path / "fixtures" / "expected.npy").dtype == dst_dtype
 
     linked_source = tmp_path / "linked.loom"
-    linked_source.write_text(f"kernel.def export(\"{export_name}\") {root_symbol}() {{}}\n", encoding="utf-8")
+    linked_source.write_text(f"kernel.def export(\"{route_id}\") @{route_id}() {{}}\n", encoding="utf-8")
     _, metadata = write_workbench(candidate, linked_source, tmp_path / "workbench.loom", tmp_path / "fixtures")
 
     assert metadata["status"] == "ok"
@@ -169,7 +168,7 @@ def test_copy_oracle_and_workbench_support_transposed_f32_source(tmp_path: Path)
         root_symbol="@copy_f32_f32_non_contiguous_4d",
         export_name="copy_f32_f32_non_contiguous_4d",
         op="CPY",
-        source_path=_materialized_copy_non_contiguous_source_path(tmp_path),
+        source_path=_materialized_copy_non_contiguous_source_path(tmp_path, "copy_f32_f32_non_contiguous_4d"),
     )
 
     result = generate_oracle(candidate, tmp_path / "fixtures", force=True)

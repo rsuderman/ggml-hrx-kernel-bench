@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from pathlib import Path
 import json
+from pathlib import Path
 
-from ggml_hrx_kernel_bench.generators.copy_contiguous import (
+from ggml_hrx_kernel_bench.generators.copy import (
     generated_catalog_route_paths,
     render_catalog_artifacts,
     render_kernel_artifacts,
@@ -21,6 +21,12 @@ def test_copy_route_writer_emits_expected_descriptors(tmp_path: Path) -> None:
         artifact_path = catalog_root / relative_path
         assert artifact_path in written_paths
         assert artifact_path.read_text(encoding="utf-8") == expected_contents, str(relative_path)
+
+
+def test_generated_copy_descriptors_do_not_serialize_lowering_metadata() -> None:
+    for contents in render_catalog_artifacts().values():
+        payload = json.loads(contents)
+        assert "lowering" not in payload
 
 
 def test_materialized_v2_kernels_include_generated_contiguous_copy(tmp_path: Path) -> None:

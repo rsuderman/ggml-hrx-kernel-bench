@@ -5,7 +5,10 @@ from pathlib import Path
 from typing import Any
 
 from .models import (
+    BindingDefinition,
     ConstraintCheck,
+    LOWERING_KIND_COPY_CONTIGUOUS,
+    LOWERING_KIND_COPY_NON_CONTIGUOUS_4D,
     RouteConstraints,
     TensorDescriptor,
     V2Route,
@@ -151,27 +154,40 @@ def _parse_value_definition(path: Path, route_index: Any, raw: Any) -> ValueDefi
             raise RuntimeError(
                 f"v2 route {route_index} value definition {name!r} permuted_contiguous_strides.permutation must reference a capture name: {path}"
             )
-    return ValueDefinition(
-        name=name,
-        contiguous_strides=None if contiguous_strides is None else contiguous_strides.strip(),
-        product=None if product is None else product.strip(),
-        inverse_permutation=None if inverse_permutation is None else inverse_permutation.strip(),
-        chain_permutations=(
-            None
-            if chain_permutations is None
-            else (str(chain_permutations[0]).strip(), str(chain_permutations[1]).strip())
-        ),
-        permuted_contiguous_strides_dimensions=(
-            None
-            if permuted_contiguous_strides is None
-            else str(permuted_contiguous_strides["dimensions"]).strip()
-        ),
-        permuted_contiguous_strides_permutation=(
-            None
-            if permuted_contiguous_strides is None
-            else str(permuted_contiguous_strides["permutation"]).strip()
-        ),
-    )
+    if contiguous_strides is not None:
+        return ValueDefinition(
+            name=name,
+            operation_kind="contiguous_strides",
+            sources=(contiguous_strides.strip(),),
+        )
+    if product is not None:
+        return ValueDefinition(
+            name=name,
+            operation_kind="product",
+            sources=(product.strip(),),
+        )
+    if inverse_permutation is not None:
+        return ValueDefinition(
+            name=name,
+            operation_kind="inverse_permutation",
+            sources=(inverse_permutation.strip(),),
+        )
+    if chain_permutations is not None:
+        return ValueDefinition(
+            name=name,
+            operation_kind="chain_permutations",
+            sources=(str(chain_permutations[0]).strip(), str(chain_permutations[1]).strip()),
+        )
+    if permuted_contiguous_strides is not None:
+        return ValueDefinition(
+            name=name,
+            operation_kind="permuted_contiguous_strides",
+            sources=(
+                str(permuted_contiguous_strides["dimensions"]).strip(),
+                str(permuted_contiguous_strides["permutation"]).strip(),
+            ),
+        )
+    raise AssertionError(f"v2 route {route_index} value definition {name!r} did not resolve to an operation: {path}")
 
 
 def _parse_values(path: Path, route_index: Any, raw: Any) -> tuple[ValueDefinition, ...]:
@@ -260,28 +276,140 @@ def _parse_constraints(path: Path, route_index: Any, raw: Any) -> RouteConstrain
     return RouteConstraints(checks=tuple(checks))
 
 
+def _parse_non_empty_string(path: Path, context: str, raw: Any) -> str:
+    if not isinstance(raw, str) or not raw.strip():
+        raise RuntimeError(f"{context} must be a non-empty string: {path}")
+    return raw.strip()
+
+
+def _parse_lowering_kind(path: Path, route_index: Any, raw: Any) -> str | None:
+    if raw is None:
+        return None
+    lowering = _parse_non_empty_string(path, f"v2 route {route_index} lowering", raw)
+    if lowering not in {LOWERING_KIND_COPY_CONTIGUOUS, LOWERING_KIND_COPY_NON_CONTIGUOUS_4D}:
+        raise RuntimeError(f"v2 route {route_index} lowering {lowering!r} is not supported: {path}")
+    return lowering
+
+
+def _infer_copy_lowering_kind(
+    *,
+    op: str,
+    route_id: str,
+    kernel_path: str,
+) -> str | None:
+    if op != "CPY":
+        return None
+    if route_id.endswith("_contiguous_1d") or kernel_path.endswith("_contiguous_1d.loom"):
+        return LOWERING_KIND_COPY_CONTIGUOUS
+    if route_id.endswith("_non_contiguous_4d") or kernel_path.endswith("_non_contiguous_4d.loom"):
+        return LOWERING_KIND_COPY_NON_CONTIGUOUS_4D
+    return None
+
+
+def _parse_bindings(path: Path, route_index: Any, raw: Any) -> tuple[BindingDefinition, ...]:
+    if raw is None:
+        return ()
+    if not isinstance(raw, list):
+        raise RuntimeError(f"v2 route {route_index} config.bindings must be a JSON array: {path}")
+    bindings: list[BindingDefinition] = []
+    for binding_index, entry in enumerate(raw):
+        if not isinstance(entry, dict):
+            raise RuntimeError(
+                f"v2 route {route_index} config.bindings[{binding_index}] must be a JSON object: {path}"
+            )
+        extra_keys = set(entry) - {"key", "source", "value"}
+        if extra_keys:
+            raise RuntimeError(
+                f"v2 route {route_index} config.bindings[{binding_index}] has unsupported keys {sorted(extra_keys)!r}: {path}"
+            )
+        key = _parse_non_empty_string(
+            path,
+            f"v2 route {route_index} config.bindings[{binding_index}].key",
+            entry.get("key"),
+        )
+        source = entry.get("source")
+        value = entry.get("value")
+        if source is not None and value is not None:
+            raise RuntimeError(
+                f"v2 route {route_index} config.bindings[{binding_index}] must not define both source and value: {path}"
+            )
+        if source is None and value is None:
+            raise RuntimeError(
+                f"v2 route {route_index} config.bindings[{binding_index}] must define source or value: {path}"
+            )
+        bindings.append(
+            BindingDefinition(
+                key=key,
+                source=None if source is None else _parse_non_empty_string(
+                    path,
+                    f"v2 route {route_index} config.bindings[{binding_index}].source",
+                    source,
+                ),
+                value=None if value is None else _parse_non_empty_string(
+                    path,
+                    f"v2 route {route_index} config.bindings[{binding_index}].value",
+                    value,
+                ),
+            )
+        )
+    return tuple(bindings)
+
+
+def _parse_kernel(path: Path, route_index: Any, raw: Any) -> dict[str, str | None]:
+    if not isinstance(raw, dict):
+        raise RuntimeError(f"v2 route {route_index} kernel must be a JSON object: {path}")
+    extra_keys = set(raw) - {"source_id", "path", "root_symbol", "export_name"}
+    if extra_keys:
+        raise RuntimeError(f"v2 route {route_index} kernel has unsupported keys {sorted(extra_keys)!r}: {path}")
+    return {
+        "source_id": _parse_non_empty_string(path, f"v2 route {route_index} kernel.source_id", raw.get("source_id")),
+        "path": _parse_non_empty_string(path, f"v2 route {route_index} kernel.path", raw.get("path")),
+        "root_symbol": _parse_non_empty_string(
+            path,
+            f"v2 route {route_index} kernel.root_symbol",
+            raw.get("root_symbol"),
+        ),
+        "export_name": (
+            None
+            if raw.get("export_name") is None
+            else _parse_non_empty_string(path, f"v2 route {route_index} kernel.export_name", raw.get("export_name"))
+        ),
+    }
+
+
 def _parse_route_entry(path: Path, route_index: Any, op: str, raw: Any) -> V2Route:
     if not isinstance(raw, dict):
         raise RuntimeError(f"v2 route entry {route_index} must be a JSON object: {path}")
-    kernel = raw.get("kernel") or {}
+    kernel = _parse_kernel(path, route_index, raw.get("kernel"))
     launch = raw.get("launch") or {}
     config = raw.get("config") or {}
-    bindings = config.get("bindings") or []
+    route_id = _parse_non_empty_string(path, f"v2 route {route_index} id", raw.get("id"))
+    family = _parse_non_empty_string(path, f"v2 route {route_index} family", raw.get("family"))
+    if not isinstance(launch, dict):
+        raise RuntimeError(f"v2 route {route_index} launch must be a JSON object: {path}")
+    if not isinstance(config, dict):
+        raise RuntimeError(f"v2 route {route_index} config must be a JSON object: {path}")
     return V2Route(
-        id=str(raw["id"]),
-        family=str(raw["family"]),
+        id=route_id,
+        family=family,
         op=op,
         source_id=str(kernel["source_id"]),
         kernel_path=str(kernel["path"]),
         root_symbol=str(kernel["root_symbol"]),
-        export_name=(
-            None if kernel.get("export_name") is None else str(kernel["export_name"])
-        ),
+        export_name=None if kernel.get("export_name") is None else str(kernel["export_name"]),
         tensors=_parse_tensors(path, route_index, raw.get("tensors")),
         values=_parse_values(path, route_index, raw.get("values")),
         constraints=_parse_constraints(path, route_index, raw.get("constraints")),
         launch=dict(launch),
-        bindings=tuple(dict(binding) for binding in bindings),
+        bindings=_parse_bindings(path, route_index, config.get("bindings")),
+        lowering_kind=(
+            _parse_lowering_kind(path, route_index, raw.get("lowering"))
+            or _infer_copy_lowering_kind(
+                op=op,
+                route_id=route_id,
+                kernel_path=str(kernel["path"]),
+            )
+        ),
     )
 
 

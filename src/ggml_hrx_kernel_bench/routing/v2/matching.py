@@ -2,6 +2,12 @@ from __future__ import annotations
 
 from typing import Any, Mapping
 
+from .layout import (
+    chain_permutations,
+    contiguous_strides,
+    inverse_permutation,
+    permuted_contiguous_strides,
+)
 from .models import (
     ConcreteTensor,
     ConcreteTensorDimension,
@@ -58,55 +64,11 @@ def _multiple_of_accept(divisor: int | None, value: int) -> bool:
     return value % divisor == 0
 
 
-def _contiguous_strides(dimensions: tuple[int, ...]) -> tuple[int, ...]:
-    stride = 1
-    strides: list[int] = []
-    for size in dimensions:
-        strides.append(stride)
-        stride *= int(size)
-    return tuple(strides)
-
-
 def _product(dimensions: tuple[int, ...]) -> int:
     total = 1
     for size in dimensions:
         total *= int(size)
     return total
-
-
-def _inverse_permutation(permutation: tuple[int, ...]) -> tuple[int, ...] | None:
-    if tuple(sorted(permutation)) != tuple(range(len(permutation))):
-        return None
-    inverse = [0] * len(permutation)
-    for index, value in enumerate(permutation):
-        inverse[int(value)] = int(index)
-    return tuple(inverse)
-
-
-def _chain_permutations(first: tuple[int, ...], second: tuple[int, ...]) -> tuple[int, ...] | None:
-    if len(first) != len(second):
-        return None
-    if tuple(sorted(first)) != tuple(range(len(first))):
-        return None
-    if tuple(sorted(second)) != tuple(range(len(second))):
-        return None
-    return tuple(int(second[index]) for index in first)
-
-
-def _permuted_contiguous_strides(
-    dimensions: tuple[int, ...],
-    permutation: tuple[int, ...],
-) -> tuple[int, ...] | None:
-    if len(dimensions) != len(permutation):
-        return None
-    if tuple(sorted(permutation)) != tuple(range(len(permutation))):
-        return None
-    base_extents = [int(dimensions[axis]) for axis in permutation]
-    base_strides = _contiguous_strides(tuple(base_extents))
-    logical_strides = [0] * len(permutation)
-    for base_axis, logical_axis in enumerate(permutation):
-        logical_strides[int(logical_axis)] = int(base_strides[base_axis])
-    return tuple(logical_strides)
 
 
 def _store_capture(
@@ -156,49 +118,48 @@ def _resolve_values(
         return captures.get(name)
 
     for definition in definitions:
-        if definition.contiguous_strides is not None:
-            source = lookup(definition.contiguous_strides)
+        if definition.operation_kind == "contiguous_strides":
+            source = lookup(definition.sources[0])
             if not isinstance(source, tuple):
                 return None
-            resolved[definition.name] = _contiguous_strides(source)
+            resolved[definition.name] = contiguous_strides(source)
             continue
-        if definition.product is not None:
-            source = lookup(definition.product)
+        if definition.operation_kind == "product":
+            source = lookup(definition.sources[0])
             if not isinstance(source, tuple):
                 return None
             resolved[definition.name] = _product(source)
             continue
-        if definition.inverse_permutation is not None:
-            source = lookup(definition.inverse_permutation)
+        if definition.operation_kind == "inverse_permutation":
+            source = lookup(definition.sources[0])
             if not isinstance(source, tuple):
                 return None
-            inverse = _inverse_permutation(source)
+            inverse = inverse_permutation(source)
             if inverse is None:
                 return None
             resolved[definition.name] = inverse
             continue
-        if definition.chain_permutations is not None:
-            first = lookup(definition.chain_permutations[0])
-            second = lookup(definition.chain_permutations[1])
+        if definition.operation_kind == "chain_permutations":
+            first = lookup(definition.sources[0])
+            second = lookup(definition.sources[1])
             if not isinstance(first, tuple) or not isinstance(second, tuple):
                 return None
-            chained = _chain_permutations(first, second)
+            chained = chain_permutations(first, second)
             if chained is None:
                 return None
             resolved[definition.name] = chained
             continue
-        if definition.permuted_contiguous_strides_dimensions is not None:
-            dimensions = lookup(definition.permuted_contiguous_strides_dimensions)
-            permutation = lookup(definition.permuted_contiguous_strides_permutation or "")
+        if definition.operation_kind == "permuted_contiguous_strides":
+            dimensions = lookup(definition.sources[0])
+            permutation = lookup(definition.sources[1])
             if not isinstance(dimensions, tuple) or not isinstance(permutation, tuple):
                 return None
-            strides = _permuted_contiguous_strides(dimensions, permutation)
+            strides = permuted_contiguous_strides(dimensions, permutation)
             if strides is None:
                 return None
             resolved[definition.name] = strides
             continue
-        if definition.name:
-            return None
+        return None
     return resolved
 
 
@@ -303,7 +264,7 @@ def shape_overrides_from_tensors(tensors: Mapping[str, ConcreteTensor]) -> dict[
     overrides: dict[str, int] = {}
     for tensor_name, tensor in tensors.items():
         sizes = [int(dimension.size) for dimension in tensor.dimensions]
-        default_strides = _contiguous_strides(tuple(sizes))
+        default_strides = contiguous_strides(tuple(sizes))
         for index, dimension in enumerate(tensor.dimensions):
             base_key = f"{tensor_name}_{dimension.name}"
             if int(dimension.size) != int(shape[dimension.name]):
@@ -409,7 +370,7 @@ def materialize_route_tensors(route: V2Route, sizes: Mapping[str, int]) -> dict[
         if tuple(index for index, _ in ranked_dimension_names) != tuple(range(len(dimension_names))):
             raise KeyError(",".join(f"d{index}" for index in range(len(dimension_names))))
         default_sizes = [int(normalized_sizes[name]) for name in dimension_names]
-        default_strides = _contiguous_strides(tuple(default_sizes))
+        default_strides = contiguous_strides(tuple(default_sizes))
         dimensions = tuple(
             ConcreteTensorDimension(name=name, size=default_sizes[index], stride=default_strides[index])
             for index, name in enumerate(dimension_names)
@@ -430,7 +391,7 @@ def materialize_route_tensors(route: V2Route, sizes: Mapping[str, int]) -> dict[
             int(normalized_sizes.get(f"{tensor_name}_{dimension_name}", normalized_sizes[dimension_name]))
             for dimension_name in dimension_names
         ]
-        default_strides = _contiguous_strides(tuple(sizes_for_tensor))
+        default_strides = contiguous_strides(tuple(sizes_for_tensor))
         dimensions: list[ConcreteTensorDimension] = []
         for index, dimension_name in enumerate(dimension_names):
             stride = int(normalized_sizes.get(f"{tensor_name}_{dimension_name}_stride", default_strides[index]))

@@ -1,3 +1,6 @@
+config.decl @hrx2.shape.copy.n : %value: index where [range(%value, 1, 1073741824)]
+config.decl @hrx2.tuning.copy.workgroup_size : %value: index where [range(%value, 32, 1024), mul(%value, 32)]
+
 kernel.def export("$export_name") $root_symbol() {
   %unit = index.constant 1 : index
   %minus_one = index.constant -1 : index

@@ -3,20 +3,18 @@ from __future__ import annotations
 from pathlib import Path
 
 from ..models import Candidate, CandidateQuery
+from .layout import encode_route_shape
 from .matching import (
     default_shape_for_route,
     materialize_route_tensors,
     route_dispatch,
     route_values,
-    shape_permutations_for_route,
-    shape_overrides_from_tensors,
-    shape_from_tensors,
     value_from_route_source,
     value_from_tensor_source,
 )
 from .models import ConcreteTensor, V2Route, stable_id
 from .query import RouteCatalog, candidate_routes
-from .serialization import route_json, route_supports, source_path_for_route
+from .serialization import route_summary_json, route_supports, source_path_for_route
 from .shape import resolve_shape_source
 
 
@@ -30,9 +28,9 @@ def build_config(
     values: dict[str, int | str] = dict(shape)
     missing: list[str] = []
     for binding in route.bindings:
-        key = str(binding["key"])
-        if "source" in binding:
-            source = str(binding["source"])
+        key = str(binding.key)
+        if binding.source is not None:
+            source = str(binding.source)
             value = value_from_route_source(source, resolved_values)
             if value is None:
                 value = value_from_tensor_source(source, tensors)
@@ -44,7 +42,7 @@ def build_config(
             config[key] = str(value)
             values[source] = value
         else:
-            config[key] = str(binding["value"])
+            config[key] = str(binding.value)
     return config, values, missing
 
 
@@ -57,12 +55,7 @@ def candidate_from_shape(
     message: str | None = None,
 ) -> Candidate:
     tensors = materialize_route_tensors(route, shape)
-    shape = {
-        **shape_from_tensors(tensors),
-        **shape_overrides_from_tensors(tensors),
-        **shape_permutations_for_route(route, tensors),
-        **shape,
-    }
+    shape = {**encode_route_shape(route, tensors).as_dict(), **shape}
     resolved_values = route_values(route, tensors)
     if resolved_values is None:
         raise RuntimeError(f"v2 route {route.id!r} failed to resolve route values for shape {shape!r}")
@@ -79,7 +72,7 @@ def candidate_from_shape(
         root_symbol=route.root_symbol,
         export_name=route.export_name,
         route_id=route.id,
-        route=route_json(route),
+        route=route_summary_json(route),
         shape=shape,
         values=values,
         config=config,

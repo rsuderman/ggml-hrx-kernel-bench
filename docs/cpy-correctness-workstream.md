@@ -44,7 +44,7 @@
 - Source references:
   - `src/ggml_hrx_kernel_bench/routing/v2/import_resolution.py`
   - `catalog/v2/copy/copy_f32_f32_contiguous_1d.json`
-  - `kernels/v2/copy/contiguous_1d.loom`
+  - `kernels/v2/copy/copy_f32_f32_contiguous_1d.loom`
 - Validation status: confirmed import-side gap; runtime path for mapped cases passes
 - Next concrete action: decide whether CPY needs a generic strided COPY route/kernel surface. The current contiguous v2 route requires equal contiguous strides, so this is not just an importer issue.
 
@@ -66,7 +66,7 @@
 - Source references:
   - `src/ggml_hrx_kernel_bench/routing/v2/import_resolution.py`
   - `catalog/v2/copy/copy_f32_f32_contiguous_1d.json`
-  - `kernels/v2/copy/contiguous_1d.loom`
+  - `kernels/v2/copy/copy_f32_f32_contiguous_1d.loom`
 - Validation status: confirmed import-side gap; current kernel ABI has no stride inputs, so the contiguous route cannot implement transpose as-is
 - Next concrete action: if transposed CPY is in scope, add a route/kernel form that captures source and destination strides rather than only `total_size`.
 
