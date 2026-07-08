@@ -515,9 +515,9 @@ def lower_tensors_for_route(
     case: ImportedCase,
     route: V2Route,
 ) -> tuple[dict[str, ConcreteTensor], dict[str, int]]:
-    if route.op == "ABS":
+    if route.op in {"ABS", "EXP", "NEG", "RELU"}:
         return lower_contiguous_unary_tensors(case)
-    if route.op == "CLAMP" or route.op == "SCALE":
+    if route.op in {"CLAMP", "SCALE", "SQR", "SQRT"}:
         return lower_contiguous_scale_or_clamp_tensors(case)
     if route.op == "CONT":
         return lower_contiguous_cont_tensors(case)

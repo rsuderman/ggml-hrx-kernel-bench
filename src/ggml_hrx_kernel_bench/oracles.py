@@ -847,18 +847,43 @@ def _clamp_arrays(np: Any, candidate: Candidate, seed: int) -> dict[str, Any]:
     }
 
 
-def _abs_arrays(np: Any, candidate: Candidate, seed: int) -> dict[str, Any]:
-    ncols, nrows, elems = _dims(candidate)
-    src = f32_pattern(np, (nrows, ncols), seed=seed)
-    if candidate.family == "abs_f16":
-        # f16 is carried through the workbench as raw int16 bit patterns; abs on
-        # a half is exact (it clears the sign bit), so the golden is bit-exact.
+def _unary_source_values(np: Any, candidate: Candidate, seed: int) -> Any:
+    ncols, nrows, _ = _dims(candidate)
+    shape = (nrows, ncols)
+    if candidate.family in {"exp_f32", "exp_f16"}:
+        return f32_pattern(np, shape, seed=seed, scale=0.25)
+    if candidate.family in {"sqrt_f32", "sqrt_f16"}:
+        return positive_f32_pattern(np, shape, seed=seed, scale=0.25)
+    return f32_pattern(np, shape, seed=seed)
+
+
+def _unary_apply(np: Any, family: str, values: Any) -> Any:
+    if family in {"abs_f32", "abs_f16"}:
+        return np.abs(values)
+    if family in {"exp_f32", "exp_f16"}:
+        return np.exp(values)
+    if family in {"neg_f32", "neg_f16"}:
+        return np.negative(values)
+    if family in {"relu_f32", "relu_f16"}:
+        return np.maximum(values, np.float32(0.0))
+    if family in {"sqr_f32", "sqr_f16"}:
+        return np.square(values)
+    if family in {"sqrt_f32", "sqrt_f16"}:
+        return np.sqrt(values)
+    raise ValueError(f"unsupported unary family {family}")
+
+
+def _unary_arrays(np: Any, candidate: Candidate, seed: int) -> dict[str, Any]:
+    _, _, elems = _dims(candidate)
+    src = _unary_source_values(np, candidate, seed)
+    if candidate.family.endswith("_f16"):
         src0 = src.astype(np.float16)
+        expected = _unary_apply(np, candidate.family, src0.astype(np.float32)).astype(np.float16)
         return {
             "arrays": {
                 "src0": src0.reshape(elems).view(np.int16),
                 "dst_init": np.zeros((elems,), dtype=np.int16),
-                "expected": np.abs(src0).reshape(elems).view(np.int16),
+                "expected": expected.reshape(elems).view(np.int16),
             },
             "metadata": {"dst_type": "i16"},
         }
@@ -867,9 +892,13 @@ def _abs_arrays(np: Any, candidate: Candidate, seed: int) -> dict[str, Any]:
         "arrays": {
             "src0": src0.reshape(elems),
             "dst_init": f32_pattern(np, (elems,), seed=seed + 2, scale=0.25),
-            "expected": np.abs(src0).astype(np.float32).reshape(elems),
+            "expected": _unary_apply(np, candidate.family, src0).astype(np.float32).reshape(elems),
         },
     }
+
+
+def _abs_arrays(np: Any, candidate: Candidate, seed: int) -> dict[str, Any]:
+    return _unary_arrays(np, candidate, seed)
 
 
 def _rms_norm_mul_arrays(np: Any, candidate: Candidate, seed: int) -> dict[str, Any]:
@@ -1514,7 +1543,7 @@ check.benchmark<{case_name}> {bench_name}
 
 
 def _write_abs_workbench(candidate: Candidate, linked_source: Path, workbench_path: Path, fixture_dir: Path) -> tuple[str, dict[str, Any]]:
-    ncols, nrows, elems = _dims(candidate)
+    _, _, elems = _dims(candidate)
     case_name, bench_name = _case_names(candidate)
     if candidate.family == "abs_f16":
         body = "\n".join(
@@ -1536,6 +1565,37 @@ def _write_abs_workbench(candidate: Candidate, linked_source: Path, workbench_pa
                 f"  check.expect.close actual(%dst) expected(%expected) atol(0.0) rtol(0.0) nan(same) : tensor<{elems}xf32>",
             ]
         )
+    return _emit_case(linked_source, workbench_path, case_name, bench_name, body)
+
+
+def _write_unary_workbench(candidate: Candidate, linked_source: Path, workbench_path: Path, fixture_dir: Path) -> tuple[str, dict[str, Any]]:
+    _, _, elems = _dims(candidate)
+    case_name, bench_name = _case_names(candidate)
+    if candidate.family.endswith("_f16"):
+        body = "\n".join(
+            [
+                _read_i16(workbench_path, fixture_dir, "src0", elems),
+                _read_i16(workbench_path, fixture_dir, "dst_init", elems).replace("%dst_init", "%dst"),
+                _read_i16(workbench_path, fixture_dir, "expected", elems),
+                f"  func.call {candidate.root_symbol}(%src0, %dst) : (tensor<{elems}xi16>, tensor<{elems}xi16>)",
+                f"  check.expect.equal actual(%dst) expected(%expected) : tensor<{elems}xi16>",
+            ]
+        )
+        return _emit_case(linked_source, workbench_path, case_name, bench_name, body)
+
+    atol, rtol = {
+        "exp_f32": ("1e-5", "1e-5"),
+        "sqrt_f32": ("1e-6", "1e-6"),
+    }.get(candidate.family, ("0.0", "0.0"))
+    body = "\n".join(
+        [
+            _read_f32(workbench_path, fixture_dir, "src0", elems),
+            _read_f32(workbench_path, fixture_dir, "dst_init", elems).replace("%dst_init", "%dst"),
+            _read_f32(workbench_path, fixture_dir, "expected", elems),
+            f"  func.call {candidate.root_symbol}(%src0, %dst) : (tensor<{elems}xf32>, tensor<{elems}xf32>)",
+            f"  check.expect.close actual(%dst) expected(%expected) atol({atol}) rtol({rtol}) nan(same) : tensor<{elems}xf32>",
+        ]
+    )
     return _emit_case(linked_source, workbench_path, case_name, bench_name, body)
 
 
@@ -1956,6 +2016,19 @@ ORACLE_SPECS: tuple[OracleSpec, ...] = (
         family_ids=("abs_f32", "abs_f16"),
         generate=_logical_generate(LogicalOracleSpec(("abs_f32", "abs_f16"), "abs_numpy", {"atol": 0.0, "rtol": 0.0}, _abs_arrays, exact_kernel_abi=True)),
         write_workbench=_write_abs_workbench,
+    ),
+    OracleSpec(
+        family_ids=("exp_f32", "exp_f16", "neg_f32", "neg_f16", "relu_f32", "relu_f16", "sqr_f32", "sqr_f16", "sqrt_f32", "sqrt_f16"),
+        generate=_logical_generate(
+            LogicalOracleSpec(
+                ("exp_f32", "exp_f16", "neg_f32", "neg_f16", "relu_f32", "relu_f16", "sqr_f32", "sqr_f16", "sqrt_f32", "sqrt_f16"),
+                "unary_numpy",
+                {"atol": 1e-5, "rtol": 1e-5},
+                _unary_arrays,
+                exact_kernel_abi=True,
+            )
+        ),
+        write_workbench=_write_unary_workbench,
     ),
 )
 

@@ -234,6 +234,98 @@ def test_set_rows_oracle_and_workbench_support_ranked_v2_shape(tmp_path: Path) -
 
 
 @pytest.mark.parametrize(
+    ("family", "op", "root_symbol", "export_name", "source_path"),
+    (
+        ("exp_f16", "EXP", "@exp_f16", "exp_f16", "kernels/v2/exp/contiguous_4d.loom"),
+        ("neg_f16", "NEG", "@neg_f16", "neg_f16", "kernels/v2/neg/contiguous_4d.loom"),
+        ("relu_f16", "RELU", "@relu_f16", "relu_f16", "kernels/v2/relu/contiguous_4d.loom"),
+        ("sqr_f16", "SQR", "@sqr_f16", "sqr_f16", "kernels/v2/sqr/contiguous_4d.loom"),
+        ("sqrt_f16", "SQRT", "@sqrt_f16", "sqrt_f16", "kernels/v2/sqrt/contiguous_4d.loom"),
+    ),
+)
+def test_unary_f16_oracle_and_workbench_use_i16_buffers(
+    tmp_path: Path,
+    family: str,
+    op: str,
+    root_symbol: str,
+    export_name: str,
+    source_path: str,
+) -> None:
+    candidate = _candidate(
+        candidate_id=f"{family}_ranked_3d",
+        shape={"d0": 4, "d1": 8, "d2": 2},
+        family=family,
+        source_id=family,
+        root_symbol=root_symbol,
+        export_name=export_name,
+        op=op,
+        source_path=source_path,
+    )
+
+    result = generate_oracle(candidate, tmp_path / "fixtures", force=True)
+
+    assert result.status == "fixtures_ready"
+    assert np.load(tmp_path / "fixtures" / "src0.npy").dtype == np.int16
+    assert np.load(tmp_path / "fixtures" / "dst_init.npy").dtype == np.int16
+    assert np.load(tmp_path / "fixtures" / "expected.npy").dtype == np.int16
+
+    linked_source = tmp_path / "linked.loom"
+    linked_source.write_text(f"kernel.def export(\"{export_name}\") {root_symbol}() {{}}\n", encoding="utf-8")
+    _, metadata = write_workbench(candidate, linked_source, tmp_path / "workbench.loom", tmp_path / "fixtures")
+
+    assert metadata["status"] == "ok"
+    workbench = (tmp_path / "workbench.loom").read_text(encoding="utf-8")
+    assert "tensor<64xi16>, tensor<64xi16>" in workbench
+    assert "check.expect.equal" in workbench
+
+
+@pytest.mark.parametrize(
+    ("family", "op", "root_symbol", "export_name", "source_path"),
+    (
+        ("exp_f32", "EXP", "@exp_f32", "exp_f32", "kernels/v2/exp/contiguous_4d.loom"),
+        ("neg_f32", "NEG", "@neg_f32", "neg_f32", "kernels/v2/neg/contiguous_4d.loom"),
+        ("relu_f32", "RELU", "@relu_f32", "relu_f32", "kernels/v2/relu/contiguous_4d.loom"),
+        ("sqr_f32", "SQR", "@sqr_f32", "sqr_f32", "kernels/v2/sqr/contiguous_4d.loom"),
+        ("sqrt_f32", "SQRT", "@sqrt_f32", "sqrt_f32", "kernels/v2/sqrt/contiguous_4d.loom"),
+    ),
+)
+def test_unary_f32_oracle_and_workbench_use_f32_buffers(
+    tmp_path: Path,
+    family: str,
+    op: str,
+    root_symbol: str,
+    export_name: str,
+    source_path: str,
+) -> None:
+    candidate = _candidate(
+        candidate_id=f"{family}_ranked_3d",
+        shape={"d0": 4, "d1": 8, "d2": 2},
+        family=family,
+        source_id=family,
+        root_symbol=root_symbol,
+        export_name=export_name,
+        op=op,
+        source_path=source_path,
+    )
+
+    result = generate_oracle(candidate, tmp_path / "fixtures", force=True)
+
+    assert result.status == "fixtures_ready"
+    assert np.load(tmp_path / "fixtures" / "src0.npy").dtype == np.float32
+    assert np.load(tmp_path / "fixtures" / "dst_init.npy").dtype == np.float32
+    assert np.load(tmp_path / "fixtures" / "expected.npy").dtype == np.float32
+
+    linked_source = tmp_path / "linked.loom"
+    linked_source.write_text(f"kernel.def export(\"{export_name}\") {root_symbol}() {{}}\n", encoding="utf-8")
+    _, metadata = write_workbench(candidate, linked_source, tmp_path / "workbench.loom", tmp_path / "fixtures")
+
+    assert metadata["status"] == "ok"
+    workbench = (tmp_path / "workbench.loom").read_text(encoding="utf-8")
+    assert "tensor<64xf32>, tensor<64xf32>" in workbench
+    assert "check.expect.close" in workbench
+
+
+@pytest.mark.parametrize(
     ("family", "op", "source_path", "root_symbol", "export_name"),
     (
         ("add_f16", "ADD", "kernels/v2/add/contiguous_1d.loom", "@hrx2_add_f16", "hrx2_add_f16"),

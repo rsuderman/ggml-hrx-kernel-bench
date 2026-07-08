@@ -9,9 +9,14 @@ VALIDATED_IMPORT_OPS = frozenset(
         "CONT",
         "CPY",
         "DIV",
+        "EXP",
         "MUL",
+        "NEG",
+        "RELU",
         "SCALE",
         "SET_ROWS",
+        "SQR",
+        "SQRT",
         "SUB",
     }
 )

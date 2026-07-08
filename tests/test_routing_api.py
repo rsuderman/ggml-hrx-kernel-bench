@@ -533,6 +533,65 @@ def test_v2_default_cont_candidate_derives_rank_polymorphic_shape_bindings() -> 
     }
 
 
+@pytest.mark.parametrize(
+    ("op", "dtype", "route_id"),
+    (
+        ("EXP", "f16", "exp_f16_contiguous_4d"),
+        ("EXP", "f32", "exp_f32_contiguous_4d"),
+        ("NEG", "f16", "neg_f16_contiguous_4d"),
+        ("NEG", "f32", "neg_f32_contiguous_4d"),
+        ("RELU", "f16", "relu_f16_contiguous_4d"),
+        ("RELU", "f32", "relu_f32_contiguous_4d"),
+    ),
+)
+def test_v2_resolve_ne_a_unary_route_for_contiguous_case(op: str, dtype: str, route_id: str) -> None:
+    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
+    case = ImportedCase(
+        op=op,
+        dtype={"type": dtype},
+        raw_case={},
+        normalized_params={
+            "ne_a": [4, 3, 2, 5],
+            "v": 0,
+        },
+        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_group_index=0,
+        source_case_index=0,
+    )
+
+    route, shape, reason, detail = resolve_route_for_case(case, list(routes_for_op(catalog, op)))
+
+    assert reason is None
+    assert detail is None
+    assert route is not None
+    assert route.id == route_id
+    assert shape == {"d0": 4, "d1": 3, "d2": 2, "d3": 5, "pointwise.d1": 30}
+
+
+def test_v2_relu_view_case_remains_unmapped_without_non_contiguous_unary_route() -> None:
+    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
+    case = ImportedCase(
+        op="RELU",
+        dtype={"type": "f32"},
+        raw_case={},
+        normalized_params={
+            "ne_a": [4, 3, 2, 5],
+            "v": 1,
+        },
+        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_group_index=0,
+        source_case_index=0,
+    )
+
+    route, shape, reason, detail = resolve_route_for_case(case, list(routes_for_op(catalog, "RELU")))
+
+    assert route is None
+    assert shape is None
+    assert reason is not None
+    assert reason.value == "shape_lowering_not_implemented"
+    assert detail == "contiguous unary routing requires contiguous input (v=0)"
+
+
 def test_v2_resolve_scale_route_for_f32_case() -> None:
     catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
     case = ImportedCase(
@@ -608,6 +667,38 @@ def test_v2_resolve_scale_route_for_rank3_f32_case() -> None:
     assert detail is None
     assert route is not None
     assert route.id == "scale_f32_contiguous_4d"
+    assert shape == {"d0": 4, "d1": 3, "d2": 2, "pointwise.d1": 6}
+
+
+@pytest.mark.parametrize(
+    ("op", "dtype", "route_id"),
+    (
+        ("SQR", "f16", "sqr_f16_contiguous_4d"),
+        ("SQR", "f32", "sqr_f32_contiguous_4d"),
+        ("SQRT", "f16", "sqrt_f16_contiguous_4d"),
+        ("SQRT", "f32", "sqrt_f32_contiguous_4d"),
+    ),
+)
+def test_v2_resolve_ne_unary_route_for_rank3_case(op: str, dtype: str, route_id: str) -> None:
+    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
+    case = ImportedCase(
+        op=op,
+        dtype={"type": dtype},
+        raw_case={},
+        normalized_params={
+            "ne": [4, 3, 2],
+        },
+        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_group_index=0,
+        source_case_index=0,
+    )
+
+    route, shape, reason, detail = resolve_route_for_case(case, list(routes_for_op(catalog, op)))
+
+    assert reason is None
+    assert detail is None
+    assert route is not None
+    assert route.id == route_id
     assert shape == {"d0": 4, "d1": 3, "d2": 2, "pointwise.d1": 6}
 
 

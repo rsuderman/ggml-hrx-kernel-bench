@@ -1,0 +1,98 @@
+{
+  "id": "sqrt_f32_contiguous_4d",
+  "family": "sqrt_f32",
+  "kernel": {
+    "source_id": "pointwise_f32",
+    "path": "sqrt/contiguous_4d.loom",
+    "root_symbol": "@sqrt_f32",
+    "export_name": "sqrt_f32"
+  },
+  "tensors": {
+    "src0": {
+      "dtype": "F32",
+      "dimensions": "src0_dimensions",
+      "strides": "src0_strides"
+    },
+    "dst": {
+      "dtype": "F32",
+      "dimensions": "dst_dimensions",
+      "strides": "dst_strides"
+    }
+  },
+  "values": [
+    {
+      "name": "contiguous_strides",
+      "contiguous_strides": "dst_dimensions"
+    },
+    {
+      "name": "leading_dimensions",
+      "head": {
+        "source": "dst_dimensions",
+        "take": 1
+      }
+    },
+    {
+      "name": "trailing_dimensions",
+      "tail": {
+        "source": "dst_dimensions",
+        "drop": 1
+      }
+    },
+    {
+      "name": "flattened_trailing_dimensions",
+      "product": "trailing_dimensions"
+    },
+    {
+      "name": "total_size",
+      "product": "dst_dimensions"
+    }
+  ],
+  "constraints": [
+    {
+      "name": "total_size",
+      "min": 1,
+      "max": 1073741824
+    },
+    {
+      "name": "dst_dimensions",
+      "rank_min": 2,
+      "rank_max": 4
+    },
+    {
+      "equals": [
+        "src0_dimensions",
+        "dst_dimensions"
+      ]
+    },
+    {
+      "equals": [
+        "contiguous_strides",
+        "src0_strides",
+        "dst_strides"
+      ]
+    }
+  ],
+  "launch": {
+    "workgroup_size": [
+      256,
+      1,
+      1
+    ]
+  },
+  "config": {
+    "bindings": [
+      {
+        "key": "@hrx2.shape.pointwise.d0",
+        "source": "value.leading_dimensions.0"
+      },
+      {
+        "key": "@hrx2.shape.pointwise.d1",
+        "source": "value.flattened_trailing_dimensions"
+      },
+      {
+        "key": "@hrx2.tuning.pointwise.workgroup_size",
+        "value": "256"
+      }
+    ]
+  }
+}

@@ -35,6 +35,10 @@
       "div/div_f32_generic_2d.json",
       "div/div_f32_generic_4d.json"
     ],
+    "EXP": [
+      "exp_f16.json",
+      "exp_f32.json"
+    ],
     "MUL": [
       "mul/mul_f16_contiguous_2d.json",
       "mul/mul_f16_rhs_row_broadcast_2d.json",
@@ -47,11 +51,27 @@
       "mul/mul_f32_generic_2d.json",
       "mul/mul_f32_generic_4d.json"
     ],
+    "NEG": [
+      "neg_f16.json",
+      "neg_f32.json"
+    ],
+    "RELU": [
+      "relu_f16.json",
+      "relu_f32.json"
+    ],
     "SCALE": [
       "scale_f32.json"
     ],
     "SET_ROWS": [
       "set_rows/set_rows_f32_f32_contiguous_4d.json"
+    ],
+    "SQR": [
+      "sqr_f16.json",
+      "sqr_f32.json"
+    ],
+    "SQRT": [
+      "sqrt_f16.json",
+      "sqrt_f32.json"
     ],
     "SUB": [
       "sub/sub_f16_contiguous_2d.json",

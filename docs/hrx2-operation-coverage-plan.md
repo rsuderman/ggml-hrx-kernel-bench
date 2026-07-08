@@ -13,6 +13,36 @@ import and runtime validation work.
 
 ## Current Tracked Gaps
 
+### Unary Pointwise Ops
+
+#### View-Backed Cases (`v != 0`)
+
+- Status: partially supported
+- Scope: grouped-YAML unary import lowering for contiguous v2 pointwise routes
+- Correctness status: contiguous unary cases for `ABS`, `EXP`, `NEG`, and `RELU`
+  now map to v2 routes; the remaining negatives are import-only view-backed
+  cases and do not currently reach kernel execution
+- Current behavior: contiguous unary lowering only accepts `v=0`, so grouped
+  YAML view-backed cases remain unmapped as `shape_lowering_not_implemented`
+- Evidence:
+  - `build/tests/kernels/artifacts/llama-cpp-tests-import-v2/ops/ABS/import-summary.md`
+  - `build/tests/kernels/artifacts/llama-cpp-tests-import-v2/ops/EXP/import-summary.md`
+  - `build/tests/kernels/artifacts/llama-cpp-tests-import-v2/ops/NEG/import-summary.md`
+  - `build/tests/kernels/artifacts/llama-cpp-tests-import-v2/ops/RELU/import-summary.md`
+- Current counts:
+  - `ABS`: `4` mapped, `4` `shape_lowering_not_implemented`
+  - `EXP`: `4` mapped, `4` `shape_lowering_not_implemented`
+  - `NEG`: `4` mapped, `4` `shape_lowering_not_implemented`
+  - `RELU`: `4` mapped, `4` `shape_lowering_not_implemented`
+- Why they fail:
+  - `lower_contiguous_unary_tensors()` rejects view-backed cases before route
+    matching with `contiguous unary routing requires contiguous input (v=0)`
+- Source references:
+  - `src/ggml_hrx_kernel_bench/routing/v2/import_resolution.py`
+- Next action: decide whether unary `v=1` should lower into the existing
+  contiguous route contract through explicit tensor stride materialization or
+  whether it requires a distinct non-contiguous unary route family
+
 ### ADD
 
 #### Fused Add Cases (`nf != 1`)

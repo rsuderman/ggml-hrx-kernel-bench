@@ -1,8 +1,8 @@
 {
   "schema": "ggml_hrx_kernel_bench.import_test_coverage.v1",
   "operation_count": 115,
-  "total_pass_case_count": 429,
-  "total_fail_case_count": 10903,
+  "total_pass_case_count": 453,
+  "total_fail_case_count": 10879,
   "operations": [
     {
       "op": "ABS",
@@ -151,8 +151,8 @@
     },
     {
       "op": "EXP",
-      "pass_case_count": 0,
-      "fail_case_count": 8
+      "pass_case_count": 4,
+      "fail_case_count": 4
     },
     {
       "op": "EXPM1",
@@ -301,8 +301,8 @@
     },
     {
       "op": "NEG",
-      "pass_case_count": 0,
-      "fail_case_count": 8
+      "pass_case_count": 4,
+      "fail_case_count": 4
     },
     {
       "op": "NORM",
@@ -356,8 +356,8 @@
     },
     {
       "op": "RELU",
-      "pass_case_count": 0,
-      "fail_case_count": 8
+      "pass_case_count": 4,
+      "fail_case_count": 4
     },
     {
       "op": "REPEAT",
@@ -491,13 +491,13 @@
     },
     {
       "op": "SQR",
-      "pass_case_count": 0,
-      "fail_case_count": 6
+      "pass_case_count": 6,
+      "fail_case_count": 0
     },
     {
       "op": "SQRT",
-      "pass_case_count": 0,
-      "fail_case_count": 6
+      "pass_case_count": 6,
+      "fail_case_count": 0
     },
     {
       "op": "SSM_CONV",
