@@ -1722,6 +1722,88 @@ def test_v2_mul_mat_route_resolves_for_small_contiguous_f32_case() -> None:
     }
 
 
+def test_v2_mul_mat_route_prefers_q6_rows2_for_cols1_case() -> None:
+    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
+    case = ImportedCase(
+        op="MUL_MAT",
+        dtype={"type_a": "q6_k", "type_b": "f32"},
+        raw_case={},
+        normalized_params={
+            "bs": [1, 1],
+            "k": 256,
+            "k_v": 0,
+            "m": 16,
+            "n": 1,
+            "nr": [1, 1],
+            "o": 1,
+            "per": [0, 1, 2, 3],
+        },
+        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_group_index=0,
+        source_case_index=0,
+    )
+
+    routes = list(routes_for_op(catalog, "MUL_MAT"))
+
+    resolved_route, shape, reason, detail = resolve_route_for_case(case, routes)
+
+    assert reason is None
+    assert detail is None
+    assert resolved_route is not None
+    assert resolved_route.id == "mul_mat_q6_k_f32_rows2_contiguous_cols1_2d"
+    assert shape == {
+        "d0": 16,
+        "d1": 1,
+        "src0_d0": 256,
+        "src0_d1": 16,
+        "src1_d0": 256,
+        "k": 256,
+        "rows": 16,
+        "cols": 1,
+    }
+
+
+def test_v2_mul_mat_route_resolves_for_q6_direct_case() -> None:
+    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
+    case = ImportedCase(
+        op="MUL_MAT",
+        dtype={"type_a": "q6_k", "type_b": "f32"},
+        raw_case={},
+        normalized_params={
+            "bs": [1, 1],
+            "k": 256,
+            "k_v": 0,
+            "m": 16,
+            "n": 8,
+            "nr": [1, 1],
+            "o": 1,
+            "per": [0, 1, 2, 3],
+        },
+        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_group_index=0,
+        source_case_index=0,
+    )
+
+    routes = list(routes_for_op(catalog, "MUL_MAT"))
+
+    resolved_route, shape, reason, detail = resolve_route_for_case(case, routes)
+
+    assert reason is None
+    assert detail is None
+    assert resolved_route is not None
+    assert resolved_route.id == "mul_mat_q6_k_f32_direct_contiguous_2d"
+    assert shape == {
+        "d0": 16,
+        "d1": 8,
+        "src0_d0": 256,
+        "src0_d1": 16,
+        "src1_d0": 256,
+        "k": 256,
+        "rows": 16,
+        "cols": 8,
+    }
+
+
 def test_v2_mul_mat_broadcast_case_stays_unmapped() -> None:
     catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
     case = ImportedCase(

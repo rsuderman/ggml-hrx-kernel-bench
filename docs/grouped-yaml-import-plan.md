@@ -12,6 +12,25 @@ Import grouped llama.cpp workload YAML such as:
 into the current benchmark system while keeping unsupported or unmapped cases
 visible as explicit backlog items instead of silently dropping them.
 
+## Kernel Source Layout
+
+When grouped-YAML support work requires a v2 kernel port or a new routed kernel
+surface, keep the source layout one routed variant per `.loom` file.
+
+Required process:
+
+- if two catalog routes target different exported kernels, split them into
+  separate `.loom` files instead of keeping multiple independently routed
+  kernels in one shared file
+- update each catalog route's `kernel.path` to the specific file that contains
+  its exported symbol
+- update any oracle or routing tests that reference kernel source paths
+- rerun generated asset materialization so `build/generated/assets/kernels/v2/`
+  picks up the split files before runtime validation
+
+This avoids a recurring failure mode where routing is widened but the generated
+kernel asset set does not contain the file path expected by the catalog.
+
 ## Required Components
 
 ### 1. YAML Loader

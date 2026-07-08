@@ -10,6 +10,8 @@ from .routing.api import Candidate
 
 QK_K = 256
 Q4_K_BLOCK_BYTES = 144
+Q5_K_BLOCK_BYTES = 176
+Q6_K_BLOCK_BYTES = 210
 Q8_0_BLOCK_BYTES = 34
 F32_BYTES = 4
 Q8_1_BLOCK_BYTES = 36
@@ -67,6 +69,18 @@ def q4_k_bytes(k: int, rows: int) -> int:
     return rows * (k // QK_K) * Q4_K_BLOCK_BYTES
 
 
+def q5_k_bytes(k: int, rows: int) -> int:
+    if k % QK_K != 0:
+        raise ValueError(f"k must be a multiple of {QK_K}: {k}")
+    return rows * (k // QK_K) * Q5_K_BLOCK_BYTES
+
+
+def q6_k_bytes(k: int, rows: int) -> int:
+    if k % QK_K != 0:
+        raise ValueError(f"k must be a multiple of {QK_K}: {k}")
+    return rows * (k // QK_K) * Q6_K_BLOCK_BYTES
+
+
 def q8_1_bytes(ncols: int, nrows: int) -> int:
     return nrows * ((ncols + 31) // 32) * Q8_1_BLOCK_BYTES
 
@@ -118,6 +132,22 @@ def pack_q4_k_scales(np: Any, scales: Any, minimums: Any):
     return packed
 
 
+def pack_q5_k_high_bits(np: Any, quants: Any):
+    packed = np.zeros((32,), dtype=np.uint8)
+    low_half_bits = (0, 1, 4, 5)
+    high_half_bits = (2, 3, 6, 7)
+    for pos in range(32):
+        value = 0
+        for group, bit in enumerate(low_half_bits):
+            if int(quants[group, pos]) & 0x10:
+                value |= 1 << bit
+        for group, bit in enumerate(high_half_bits):
+            if int(quants[group + 4, pos]) & 0x10:
+                value |= 1 << bit
+        packed[pos] = np.uint8(value)
+    return packed
+
+
 def q4_k_pattern(np: Any, k: int, rows: int, *, seed: int, target_rms: float = 0.5):
     blocks = rows * (k // QK_K)
     data = np.zeros((blocks, Q4_K_BLOCK_BYTES), dtype=np.uint8)
@@ -157,6 +187,73 @@ def q4_k_pattern(np: Any, k: int, rows: int, *, seed: int, target_rms: float = 0
     return data.reshape(-1)
 
 
+def q5_k_pattern(np: Any, k: int, rows: int, *, seed: int, target_rms: float = 0.5):
+    blocks = rows * (k // QK_K)
+    data = np.zeros((blocks, Q5_K_BLOCK_BYTES), dtype=np.uint8)
+    rng = np.random.default_rng(seed)
+    q_base = np.arange(32, dtype=np.uint8)
+    for block_index in range(blocks):
+        scales = rng.integers(2, 5, size=(8,), dtype=np.uint8)
+        minimums = np.floor(scales.astype(np.float32) * np.float32(15.5) + np.float32(0.5)).astype(np.uint8)
+        quants = np.zeros((8, 32), dtype=np.uint8)
+        qs = np.zeros((128,), dtype=np.uint8)
+        logical = np.empty((QK_K,), dtype=np.float32)
+        for group in range(8):
+            q_values = rng.permutation(q_base).astype(np.uint8)
+            quants[group] = q_values
+            byte_base = (group // 2) * 32
+            if group % 2:
+                qs[byte_base : byte_base + 32] |= q_values.astype(np.uint8) << np.uint8(4)
+            else:
+                qs[byte_base : byte_base + 32] |= q_values & np.uint8(0x0F)
+            offset = group * 32
+            logical[offset : offset + 32] = (
+                np.float32(scales[group]) * q_values.astype(np.float32) - np.float32(minimums[group])
+            )
+        rms = np.float32(np.sqrt(np.mean(logical * logical, dtype=np.float32)))
+        d_value = np.float16(np.float32(target_rms) / rms) if rms > np.float32(0.0) else np.float16(1.0)
+        d_bytes = np.array([d_value], dtype=np.float16).view(np.uint8)
+        data[block_index, 0:2] = d_bytes
+        data[block_index, 2:4] = d_bytes
+        data[block_index, 4:16] = pack_q4_k_scales(np, scales, minimums)
+        data[block_index, 16:48] = pack_q5_k_high_bits(np, quants)
+        data[block_index, 48:176] = qs
+    return data.reshape(-1)
+
+
+def q6_k_pattern(np: Any, k: int, rows: int, *, seed: int, target_rms: float = 0.5):
+    blocks = rows * (k // QK_K)
+    data = np.zeros((blocks, Q6_K_BLOCK_BYTES), dtype=np.uint8)
+    rng = np.random.default_rng(seed)
+    for block_index in range(blocks):
+        ql = np.zeros((128,), dtype=np.uint8)
+        qh = np.zeros((64,), dtype=np.uint8)
+        scales = rng.integers(1, 5, size=(16,), dtype=np.int8)
+        logical = np.empty((QK_K,), dtype=np.float32)
+        for half in range(2):
+            for segment in range(4):
+                group = half * 4 + segment
+                q_signed = rng.integers(-32, 32, size=(32,), dtype=np.int16)
+                for pos in range(32):
+                    q_u = int(q_signed[pos]) + 32
+                    ql_index = half * 64 + (segment % 2) * 32 + pos
+                    if segment < 2:
+                        ql[ql_index] |= np.uint8(q_u & 0x0F)
+                    else:
+                        ql[ql_index] |= np.uint8((q_u & 0x0F) << 4)
+                    qh_index = half * 32 + pos
+                    qh[qh_index] |= np.uint8(((q_u >> 4) & 0x03) << (2 * segment))
+                    scale_index = half * 8 + segment * 2 + (1 if pos >= 16 else 0)
+                    logical[group * 32 + pos] = np.float32(int(scales[scale_index])) * np.float32(int(q_signed[pos]))
+        rms = np.float32(np.sqrt(np.mean(logical * logical, dtype=np.float32)))
+        d_value = np.float16(np.float32(target_rms) / rms) if rms > np.float32(0.0) else np.float16(1.0)
+        data[block_index, 0:128] = ql
+        data[block_index, 128:192] = qh
+        data[block_index, 192:208] = scales.view(np.uint8)
+        data[block_index, 208:210] = np.array([d_value], dtype=np.float16).view(np.uint8)
+    return data.reshape(-1)
+
+
 def dequant_q4_k(np: Any, packed: Any, k: int, rows: int):
     blocks_per_row = k // QK_K
     blocks = packed.reshape(rows * blocks_per_row, Q4_K_BLOCK_BYTES)
@@ -188,6 +285,71 @@ def dequant_q4_k(np: Any, packed: Any, k: int, rows: int):
                     group_values[j] = np.float32(scale * np.float32(q) - minimum)
                 offset = block_in_row * QK_K + group * 32
                 out[row, offset : offset + 32] = group_values
+    return out
+
+
+def dequant_q5_k(np: Any, packed: Any, k: int, rows: int):
+    blocks_per_row = k // QK_K
+    blocks = packed.view(np.uint8).reshape(rows * blocks_per_row, Q5_K_BLOCK_BYTES)
+    out = np.empty((rows, k), dtype=np.float32)
+    low_half_bits = (0, 1, 4, 5)
+    high_half_bits = (2, 3, 6, 7)
+    for row in range(rows):
+        for block_in_row in range(blocks_per_row):
+            block = blocks[row * blocks_per_row + block_in_row]
+            d = block[0:2].copy().view(np.float16).astype(np.float32)[0]
+            dmin = block[2:4].copy().view(np.float16).astype(np.float32)[0]
+            packed_scales = block[4:16].astype(np.uint32)
+            qh = block[16:48].astype(np.uint32)
+            qs = block[48:176].astype(np.uint32)
+            for group in range(8):
+                if group < 4:
+                    scale_i = packed_scales[group] & 0x3F
+                    min_i = packed_scales[group + 4] & 0x3F
+                    high_bit = low_half_bits[group]
+                else:
+                    low = packed_scales[group - 4]
+                    mid = packed_scales[group]
+                    high = packed_scales[group + 4]
+                    scale_i = (high & 0x0F) | ((low >> 6) << 4)
+                    min_i = (high >> 4) | ((mid >> 6) << 4)
+                    high_bit = high_half_bits[group - 4]
+                scale = np.float32(d * np.float32(scale_i))
+                minimum = np.float32(dmin * np.float32(min_i))
+                byte_base = (group // 2) * 32
+                offset = block_in_row * QK_K + group * 32
+                for j in range(32):
+                    q_byte = qs[byte_base + j]
+                    low_nibble = (q_byte >> 4) if group % 2 else (q_byte & 0x0F)
+                    q = low_nibble | (((qh[j] >> high_bit) & 0x01) << 4)
+                    out[row, offset + j] = np.float32(scale * np.float32(q) - minimum)
+    return out
+
+
+def dequant_q6_k(np: Any, packed: Any, k: int, rows: int):
+    blocks_per_row = k // QK_K
+    blocks = packed.view(np.uint8).reshape(rows * blocks_per_row, Q6_K_BLOCK_BYTES)
+    out = np.empty((rows, k), dtype=np.float32)
+    for row in range(rows):
+        for block_in_row in range(blocks_per_row):
+            block = blocks[row * blocks_per_row + block_in_row]
+            ql = block[0:128].astype(np.uint32)
+            qh = block[128:192].astype(np.uint32)
+            scales = block[192:208].copy().view(np.int8).astype(np.float32)
+            d = block[208:210].copy().view(np.float16).astype(np.float32)[0]
+            block_base = block_in_row * QK_K
+            for half in range(2):
+                for segment in range(4):
+                    group = half * 4 + segment
+                    group_offset = block_base + group * 32
+                    for pos in range(32):
+                        ql_index = half * 64 + (segment % 2) * 32 + pos
+                        ql_nibble = (ql[ql_index] & 0x0F) if segment < 2 else ((ql[ql_index] >> 4) & 0x0F)
+                        qh_index = half * 32 + pos
+                        high = (qh[qh_index] >> (2 * segment)) & 0x03
+                        q_signed = int((high << 4) | ql_nibble) - 32
+                        scale_index = half * 8 + segment * 2 + (1 if pos >= 16 else 0)
+                        out[row, group_offset + pos] = np.float32(d * scales[scale_index] * np.float32(q_signed))
     return out
 
 
@@ -1176,6 +1338,44 @@ def _mul_mat_q8_0_arrays(np: Any, candidate: Candidate, seed: int) -> dict[str, 
     }
 
 
+def _mul_mat_q5_k_arrays(np: Any, candidate: Candidate, seed: int) -> dict[str, Any]:
+    k, rows, cols = _matmul_dims(candidate)
+    src0 = q5_k_pattern(np, k, rows, seed=seed)
+    rhs = normalized_f32_rows(np, (cols, k), seed=seed + 1)
+    weights = dequant_q5_k(np, src0, k, rows)
+    expected = np.matmul(weights.astype(np.float32), rhs.T.astype(np.float32)).T.astype(np.float32)
+    return {
+        "arrays": {
+            "src0": src0.view(np.int8),
+            "src1": rhs.reshape(cols * k),
+            "dst_init": f32_pattern(np, (rows * cols,), seed=seed + 2, scale=0.25),
+            "expected": expected.reshape(rows * cols),
+        },
+        "metadata": {
+            "bytes": {"src0": q5_k_bytes(k, rows), "src1": k * cols * F32_BYTES, "dst": rows * cols * F32_BYTES},
+        },
+    }
+
+
+def _mul_mat_q6_k_arrays(np: Any, candidate: Candidate, seed: int) -> dict[str, Any]:
+    k, rows, cols = _matmul_dims(candidate)
+    src0 = q6_k_pattern(np, k, rows, seed=seed)
+    rhs = normalized_f32_rows(np, (cols, k), seed=seed + 1)
+    weights = dequant_q6_k(np, src0.view(np.int8), k, rows)
+    expected = np.matmul(weights.astype(np.float32), rhs.T.astype(np.float32)).T.astype(np.float32)
+    return {
+        "arrays": {
+            "src0": src0.view(np.int8),
+            "src1": rhs.reshape(cols * k),
+            "dst_init": f32_pattern(np, (rows * cols,), seed=seed + 2, scale=0.25),
+            "expected": expected.reshape(rows * cols),
+        },
+        "metadata": {
+            "bytes": {"src0": q6_k_bytes(k, rows), "src1": k * cols * F32_BYTES, "dst": rows * cols * F32_BYTES},
+        },
+    }
+
+
 def _quantized_matmul_arrays(np: Any, candidate: Candidate, seed: int) -> dict[str, Any]:
     data = _matmul_f32_arrays(np, candidate, seed)
     data["metadata"]["logical_packed_weight_fixture"] = True
@@ -1960,6 +2160,37 @@ def _write_mul_mat_q8_0_workbench(candidate: Candidate, linked_source: Path, wor
     return _emit_case(linked_source, workbench_path, case_name, bench_name, "\n".join(lines))
 
 
+def _write_quantized_mul_mat_static_workbench(
+    candidate: Candidate,
+    linked_source: Path,
+    workbench_path: Path,
+    fixture_dir: Path,
+) -> tuple[str, dict[str, Any]]:
+    k, rows, cols = _matmul_dims(candidate)
+    if candidate.family == "mul_mat_q5_k_f32":
+        src0_elems = q5_k_bytes(k, rows)
+        atol = 0.12
+        rtol = 0.04
+    elif candidate.family == "mul_mat_q6_k_f32":
+        src0_elems = q6_k_bytes(k, rows)
+        atol = 0.12
+        rtol = 0.04
+    else:
+        raise ValueError(f"unsupported packed quantized workbench family: {candidate.family}")
+    src1_elems = k * cols
+    dst_elems = rows * cols
+    case_name, bench_name = _case_names(candidate)
+    lines = [
+        f"  %src0 = check.file.read.npy path(\"{_rel_fixture(workbench_path, fixture_dir, 'src0.npy')}\") : tensor<{src0_elems}xi8>",
+        _read_f32(workbench_path, fixture_dir, "src1", src1_elems),
+        _read_f32(workbench_path, fixture_dir, "dst_init", dst_elems).replace("%dst_init", "%dst"),
+        _read_f32(workbench_path, fixture_dir, "expected", dst_elems),
+        f"  func.call {candidate.root_symbol}(%src0, %src1, %dst) : (tensor<{src0_elems}xi8>, tensor<{src1_elems}xf32>, tensor<{dst_elems}xf32>)",
+        f"  check.expect.close actual(%dst) expected(%expected) atol({atol}) rtol({rtol}) nan(same) : tensor<{dst_elems}xf32>",
+    ]
+    return _emit_case(linked_source, workbench_path, case_name, bench_name, "\n".join(lines))
+
+
 def _write_rope_workbench(candidate: Candidate, linked_source: Path, workbench_path: Path, fixture_dir: Path) -> tuple[str | None, dict[str, Any]]:
     if candidate.family == "rope_set_rows_f32":
         src0_dims = _captured_tensor_dims(candidate, "src0")
@@ -2193,6 +2424,11 @@ ORACLE_SPECS: tuple[OracleSpec, ...] = (
         family_ids=("mul_mat_q8_0_f32",),
         generate=_logical_generate(LogicalOracleSpec(("mul_mat_q8_0_f32",), "mul_mat_q8_0_f32_numpy_dequant_matmul", {"atol": 0.08, "rtol": 0.02}, _mul_mat_q8_0_arrays, exact_kernel_abi=True)),
         write_workbench=_write_mul_mat_q8_0_workbench,
+    ),
+    OracleSpec(
+        family_ids=("mul_mat_q6_k_f32",),
+        generate=_logical_generate(LogicalOracleSpec(("mul_mat_q6_k_f32",), "mul_mat_q6_k_f32_numpy_dequant_matmul", {"atol": 0.12, "rtol": 0.04}, _mul_mat_q6_k_arrays, exact_kernel_abi=True)),
+        write_workbench=_write_quantized_mul_mat_static_workbench,
     ),
     OracleSpec(
         family_ids=("mul_mat_f32_f32",),
