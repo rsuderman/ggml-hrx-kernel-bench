@@ -2,11 +2,11 @@
   "schema": "ggml_hrx_kernel_bench.routing_descriptors.v2",
   "routes": {
     "ABS": [
-      "abs_f16.json",
-      "abs_f32.json"
+      "abs/abs_f16.json",
+      "abs/abs_f32.json"
     ],
     "CLAMP": [
-      "clamp_f32.json"
+      "clamp/clamp_f32.json"
     ],
     "CONT": [
       "cont/cont_f32_contiguous_4d.json"
@@ -36,8 +36,8 @@
       "div/div_f32_generic_4d.json"
     ],
     "EXP": [
-      "exp_f16.json",
-      "exp_f32.json"
+      "exp/exp_f16.json",
+      "exp/exp_f32.json"
     ],
     "MUL": [
       "mul/mul_f16_contiguous_2d.json",
@@ -52,26 +52,26 @@
       "mul/mul_f32_generic_4d.json"
     ],
     "NEG": [
-      "neg_f16.json",
-      "neg_f32.json"
+      "neg/neg_f16.json",
+      "neg/neg_f32.json"
     ],
     "RELU": [
-      "relu_f16.json",
-      "relu_f32.json"
+      "relu/relu_f16.json",
+      "relu/relu_f32.json"
     ],
     "SCALE": [
-      "scale_f32.json"
+      "scale/scale_f32.json"
     ],
     "SET_ROWS": [
       "set_rows/set_rows_f32_f32_contiguous_4d.json"
     ],
     "SQR": [
-      "sqr_f16.json",
-      "sqr_f32.json"
+      "sqr/sqr_f16.json",
+      "sqr/sqr_f32.json"
     ],
     "SQRT": [
-      "sqrt_f16.json",
-      "sqrt_f32.json"
+      "sqrt/sqrt_f16.json",
+      "sqrt/sqrt_f32.json"
     ],
     "SUB": [
       "sub/sub_f16_contiguous_2d.json",
