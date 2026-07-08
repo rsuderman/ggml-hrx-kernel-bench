@@ -463,6 +463,81 @@ def lower_get_rows_tensors(
     }
 
 
+def lower_rope_tensors(
+    case: ImportedCase,
+) -> tuple[dict[str, ConcreteTensor], dict[str, int]]:
+    ne = case.normalized_params.get("ne_a")
+    n_dims = case.normalized_params.get("n_dims")
+    mode = case.normalized_params.get("mode", 0)
+    freq_factor = case.normalized_params.get("ff", 0)
+    freq_scale = case.normalized_params.get("fs", 1.0)
+    ext_factor = case.normalized_params.get("ef", 0.0)
+    attn_factor = case.normalized_params.get("af", 1.0)
+    inplace = case.normalized_params.get("inplace", 0)
+    view_mode = case.normalized_params.get("v", 0)
+    if not isinstance(ne, list) or len(ne) != 4:
+        raise ValueError("ROPE lowering requires a 4-D ne_a extent list")
+    if any(not isinstance(value, int) for value in ne):
+        raise ValueError("ROPE lowering requires integer ne_a extents")
+    for name, value in (
+        ("n_dims", n_dims),
+        ("mode", mode),
+        ("ff", freq_factor),
+        ("inplace", inplace),
+        ("v", view_mode),
+    ):
+        if not isinstance(value, int):
+            raise ValueError(f"ROPE lowering requires integer {name}")
+    for name, value in (("fs", freq_scale), ("ef", ext_factor), ("af", attn_factor)):
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise ValueError(f"ROPE lowering requires numeric {name}")
+    if view_mode != 0:
+        raise ValueError("ROPE v2 routing requires contiguous input (v=0)")
+    if inplace != 0:
+        raise ValueError("ROPE v2 routing currently requires inplace=0")
+    if mode != 0:
+        raise ValueError("ROPE v2 routing currently requires mode=0")
+    if freq_factor != 0:
+        raise ValueError("ROPE v2 routing currently requires ff=0")
+    if float(freq_scale) != 1.0:
+        raise ValueError("ROPE v2 routing currently requires fs=1.0")
+    if float(ext_factor) != 0.0:
+        raise ValueError("ROPE v2 routing currently requires ef=0.0")
+    if float(attn_factor) != 1.0:
+        raise ValueError("ROPE v2 routing currently requires af=1.0")
+    extents = [int(value) for value in ne]
+    ncols = extents[0]
+    nheads = extents[1]
+    ntokens = extents[2] * extents[3]
+    dtype = str(case.dtype.get("type", "")).upper()
+    tensors = {
+        "src0": ConcreteTensor(
+            dtype=dtype,
+            dimensions=_dimensions_from_extents(extents),
+        ),
+        "src1": ConcreteTensor(
+            dtype="I32",
+            dimensions=_dimensions_from_extents([1, 1, ntokens, 1]),
+        ),
+        "dst": ConcreteTensor(
+            dtype=dtype,
+            dimensions=_dimensions_from_extents(extents),
+        ),
+    }
+    return tensors, {
+        **_shape_from_extents(extents),
+        "rope.ncols": ncols,
+        "rope.n_dims": int(n_dims),
+        "rope.nheads": nheads,
+        "rope.ntokens": ntokens,
+        "rope.src0_head_stride": ncols,
+        "rope.src0_token_stride": ncols * nheads,
+        "rope.dst_head_stride": ncols,
+        "rope.dst_token_stride": ncols * nheads,
+        "rope.pos_token_stride": 1,
+    }
+
+
 def lower_soft_max_tensors(
     case: ImportedCase,
 ) -> tuple[dict[str, ConcreteTensor], dict[str, int]]:
@@ -734,6 +809,8 @@ def lower_tensors_for_route(
         return lower_contiguous_cont_tensors(case)
     if route.op == "GET_ROWS":
         return lower_get_rows_tensors(case)
+    if route.op == "ROPE":
+        return lower_rope_tensors(case)
     if route.op == "RMS_NORM":
         return lower_rms_norm_tensors(case)
     if route.op == "SOFT_MAX":

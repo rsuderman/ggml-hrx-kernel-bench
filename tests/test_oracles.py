@@ -356,6 +356,52 @@ def test_get_rows_oracle_and_workbench_use_src0_row_override(tmp_path: Path) -> 
     assert "tensor<1280xf32>, tensor<4xi32>, tensor<1024xf32>" in workbench
 
 
+def test_rope_oracle_and_workbench_use_shape_rope_values(tmp_path: Path) -> None:
+    candidate = Candidate(
+        id="rope_f32_normal_n128_h32_t2_contiguous_4d",
+        family="rope_f32",
+        op="ROPE",
+        source_id="rope_f32",
+        source_path=Path("kernels/v2/rope/normal_f32.loom"),
+        root_symbol="@hrx2_rope_normal_f32",
+        export_name="hrx2_rope_normal_f32",
+        route_id="rope_f32_normal_n128_h32_t2_contiguous_4d",
+        route=None,
+        shape={"d0": 128, "d1": 32, "d2": 2, "d3": 1},
+        values={
+            "shape.rope.ncols": 128,
+            "shape.rope.n_dims": 128,
+            "shape.rope.nheads": 32,
+            "shape.rope.ntokens": 2,
+            "shape.rope.src0_head_stride": 128,
+            "shape.rope.src0_token_stride": 4096,
+            "shape.rope.dst_head_stride": 128,
+            "shape.rope.dst_token_stride": 4096,
+            "shape.rope.pos_token_stride": 1,
+        },
+        config={},
+        dispatch={},
+        supports={},
+        coverage="route_backed",
+    )
+
+    result = generate_oracle(candidate, tmp_path / "fixtures", force=True)
+
+    assert result.status == "fixtures_ready"
+    assert np.load(tmp_path / "fixtures" / "src0.npy").shape == (8192,)
+    assert np.load(tmp_path / "fixtures" / "positions.npy").shape == (2,)
+    assert np.load(tmp_path / "fixtures" / "expected.npy").shape == (8192,)
+
+    linked_source = tmp_path / "linked.loom"
+    linked_source.write_text('kernel.def export("hrx2_rope_normal_f32") @hrx2_rope_normal_f32() {}\n', encoding="utf-8")
+    _, metadata = write_workbench(candidate, linked_source, tmp_path / "workbench.loom", tmp_path / "fixtures")
+
+    assert metadata["status"] == "ok"
+    workbench = (tmp_path / "workbench.loom").read_text(encoding="utf-8")
+    assert "tensor<8192xf32>, tensor<2xi32>, tensor<8192xf32>" in workbench
+    assert "check.expect.close" in workbench
+
+
 def test_soft_max_oracle_and_workbench_use_flattened_rows(tmp_path: Path) -> None:
     candidate = _candidate(
         candidate_id="soft_max_f32_ranked_2d",
