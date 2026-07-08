@@ -451,6 +451,128 @@ def test_mul_mat_q6_k_oracle_and_workbench_use_packed_kernel_abi_buffers(tmp_pat
     assert "check.expect.close" in workbench
 
 
+def _emulate_mul_mat_q5_dot16_rows(src0: np.ndarray, src1: np.ndarray) -> np.ndarray:
+    rows = src0.size // 176
+    blocks = src0.view(np.uint8).reshape(rows, 176)
+    rhs = src1.reshape(256).astype(np.float32)
+    out = np.empty((rows,), dtype=np.float32)
+    for row in range(rows):
+        block = blocks[row]
+        d = block[0:2].copy().view(np.float16).astype(np.float32)[0]
+        dmin = block[2:4].copy().view(np.float16).astype(np.float32)[0]
+        total = np.float32(0.0)
+        for lane in range(16):
+            itid = lane
+            il = itid // 4
+            ir = itid % 4
+            v_im = il // 2
+            v_in = il % 2
+            lane_q = ir * 4 + v_in * 2
+            v_im32 = v_im * 32
+            v_im64 = v_im * 64
+            qs0_rel = v_im32 + lane_q
+            qs4_rel = v_im32 + 64 + lane_q
+
+            scale0 = int(block[4 + v_im * 2]) | (int(block[5 + v_im * 2]) << 8)
+            scale4 = int(block[4 + (v_im + 2) * 2]) | (int(block[5 + (v_im + 2) * 2]) << 8)
+            scale8_raw = int(block[4 + (v_im + 4) * 2]) | (int(block[5 + (v_im + 4) * 2]) << 8)
+            scale_0_4_l = scale0 | (scale4 << 16)
+            scale_0_4_h = (scale_0_4_l & 0xC0C0C0C0) >> 2
+            scale_0_4_l6 = scale_0_4_l & 0x3F3F3F3F
+            scale8_dup = (scale8_raw << 12) | scale8_raw
+            scale8 = (scale8_dup & 0x0F0F0F0F) | scale_0_4_h
+
+            def i32_from_4(base: int) -> int:
+                return (
+                    int(block[base])
+                    | (int(block[base + 1]) << 8)
+                    | (int(block[base + 16]) << 16)
+                    | (int(block[base + 17]) << 24)
+                )
+
+            qs0 = i32_from_4(48 + qs0_rel)
+            qs4 = i32_from_4(48 + qs4_rel)
+            qh = i32_from_4(16 + lane_q)
+            qh_shifted = qh >> (v_im * 2)
+            qs0_lo = (qs0 & 0x0F0F0F0F) + ((qh_shifted & 0x01010101) << 4)
+            qs0_hi = ((qs0 >> 4) & 0x0F0F0F0F) + ((qh_shifted & 0x02020202) << 3)
+            qs4_lo = (qs4 & 0x0F0F0F0F) + (qh_shifted & 0x10101010)
+            qs4_hi = ((qs4 >> 4) & 0x0F0F0F0F) + ((qh_shifted & 0x20202020) >> 1)
+
+            def bytes4(word: int) -> np.ndarray:
+                return np.array([(word >> shift) & 0xFF for shift in (0, 8, 16, 24)], dtype=np.float32)
+
+            q0, q1, q2, q3 = map(bytes4, (qs0_lo, qs0_hi, qs4_lo, qs4_hi))
+            base = v_im64 + lane_q
+            idxs = (
+                base,
+                base + 1,
+                base + 16,
+                base + 17,
+                base + 32,
+                base + 33,
+                base + 48,
+                base + 49,
+                base + 128,
+                base + 129,
+                base + 144,
+                base + 145,
+                base + 160,
+                base + 161,
+                base + 176,
+                base + 177,
+            )
+            by0 = np.array([rhs[idxs[0]], rhs[idxs[1]], rhs[idxs[2]], rhs[idxs[3]]], dtype=np.float32)
+            by1 = np.array([rhs[idxs[4]], rhs[idxs[5]], rhs[idxs[6]], rhs[idxs[7]]], dtype=np.float32)
+            by2 = np.array([rhs[idxs[8]], rhs[idxs[9]], rhs[idxs[10]], rhs[idxs[11]]], dtype=np.float32)
+            by3 = np.array([rhs[idxs[12]], rhs[idxs[13]], rhs[idxs[14]], rhs[idxs[15]]], dtype=np.float32)
+            sx, sy, sz, sw = [np.sum(lhs * rhs_block, dtype=np.float32) for lhs, rhs_block in ((q0, by0), (q1, by1), (q2, by2), (q3, by3))]
+            by0_sum, by1_sum, by2_sum, by3_sum = [np.sum(values, dtype=np.float32) for values in (by0, by1, by2, by3)]
+            scale_a, scale_b, min_a, min_b = [np.float32((scale_0_4_l6 >> shift) & 0xFF) for shift in (0, 8, 16, 24)]
+            scale_c, scale_d, min_c, min_d = [np.float32((scale8 >> shift) & 0xFF) for shift in (0, 8, 16, 24)]
+            total += d * (sx * scale_a + sy * scale_b + sz * scale_c + sw * scale_d)
+            total -= dmin * (by0_sum * min_a + by1_sum * min_b + by2_sum * min_c + by3_sum * min_d)
+        out[row] = total
+    return out
+
+
+def test_mul_mat_q5_k_oracle_and_workbench_use_packed_kernel_abi_buffers(tmp_path: Path) -> None:
+    candidate = _candidate(
+        candidate_id="mul_mat_q5_k_f32_dot16_contiguous_cols1_2d",
+        shape={"k": 256, "rows": 16, "cols": 1},
+        family="mul_mat_q5_k_f32",
+        source_id="mul_mat_q5_k_f32",
+        root_symbol="@hrx2_mul_mat_q5_k_f32_dot16_static",
+        export_name="hrx2_mul_mat_q5_k_f32_dot16_static",
+        op="MUL_MAT",
+        source_path="kernels/v2/mul_mat/q5_k_f32_dot16.loom",
+    )
+
+    result = generate_oracle(candidate, tmp_path / "fixtures", force=True)
+
+    assert result.status == "fixtures_ready"
+    src0 = np.load(tmp_path / "fixtures" / "src0.npy")
+    src1 = np.load(tmp_path / "fixtures" / "src1.npy")
+    expected = np.load(tmp_path / "fixtures" / "expected.npy")
+    assert src0.shape == (2816,)
+    assert src1.shape == (256,)
+    assert np.load(tmp_path / "fixtures" / "dst_init.npy").shape == (16,)
+    assert expected.shape == (16,)
+    assert np.allclose(_emulate_mul_mat_q5_dot16_rows(src0, src1), expected, atol=1e-5, rtol=1e-5)
+
+    linked_source = tmp_path / "linked.loom"
+    linked_source.write_text(
+        'kernel.def export("hrx2_mul_mat_q5_k_f32_dot16_static") @hrx2_mul_mat_q5_k_f32_dot16_static() {}\n',
+        encoding="utf-8",
+    )
+    _, metadata = write_workbench(candidate, linked_source, tmp_path / "workbench.loom", tmp_path / "fixtures")
+
+    assert metadata["status"] == "ok"
+    workbench = (tmp_path / "workbench.loom").read_text(encoding="utf-8")
+    assert "tensor<2816xi8>, tensor<256xf32>, tensor<16xf32>" in workbench
+    assert "check.expect.close" in workbench
+
+
 def test_mul_mat_q8_0_oracle_and_workbench_use_packed_kernel_abi_buffers(tmp_path: Path) -> None:
     candidate = _candidate(
         candidate_id="mul_mat_q8_0_f32_contiguous_2d",

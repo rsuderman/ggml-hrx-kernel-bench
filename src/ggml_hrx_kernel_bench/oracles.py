@@ -134,16 +134,11 @@ def pack_q4_k_scales(np: Any, scales: Any, minimums: Any):
 
 def pack_q5_k_high_bits(np: Any, quants: Any):
     packed = np.zeros((32,), dtype=np.uint8)
-    low_half_bits = (0, 1, 4, 5)
-    high_half_bits = (2, 3, 6, 7)
     for pos in range(32):
         value = 0
-        for group, bit in enumerate(low_half_bits):
+        for group in range(8):
             if int(quants[group, pos]) & 0x10:
-                value |= 1 << bit
-        for group, bit in enumerate(high_half_bits):
-            if int(quants[group + 4, pos]) & 0x10:
-                value |= 1 << bit
+                value |= 1 << group
         packed[pos] = np.uint8(value)
     return packed
 
@@ -292,8 +287,6 @@ def dequant_q5_k(np: Any, packed: Any, k: int, rows: int):
     blocks_per_row = k // QK_K
     blocks = packed.view(np.uint8).reshape(rows * blocks_per_row, Q5_K_BLOCK_BYTES)
     out = np.empty((rows, k), dtype=np.float32)
-    low_half_bits = (0, 1, 4, 5)
-    high_half_bits = (2, 3, 6, 7)
     for row in range(rows):
         for block_in_row in range(blocks_per_row):
             block = blocks[row * blocks_per_row + block_in_row]
@@ -306,14 +299,12 @@ def dequant_q5_k(np: Any, packed: Any, k: int, rows: int):
                 if group < 4:
                     scale_i = packed_scales[group] & 0x3F
                     min_i = packed_scales[group + 4] & 0x3F
-                    high_bit = low_half_bits[group]
                 else:
                     low = packed_scales[group - 4]
                     mid = packed_scales[group]
                     high = packed_scales[group + 4]
                     scale_i = (high & 0x0F) | ((low >> 6) << 4)
                     min_i = (high >> 4) | ((mid >> 6) << 4)
-                    high_bit = high_half_bits[group - 4]
                 scale = np.float32(d * np.float32(scale_i))
                 minimum = np.float32(dmin * np.float32(min_i))
                 byte_base = (group // 2) * 32
@@ -321,7 +312,7 @@ def dequant_q5_k(np: Any, packed: Any, k: int, rows: int):
                 for j in range(32):
                     q_byte = qs[byte_base + j]
                     low_nibble = (q_byte >> 4) if group % 2 else (q_byte & 0x0F)
-                    q = low_nibble | (((qh[j] >> high_bit) & 0x01) << 4)
+                    q = low_nibble | (((qh[j] >> group) & 0x01) << 4)
                     out[row, offset + j] = np.float32(scale * np.float32(q) - minimum)
     return out
 
@@ -2167,7 +2158,11 @@ def _write_quantized_mul_mat_static_workbench(
     fixture_dir: Path,
 ) -> tuple[str, dict[str, Any]]:
     k, rows, cols = _matmul_dims(candidate)
-    if candidate.family == "mul_mat_q6_k_f32":
+    if candidate.family == "mul_mat_q5_k_f32":
+        src0_elems = q5_k_bytes(k, rows)
+        atol = 0.12
+        rtol = 0.04
+    elif candidate.family == "mul_mat_q6_k_f32":
         src0_elems = q6_k_bytes(k, rows)
         atol = 0.12
         rtol = 0.04
@@ -2420,6 +2415,11 @@ ORACLE_SPECS: tuple[OracleSpec, ...] = (
         family_ids=("mul_mat_q8_0_f32",),
         generate=_logical_generate(LogicalOracleSpec(("mul_mat_q8_0_f32",), "mul_mat_q8_0_f32_numpy_dequant_matmul", {"atol": 0.08, "rtol": 0.02}, _mul_mat_q8_0_arrays, exact_kernel_abi=True)),
         write_workbench=_write_mul_mat_q8_0_workbench,
+    ),
+    OracleSpec(
+        family_ids=("mul_mat_q5_k_f32",),
+        generate=_logical_generate(LogicalOracleSpec(("mul_mat_q5_k_f32",), "mul_mat_q5_k_f32_numpy_dequant_matmul", {"atol": 0.12, "rtol": 0.04}, _mul_mat_q5_k_arrays, exact_kernel_abi=True)),
+        write_workbench=_write_quantized_mul_mat_static_workbench,
     ),
     OracleSpec(
         family_ids=("mul_mat_q6_k_f32",),
