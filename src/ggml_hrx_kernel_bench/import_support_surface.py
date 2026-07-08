@@ -5,6 +5,7 @@ VALIDATED_IMPORT_OPS = frozenset(
     {
         "ABS",
         "ADD",
+        "ARGSORT",
         "CLAMP",
         "CONT",
         "CPY",

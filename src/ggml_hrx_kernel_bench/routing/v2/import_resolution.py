@@ -415,6 +415,35 @@ def lower_swiglu_tensors(
     return tensors, _shape_from_extents(extents)
 
 
+def lower_argsort_tensors(
+    case: ImportedCase,
+) -> tuple[dict[str, ConcreteTensor], dict[str, int]]:
+    ne = case.normalized_params.get("ne")
+    order = case.normalized_params.get("order", 0)
+    if not isinstance(ne, list) or len(ne) != 4:
+        raise ValueError("ARGSORT lowering requires a 4-D ne extent list")
+    if any(not isinstance(value, int) for value in ne):
+        raise ValueError("ARGSORT lowering requires integer ne extents")
+    if not isinstance(order, int):
+        raise ValueError("ARGSORT lowering requires integer order")
+    if order != 0:
+        raise ValueError("ARGSORT v2 routing currently requires order=0")
+    ncols = int(ne[0])
+    nrows = int(ne[1]) * int(ne[2]) * int(ne[3])
+    dimensions = _dimensions_from_extents([ncols, nrows])
+    tensors = {
+        "src0": ConcreteTensor(
+            dtype=str(case.dtype.get("type", "")).upper(),
+            dimensions=dimensions,
+        ),
+        "dst": ConcreteTensor(
+            dtype="I32",
+            dimensions=dimensions,
+        ),
+    }
+    return tensors, _shape_from_extents([ncols, nrows])
+
+
 def lower_get_rows_tensors(
     case: ImportedCase,
 ) -> tuple[dict[str, ConcreteTensor], dict[str, int]]:
@@ -803,6 +832,8 @@ def lower_tensors_for_route(
 ) -> tuple[dict[str, ConcreteTensor], dict[str, int]]:
     if route.op in {"ABS", "EXP", "NEG", "RELU"}:
         return lower_contiguous_unary_tensors(case)
+    if route.op == "ARGSORT":
+        return lower_argsort_tensors(case)
     if route.op in {"CLAMP", "SCALE", "SQR", "SQRT"}:
         return lower_contiguous_scale_or_clamp_tensors(case)
     if route.op == "CONT":

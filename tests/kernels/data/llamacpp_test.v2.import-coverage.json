@@ -1,8 +1,8 @@
 {
   "schema": "ggml_hrx_kernel_bench.import_test_coverage.v1",
   "operation_count": 115,
-  "total_pass_case_count": 480,
-  "total_fail_case_count": 10852,
+  "total_pass_case_count": 481,
+  "total_fail_case_count": 10851,
   "operations": [
     {
       "op": "ABS",
@@ -46,8 +46,8 @@
     },
     {
       "op": "ARGSORT",
-      "pass_case_count": 0,
-      "fail_case_count": 58
+      "pass_case_count": 1,
+      "fail_case_count": 57
     },
     {
       "op": "CEIL",

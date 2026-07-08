@@ -356,6 +356,35 @@ def test_get_rows_oracle_and_workbench_use_src0_row_override(tmp_path: Path) -> 
     assert "tensor<1280xf32>, tensor<4xi32>, tensor<1024xf32>" in workbench
 
 
+def test_argsort_oracle_and_workbench_use_flattened_rows(tmp_path: Path) -> None:
+    candidate = _candidate(
+        candidate_id="argsort_f32_i32_n128_r1_desc_wg128",
+        shape={"d0": 128, "d1": 1},
+        family="argsort_f32_i32",
+        source_id="argsort_f32_i32",
+        root_symbol="@hrx2_argsort_f32_i32_desc",
+        export_name="hrx2_argsort_f32_i32_desc",
+        op="ARGSORT",
+        source_path="kernels/v2/argsort/argsort_f32_i32.loom",
+    )
+
+    result = generate_oracle(candidate, tmp_path / "fixtures", force=True)
+
+    assert result.status == "fixtures_ready"
+    assert np.load(tmp_path / "fixtures" / "src0.npy").shape == (128,)
+    assert np.load(tmp_path / "fixtures" / "dst_init.npy").shape == (128,)
+    assert np.load(tmp_path / "fixtures" / "expected.npy").shape == (128,)
+
+    linked_source = tmp_path / "linked.loom"
+    linked_source.write_text('kernel.def export("hrx2_argsort_f32_i32_desc") @hrx2_argsort_f32_i32_desc() {}\n', encoding="utf-8")
+    _, metadata = write_workbench(candidate, linked_source, tmp_path / "workbench.loom", tmp_path / "fixtures")
+
+    assert metadata["status"] == "ok"
+    workbench = (tmp_path / "workbench.loom").read_text(encoding="utf-8")
+    assert "tensor<128xf32>, tensor<128xi32>" in workbench
+    assert "check.expect.equal" in workbench
+
+
 def test_rope_oracle_and_workbench_use_shape_rope_values(tmp_path: Path) -> None:
     candidate = Candidate(
         id="rope_f32_normal_n128_h32_t2_contiguous_4d",

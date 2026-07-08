@@ -1603,6 +1603,84 @@ def test_v2_get_rows_non_unit_be1_case_stays_unmapped() -> None:
     assert detail == "GET_ROWS v2 routing currently requires be1=1"
 
 
+def test_v2_argsort_route_resolves_for_base_f32_case() -> None:
+    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
+    case = ImportedCase(
+        op="ARGSORT",
+        dtype={"type": "f32"},
+        raw_case={},
+        normalized_params={
+            "ne": [128, 1, 1, 1],
+            "order": 0,
+        },
+        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_group_index=0,
+        source_case_index=0,
+    )
+
+    argsort_routes = list(routes_for_op(catalog, "ARGSORT"))
+
+    resolved_route, shape, reason, detail = resolve_route_for_case(case, argsort_routes)
+
+    assert reason is None
+    assert detail is None
+    assert resolved_route is not None
+    assert resolved_route.id == "argsort_f32_i32_n128_r1_desc_wg128"
+    assert shape == {"d0": 128, "d1": 1}
+
+
+def test_v2_argsort_ascending_case_stays_unmapped() -> None:
+    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
+    case = ImportedCase(
+        op="ARGSORT",
+        dtype={"type": "f32"},
+        raw_case={},
+        normalized_params={
+            "ne": [128, 1, 1, 1],
+            "order": 1,
+        },
+        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_group_index=0,
+        source_case_index=0,
+    )
+
+    argsort_routes = list(routes_for_op(catalog, "ARGSORT"))
+
+    resolved_route, shape, reason, detail = resolve_route_for_case(case, argsort_routes)
+
+    assert resolved_route is None
+    assert shape is None
+    assert reason is not None
+    assert reason.value == "shape_lowering_not_implemented"
+    assert detail == "ARGSORT v2 routing currently requires order=0"
+
+
+def test_v2_argsort_non_route_shape_case_stays_unmapped() -> None:
+    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
+    case = ImportedCase(
+        op="ARGSORT",
+        dtype={"type": "f32"},
+        raw_case={},
+        normalized_params={
+            "ne": [127, 1, 1, 1],
+            "order": 0,
+        },
+        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_group_index=0,
+        source_case_index=0,
+    )
+
+    argsort_routes = list(routes_for_op(catalog, "ARGSORT"))
+
+    resolved_route, shape, reason, detail = resolve_route_for_case(case, argsort_routes)
+
+    assert resolved_route is None
+    assert shape is None
+    assert reason is not None
+    assert reason.value == "no_route_match"
+    assert detail == "lowered tensor descriptors did not satisfy any v2 route"
+
+
 def test_v2_rope_route_resolves_for_plain_f32_case() -> None:
     catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
     case = ImportedCase(

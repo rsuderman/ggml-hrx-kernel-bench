@@ -23,6 +23,9 @@
       "add/add_f32_generic_2d.json",
       "add/add_f32_generic_4d.json"
     ],
+    "ARGSORT": [
+      "argsort/argsort_f32_i32_n128_r1_desc_wg128.json"
+    ],
     "DIV": [
       "div/div_f16_contiguous_2d.json",
       "div/div_f16_rhs_row_broadcast_2d.json",
