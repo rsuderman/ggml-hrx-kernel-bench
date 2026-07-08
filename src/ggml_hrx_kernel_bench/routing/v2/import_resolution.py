@@ -492,8 +492,21 @@ def lower_get_rows_tensors(
     }
 
 
+def _rope_route_mode_and_freq(route: V2Route) -> tuple[int, int]:
+    if route.root_symbol == "@hrx2_rope_normal_f32":
+        return 0, 0
+    if route.root_symbol == "@hrx2_rope_neox_f32":
+        return 2, 0
+    if route.root_symbol == "@hrx2_rope_normal_f32_freq":
+        return 0, 1
+    if route.root_symbol in {"@hrx2_rope_neox_f32_freq", "@hrx2_rope_neox_f32_freq_scale"}:
+        return 2, 1
+    raise ValueError(f"ROPE v2 routing is not implemented for {route.root_symbol}")
+
+
 def lower_rope_tensors(
     case: ImportedCase,
+    route: V2Route,
 ) -> tuple[dict[str, ConcreteTensor], dict[str, int]]:
     ne = case.normalized_params.get("ne_a")
     n_dims = case.normalized_params.get("n_dims")
@@ -520,21 +533,21 @@ def lower_rope_tensors(
     for name, value in (("fs", freq_scale), ("ef", ext_factor), ("af", attn_factor)):
         if isinstance(value, bool) or not isinstance(value, (int, float)):
             raise ValueError(f"ROPE lowering requires numeric {name}")
+    expected_mode, expected_freq_factor = _rope_route_mode_and_freq(route)
     if view_mode != 0:
         raise ValueError("ROPE v2 routing requires contiguous input (v=0)")
     if inplace != 0:
         raise ValueError("ROPE v2 routing currently requires inplace=0")
-    if mode != 0:
-        raise ValueError("ROPE v2 routing currently requires mode=0")
-    if freq_factor != 0:
-        raise ValueError("ROPE v2 routing currently requires ff=0")
-    if float(freq_scale) != 1.0:
-        raise ValueError("ROPE v2 routing currently requires fs=1.0")
-    if float(ext_factor) != 0.0:
-        raise ValueError("ROPE v2 routing currently requires ef=0.0")
-    if float(attn_factor) != 1.0:
-        raise ValueError("ROPE v2 routing currently requires af=1.0")
+    if mode != expected_mode:
+        raise ValueError(f"ROPE v2 routing currently requires mode={expected_mode}")
+    if freq_factor != expected_freq_factor:
+        raise ValueError(f"ROPE v2 routing currently requires ff={expected_freq_factor}")
+    # The current v2 normal-mode ROPE kernel already accepts scalar frequency,
+    # extension, and attention scaling through its launch ABI, so grouped-YAML
+    # scale variants stay on the same route as long as mode/layout match.
     extents = [int(value) for value in ne]
+    if route.root_symbol == "@hrx2_rope_neox_f32" and int(n_dims) != extents[0]:
+        raise ValueError("ROPE NEOX v2 routing currently requires n_dims == ne_a[0]")
     ncols = extents[0]
     nheads = extents[1]
     ntokens = extents[2] * extents[3]
@@ -841,7 +854,7 @@ def lower_tensors_for_route(
     if route.op == "GET_ROWS":
         return lower_get_rows_tensors(case)
     if route.op == "ROPE":
-        return lower_rope_tensors(case)
+        return lower_rope_tensors(case, route)
     if route.op == "RMS_NORM":
         return lower_rms_norm_tensors(case)
     if route.op == "SOFT_MAX":

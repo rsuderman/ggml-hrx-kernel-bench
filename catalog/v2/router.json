@@ -62,7 +62,8 @@
       "neg/neg_f32.json"
     ],
     "ROPE": [
-      "rope/rope_f32_normal_n128_h32_t2_contiguous_4d.json"
+      "rope/rope_f32_normal_n128_h32_t2_contiguous_4d.json",
+      "rope/rope_neox_f32_n64_h128_t2_contiguous_4d.json"
     ],
     "RMS_NORM": [
       "rms_norm/rms_norm_f32_contiguous_4d.json"

@@ -1731,6 +1731,56 @@ def test_v2_rope_route_resolves_for_plain_f32_case() -> None:
     }
 
 
+def test_v2_rope_route_resolves_for_scaled_plain_f32_case() -> None:
+    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
+    case = ImportedCase(
+        op="ROPE",
+        dtype={"type": "f32"},
+        raw_case={},
+        normalized_params={
+            "af": 1.4245,
+            "ef": 0.7465,
+            "ff": 0,
+            "fs": 1.4245,
+            "inplace": 0,
+            "mode": 0,
+            "n_ctx": 512,
+            "n_dims": 128,
+            "ne_a": [128, 32, 2, 1],
+            "v": 0,
+        },
+        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_group_index=0,
+        source_case_index=152,
+    )
+
+    rope_routes = list(routes_for_op(catalog, "ROPE"))
+
+    resolved_route, shape, reason, detail = resolve_route_for_case(case, rope_routes)
+
+    assert reason is None
+    assert detail is None
+    assert resolved_route is not None
+    assert resolved_route.id == "rope_f32_normal_n128_h32_t2_contiguous_4d"
+    assert shape == {
+        "d0": 128,
+        "d1": 32,
+        "d2": 2,
+        "d3": 1,
+        "src1_d0": 1,
+        "src1_d1": 1,
+        "rope.ncols": 128,
+        "rope.n_dims": 128,
+        "rope.nheads": 32,
+        "rope.ntokens": 2,
+        "rope.src0_head_stride": 128,
+        "rope.src0_token_stride": 4096,
+        "rope.dst_head_stride": 128,
+        "rope.dst_token_stride": 4096,
+        "rope.pos_token_stride": 1,
+    }
+
+
 def test_v2_rope_view_case_stays_unmapped() -> None:
     catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
     case = ImportedCase(
@@ -1765,7 +1815,7 @@ def test_v2_rope_view_case_stays_unmapped() -> None:
     assert detail == "ROPE v2 routing requires contiguous input (v=0)"
 
 
-def test_v2_rope_neox_case_stays_unmapped() -> None:
+def test_v2_rope_neox_route_resolves_for_plain_f32_case() -> None:
     catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
     case = ImportedCase(
         op="ROPE",
@@ -1792,11 +1842,65 @@ def test_v2_rope_neox_case_stays_unmapped() -> None:
 
     resolved_route, shape, reason, detail = resolve_route_for_case(case, rope_routes)
 
+    assert reason is None
+    assert detail is None
+    assert resolved_route is not None
+    assert resolved_route.id == "rope_neox_f32_n64_h128_t2_contiguous_4d"
+    assert shape == {
+        "d0": 64,
+        "d1": 128,
+        "d2": 2,
+        "d3": 1,
+        "src1_d0": 1,
+        "src1_d1": 1,
+        "rope.ncols": 64,
+        "rope.n_dims": 64,
+        "rope.nheads": 128,
+        "rope.ntokens": 2,
+        "rope.src0_head_stride": 64,
+        "rope.src0_token_stride": 8192,
+        "rope.dst_head_stride": 64,
+        "rope.dst_token_stride": 8192,
+        "rope.pos_token_stride": 1,
+    }
+
+
+def test_v2_rope_neox_partial_dims_case_stays_unmapped() -> None:
+    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
+    case = ImportedCase(
+        op="ROPE",
+        dtype={"type": "f32"},
+        raw_case={},
+        normalized_params={
+            "af": 1.0,
+            "ef": 0.0,
+            "ff": 0,
+            "fs": 1.0,
+            "inplace": 0,
+            "mode": 2,
+            "n_ctx": 512,
+            "n_dims": 32,
+            "ne_a": [80, 32, 2, 1],
+            "v": 0,
+        },
+        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_group_index=0,
+        source_case_index=20,
+    )
+
+    rope_routes = [
+        route
+        for route in routes_for_op(catalog, "ROPE")
+        if route.id == "rope_neox_f32_n64_h128_t2_contiguous_4d"
+    ]
+
+    resolved_route, shape, reason, detail = resolve_route_for_case(case, rope_routes)
+
     assert resolved_route is None
     assert shape is None
     assert reason is not None
     assert reason.value == "shape_lowering_not_implemented"
-    assert detail == "ROPE v2 routing currently requires mode=0"
+    assert detail == "ROPE NEOX v2 routing currently requires n_dims == ne_a[0]"
 
 
 def test_v2_soft_max_route_resolves_for_plain_f32_case() -> None:
