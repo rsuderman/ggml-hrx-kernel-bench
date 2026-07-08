@@ -1,0 +1,82 @@
+{
+  "id": "sum_rows_f32_contiguous_4d",
+  "family": "sum_rows_f32",
+  "kernel": {
+    "source_id": "sum_rows_f32",
+    "path": "sum_rows/contiguous_4d.loom",
+    "root_symbol": "@hrx2_sum_rows_f32",
+    "export_name": "hrx2_sum_rows_f32"
+  },
+  "tensors": {
+    "src0": {
+      "dtype": "F32",
+      "dimensions": "src0_dimensions",
+      "strides": "src0_strides"
+    }
+  },
+  "values": [
+    {
+      "name": "src0_contiguous_strides",
+      "contiguous_strides": "src0_dimensions"
+    },
+    {
+      "name": "trailing_dimensions",
+      "tail": {
+        "source": "src0_dimensions",
+        "drop": 1
+      }
+    },
+    {
+      "name": "flattened_trailing_dimensions",
+      "product": "trailing_dimensions"
+    },
+    {
+      "name": "total_size",
+      "product": "src0_dimensions"
+    }
+  ],
+  "constraints": [
+    {
+      "name": "total_size",
+      "min": 1,
+      "max": 1073741824
+    },
+    {
+      "name": "src0_dimensions",
+      "length": 4
+    },
+    {
+      "equals": [
+        "src0_contiguous_strides",
+        "src0_strides"
+      ]
+    }
+  ],
+  "launch": {
+    "workgroup_size": [
+      32,
+      1,
+      1
+    ]
+  },
+  "config": {
+    "bindings": [
+      {
+        "key": "@hrx2.shape.sum_rows.ncols",
+        "source": "tensor.src0.dimensions.d0.size"
+      },
+      {
+        "key": "@hrx2.shape.sum_rows.nrows",
+        "source": "value.flattened_trailing_dimensions"
+      },
+      {
+        "key": "@hrx2.shape.sum_rows.src0_row_stride",
+        "source": "tensor.src0.dimensions.d1.stride"
+      },
+      {
+        "key": "@hrx2.tuning.sum_rows.workgroup_size",
+        "value": "32"
+      }
+    ]
+  }
+}

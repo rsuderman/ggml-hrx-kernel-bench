@@ -334,6 +334,34 @@ def lower_contiguous_scale_or_clamp_tensors(
     return _lower_contiguous_extent_tensors(case, extent_key="ne", shape_prefix="pointwise")
 
 
+def lower_sum_rows_tensors(
+    case: ImportedCase,
+) -> tuple[dict[str, ConcreteTensor], dict[str, int]]:
+    ne = case.normalized_params.get("ne")
+    permute = case.normalized_params.get("permute", 0)
+    slice_mode = case.normalized_params.get("slice", 0)
+    if not isinstance(ne, list) or len(ne) != 4:
+        raise ValueError("SUM_ROWS lowering requires a 4-D ne extent list")
+    if any(not isinstance(value, int) for value in ne):
+        raise ValueError("SUM_ROWS lowering requires integer ne extents")
+    if not isinstance(permute, int):
+        raise ValueError("SUM_ROWS lowering requires integer permute")
+    if not isinstance(slice_mode, int):
+        raise ValueError("SUM_ROWS lowering requires integer slice")
+    if permute != 0:
+        raise ValueError("SUM_ROWS v2 routing requires permute=0")
+    if slice_mode != 0:
+        raise ValueError("SUM_ROWS v2 routing requires slice=0")
+    extents = [int(value) for value in ne]
+    tensors = {
+        "src0": ConcreteTensor(
+            dtype=str(case.dtype.get("type", "")).upper(),
+            dimensions=_dimensions_from_extents(extents),
+        ),
+    }
+    return tensors, _shape_from_extents(extents)
+
+
 def lower_set_rows_tensors(
     case: ImportedCase,
 ) -> tuple[dict[str, ConcreteTensor], dict[str, int]]:
@@ -521,6 +549,8 @@ def lower_tensors_for_route(
         return lower_contiguous_scale_or_clamp_tensors(case)
     if route.op == "CONT":
         return lower_contiguous_cont_tensors(case)
+    if route.op == "SUM_ROWS":
+        return lower_sum_rows_tensors(case)
     if route.op == "SET_ROWS":
         return lower_set_rows_tensors(case)
     if route.lowering_kind == LOWERING_KIND_COPY_CONTIGUOUS:

@@ -1305,3 +1305,65 @@ def test_v2_oversized_contiguous_pointwise_case_becomes_unmapped() -> None:
     assert reason is not None
     assert reason.value == "no_route_match"
     assert detail == "lowered tensor descriptors did not satisfy any v2 route"
+
+
+def test_v2_sum_rows_route_resolves_for_contiguous_case() -> None:
+    case = ImportedCase(
+        op="SUM_ROWS",
+        dtype={"type": "f32"},
+        raw_case={
+            "ne": [33, 256, 1, 1],
+            "permute": 0,
+            "slice": 0,
+        },
+        normalized_params={
+            "ne": [33, 256, 1, 1],
+            "permute": 0,
+            "slice": 0,
+        },
+        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_group_index=0,
+        source_case_index=0,
+    )
+    catalog = load_route_catalog(Path("catalog/v2"))
+    sum_rows_routes = list(routes_for_op(catalog, "SUM_ROWS"))
+
+    resolved_route, shape, reason, detail = resolve_route_for_case(case, sum_rows_routes)
+
+    assert resolved_route is not None
+    assert resolved_route.id == "sum_rows_f32_contiguous_4d"
+    assert shape is not None
+    assert shape["d0"] == 33
+    assert shape["d1"] == 256
+    assert reason is None
+    assert detail is None
+
+
+def test_v2_sum_rows_permuted_case_stays_unmapped() -> None:
+    case = ImportedCase(
+        op="SUM_ROWS",
+        dtype={"type": "f32"},
+        raw_case={
+            "ne": [11, 5, 6, 3],
+            "permute": 1,
+            "slice": 0,
+        },
+        normalized_params={
+            "ne": [11, 5, 6, 3],
+            "permute": 1,
+            "slice": 0,
+        },
+        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_group_index=0,
+        source_case_index=0,
+    )
+    catalog = load_route_catalog(Path("catalog/v2"))
+    sum_rows_routes = list(routes_for_op(catalog, "SUM_ROWS"))
+
+    resolved_route, shape, reason, detail = resolve_route_for_case(case, sum_rows_routes)
+
+    assert resolved_route is None
+    assert shape is None
+    assert reason is not None
+    assert reason.value == "shape_lowering_not_implemented"
+    assert detail == "SUM_ROWS v2 routing requires permute=0"
