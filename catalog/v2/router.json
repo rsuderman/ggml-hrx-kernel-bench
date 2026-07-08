@@ -71,6 +71,9 @@
     "SET_ROWS": [
       "set_rows/set_rows_f32_f32_contiguous_4d.json"
     ],
+    "SOFT_MAX": [
+      "soft_max/soft_max_f32_contiguous_2d.json"
+    ],
     "SUM_ROWS": [
       "sum_rows/sum_rows_f32_contiguous_4d.json"
     ],

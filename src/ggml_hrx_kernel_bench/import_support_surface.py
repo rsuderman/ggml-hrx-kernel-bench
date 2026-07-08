@@ -17,6 +17,7 @@ VALIDATED_IMPORT_OPS = frozenset(
         "RELU",
         "SCALE",
         "SET_ROWS",
+        "SOFT_MAX",
         "SQR",
         "SQRT",
         "SUB",

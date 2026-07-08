@@ -354,6 +354,33 @@ def test_get_rows_oracle_and_workbench_use_src0_row_override(tmp_path: Path) -> 
     assert metadata["status"] == "ok"
     workbench = (tmp_path / "workbench.loom").read_text(encoding="utf-8")
     assert "tensor<1280xf32>, tensor<4xi32>, tensor<1024xf32>" in workbench
+
+
+def test_soft_max_oracle_and_workbench_use_flattened_rows(tmp_path: Path) -> None:
+    candidate = _candidate(
+        candidate_id="soft_max_f32_ranked_2d",
+        shape={"d0": 16, "d1": 16},
+        family="soft_max_f32",
+        source_id="soft_max_f32",
+        root_symbol="@hrx2_soft_max_f32",
+        export_name="hrx2_soft_max_f32",
+        op="SOFT_MAX",
+        source_path="kernels/v2/soft_max/contiguous_f32.loom",
+    )
+
+    result = generate_oracle(candidate, tmp_path / "fixtures", force=True)
+
+    assert result.status == "fixtures_ready"
+    assert np.load(tmp_path / "fixtures" / "src0.npy").shape == (256,)
+    assert np.load(tmp_path / "fixtures" / "expected.npy").shape == (256,)
+
+    linked_source = tmp_path / "linked.loom"
+    linked_source.write_text('kernel.def export("hrx2_soft_max_f32") @hrx2_soft_max_f32() {}\n', encoding="utf-8")
+    _, metadata = write_workbench(candidate, linked_source, tmp_path / "workbench.loom", tmp_path / "fixtures")
+
+    assert metadata["status"] == "ok"
+    workbench = (tmp_path / "workbench.loom").read_text(encoding="utf-8")
+    assert "tensor<256xf32>, tensor<256xf32>" in workbench
     assert "check.expect.close" in workbench
 
 

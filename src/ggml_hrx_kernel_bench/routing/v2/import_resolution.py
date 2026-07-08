@@ -463,6 +463,60 @@ def lower_get_rows_tensors(
     }
 
 
+def lower_soft_max_tensors(
+    case: ImportedCase,
+) -> tuple[dict[str, ConcreteTensor], dict[str, int]]:
+    ne = case.normalized_params.get("ne")
+    mask = case.normalized_params.get("mask", 0)
+    sinks = case.normalized_params.get("sinks", 0)
+    max_bias = case.normalized_params.get("max_bias", 0.0)
+    inplace = case.normalized_params.get("inplace", 0)
+    if not isinstance(ne, list) or len(ne) != 4:
+        raise ValueError("SOFT_MAX lowering requires a 4-D ne extent list")
+    if any(not isinstance(value, int) for value in ne):
+        raise ValueError("SOFT_MAX lowering requires integer ne extents")
+    for name, value in (("mask", mask), ("sinks", sinks), ("inplace", inplace)):
+        if not isinstance(value, int):
+            raise ValueError(f"SOFT_MAX lowering requires integer {name}")
+    if isinstance(max_bias, bool):
+        raise ValueError("SOFT_MAX lowering requires numeric max_bias")
+    if isinstance(max_bias, str):
+        try:
+            max_bias_value = float(max_bias)
+        except ValueError as exc:
+            raise ValueError("SOFT_MAX lowering requires numeric max_bias") from exc
+    elif isinstance(max_bias, (int, float)):
+        max_bias_value = float(max_bias)
+    else:
+        raise ValueError("SOFT_MAX lowering requires numeric max_bias")
+    if mask != 0:
+        raise ValueError("SOFT_MAX v2 routing currently requires mask=0")
+    if sinks != 0:
+        raise ValueError("SOFT_MAX v2 routing currently requires sinks=0")
+    if inplace != 0:
+        raise ValueError("SOFT_MAX v2 routing currently requires inplace=0")
+    if max_bias_value != 0.0:
+        raise ValueError("SOFT_MAX v2 routing currently requires max_bias=0.0")
+    extents = [int(value) for value in ne]
+    ncols = extents[0]
+    nrows = 1
+    for extent in extents[1:]:
+        nrows *= int(extent)
+    if ncols > 1024:
+        raise ValueError("SOFT_MAX v2 routing currently requires ne[0] <= 1024")
+    tensors = {
+        "src0": ConcreteTensor(
+            dtype=str(case.dtype.get("type", "")).upper(),
+            dimensions=_dimensions_from_extents([ncols, nrows]),
+        ),
+        "dst": ConcreteTensor(
+            dtype=str(case.dtype.get("type", "")).upper(),
+            dimensions=_dimensions_from_extents([ncols, nrows]),
+        ),
+    }
+    return tensors, _shape_from_extents([ncols, nrows])
+
+
 def lower_sum_rows_tensors(
     case: ImportedCase,
 ) -> tuple[dict[str, ConcreteTensor], dict[str, int]]:
@@ -682,6 +736,8 @@ def lower_tensors_for_route(
         return lower_get_rows_tensors(case)
     if route.op == "RMS_NORM":
         return lower_rms_norm_tensors(case)
+    if route.op == "SOFT_MAX":
+        return lower_soft_max_tensors(case)
     if route.op == "SWIGLU":
         return lower_swiglu_tensors(case)
     if route.op == "SUM_ROWS":
