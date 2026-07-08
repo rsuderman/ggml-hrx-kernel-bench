@@ -38,6 +38,16 @@ def tensor_values_json(route: V2Route) -> list[dict[str, Any]]:
         if value.operation_kind == "inverse_permutation":
             payload.append({"name": value.name, "inverse_permutation": value.sources[0]})
             continue
+        if value.operation_kind == "head":
+            payload.append(
+                {"name": value.name, "head": {"source": value.sources[0], "take": value.parameters[0]}}
+            )
+            continue
+        if value.operation_kind == "tail":
+            payload.append(
+                {"name": value.name, "tail": {"source": value.sources[0], "drop": value.parameters[0]}}
+            )
+            continue
         if value.operation_kind == "chain_permutations":
             payload.append({"name": value.name, "chain_permutations": list(value.sources)})
             continue
@@ -71,6 +81,8 @@ def tensor_constraints_json(route: V2Route) -> list[dict[str, Any]]:
                 for key, value in (
                     ("name", check.name),
                     ("length", check.length),
+                    ("rank_min", check.rank_min),
+                    ("rank_max", check.rank_max),
                     ("index", check.index),
                     ("min", check.min),
                     ("max", check.max),

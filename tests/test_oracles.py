@@ -193,6 +193,46 @@ def test_copy_oracle_and_workbench_support_transposed_f32_source(tmp_path: Path)
     assert "check.expect.close" in workbench
 
 
+def test_set_rows_oracle_and_workbench_support_ranked_v2_shape(tmp_path: Path) -> None:
+    candidate = _candidate(
+        candidate_id="set_rows_f32_ranked_4d",
+        shape={
+            "d0": 4,
+            "d1": 8,
+            "d2": 1,
+            "d3": 3,
+            "src0_d1": 2,
+            "src1_d0": 2,
+            "src1_d1": 1,
+            "src1_d2": 1,
+            "src1_d3": 1,
+        },
+        family="set_rows_f32",
+        source_id="set_rows_f32",
+        root_symbol="@set_rows_f32_f32",
+        export_name="set_rows_f32_f32",
+        op="SET_ROWS",
+        source_path="kernels/hrx2/set_rows_f32.loom",
+    )
+
+    result = generate_oracle(candidate, tmp_path / "fixtures", force=True)
+
+    assert result.status == "fixtures_ready"
+    assert np.load(tmp_path / "fixtures" / "src0.npy").shape == (24,)
+    assert np.load(tmp_path / "fixtures" / "indices.npy").shape == (4,)
+    assert np.load(tmp_path / "fixtures" / "dst_init.npy").shape == (96,)
+    assert np.load(tmp_path / "fixtures" / "expected.npy").shape == (96,)
+
+    linked_source = tmp_path / "linked.loom"
+    linked_source.write_text('kernel.def export("set_rows_f32_f32") @set_rows_f32_f32() {}\n', encoding="utf-8")
+    _, metadata = write_workbench(candidate, linked_source, tmp_path / "workbench.loom", tmp_path / "fixtures")
+
+    assert metadata["status"] == "ok"
+    workbench = (tmp_path / "workbench.loom").read_text(encoding="utf-8")
+    assert "tensor<24xf32>, tensor<4xi32>, tensor<96xf32>" in workbench
+    assert "check.expect.close" in workbench
+
+
 @pytest.mark.parametrize(
     ("family", "op", "source_path", "root_symbol", "export_name"),
     (

@@ -1,8 +1,8 @@
 {
   "schema": "ggml_hrx_kernel_bench.import_test_coverage.v1",
   "operation_count": 115,
-  "total_pass_case_count": 405,
-  "total_fail_case_count": 10927,
+  "total_pass_case_count": 429,
+  "total_fail_case_count": 10903,
   "operations": [
     {
       "op": "ABS",
@@ -56,8 +56,8 @@
     },
     {
       "op": "CLAMP",
-      "pass_case_count": 0,
-      "fail_case_count": 6
+      "pass_case_count": 3,
+      "fail_case_count": 3
     },
     {
       "op": "CONCAT",
@@ -66,8 +66,8 @@
     },
     {
       "op": "CONT",
-      "pass_case_count": 0,
-      "fail_case_count": 36
+      "pass_case_count": 6,
+      "fail_case_count": 30
     },
     {
       "op": "CONV_2D",
@@ -426,8 +426,8 @@
     },
     {
       "op": "SCALE",
-      "pass_case_count": 0,
-      "fail_case_count": 4
+      "pass_case_count": 4,
+      "fail_case_count": 0
     },
     {
       "op": "SET",
@@ -436,8 +436,8 @@
     },
     {
       "op": "SET_ROWS",
-      "pass_case_count": 0,
-      "fail_case_count": 315
+      "pass_case_count": 11,
+      "fail_case_count": 304
     },
     {
       "op": "SGN",

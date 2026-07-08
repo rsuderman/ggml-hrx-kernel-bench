@@ -227,13 +227,49 @@ def _parse_unary_parameters(case: ImportedCase) -> tuple[list[int], int]:
     v = case.normalized_params.get("v", 0)
     if not isinstance(ne, list):
         raise ValueError("unary lowering requires ne_a array")
-    if len(ne) != 4:
-        raise ValueError("unary lowering requires 4-D extents")
+    if len(ne) < 1:
+        raise ValueError("unary lowering requires at least one extent")
     if any(not isinstance(value, int) for value in ne):
         raise ValueError("unary lowering requires integer extents")
     if not isinstance(v, int):
         raise ValueError("unary lowering requires integer v")
     return [int(value) for value in ne], int(v)
+
+
+def _contiguous_shape_metadata(extents: list[int], *, prefix: str) -> dict[str, int]:
+    if not extents:
+        raise ValueError("contiguous lowering requires at least one extent")
+    trailing_product = 1
+    for extent in extents[1:]:
+        trailing_product *= int(extent)
+    return {
+        f"{prefix}.d1": trailing_product,
+    }
+
+
+def _lower_contiguous_extent_tensors(
+    case: ImportedCase,
+    *,
+    extent_key: str,
+    dtype_keys: tuple[str, str] = ("type", "type"),
+    shape_prefix: str,
+) -> tuple[dict[str, ConcreteTensor], dict[str, int]]:
+    ne = case.normalized_params.get(extent_key)
+    if not isinstance(ne, list) or len(ne) < 1:
+        raise ValueError(f"contiguous lowering requires a non-empty {extent_key} extent list")
+    if any(not isinstance(value, int) for value in ne):
+        raise ValueError(f"contiguous lowering requires integer {extent_key} extents")
+    src_dtype = str(case.dtype.get(dtype_keys[0], "")).upper()
+    dst_dtype = str(case.dtype.get(dtype_keys[1], "")).upper()
+    extents = [int(value) for value in ne]
+    tensors = {
+        "src0": ConcreteTensor(dtype=src_dtype, dimensions=_dimensions_from_extents(extents)),
+        "dst": ConcreteTensor(dtype=dst_dtype, dimensions=_dimensions_from_extents(extents)),
+    }
+    return tensors, {
+        **_shape_from_extents(extents),
+        **_contiguous_shape_metadata(extents, prefix=shape_prefix),
+    }
 
 
 def lower_contiguous_unary_tensors(
@@ -242,13 +278,102 @@ def lower_contiguous_unary_tensors(
     ne, v = _parse_unary_parameters(case)
     if v != 0:
         raise ValueError("contiguous unary routing requires contiguous input (v=0)")
-    dtype = str(case.dtype.get("type", "")).upper()
-    dimensions = _dimensions_from_extents(ne)
+    tensors, shape = _lower_contiguous_extent_tensors(
+        ImportedCase(
+            op=case.op,
+            dtype=case.dtype,
+            raw_case=case.raw_case,
+            normalized_params={"ne_a": ne},
+            source_path=case.source_path,
+            source_group_index=case.source_group_index,
+            source_case_index=case.source_case_index,
+        ),
+        extent_key="ne_a",
+        shape_prefix="pointwise",
+    )
+    return tensors, shape
+
+
+def _parse_cont_parameters(case: ImportedCase) -> list[int]:
+    ne = case.normalized_params.get("ne")
+    use_view_slice = case.normalized_params.get("use_view_slice", 0)
+    if not isinstance(ne, list) or len(ne) < 2 or len(ne) > 4:
+        raise ValueError("CONT lowering requires a 2-D to 4-D ne extent list")
+    if any(not isinstance(value, int) for value in ne):
+        raise ValueError("CONT lowering requires integer ne extents")
+    if not isinstance(use_view_slice, int):
+        raise ValueError("CONT lowering requires integer use_view_slice")
+    if use_view_slice != 0:
+        raise ValueError("CONT lowering requires contiguous source input (use_view_slice=0)")
+    return [int(value) for value in ne]
+
+
+def lower_contiguous_cont_tensors(
+    case: ImportedCase,
+) -> tuple[dict[str, ConcreteTensor], dict[str, int]]:
+    extents = _parse_cont_parameters(case)
+    tensors, shape = _lower_contiguous_extent_tensors(
+        ImportedCase(
+            op=case.op,
+            dtype=case.dtype,
+            raw_case=case.raw_case,
+            normalized_params={"ne": extents},
+            source_path=case.source_path,
+            source_group_index=case.source_group_index,
+            source_case_index=case.source_case_index,
+        ),
+        extent_key="ne",
+        shape_prefix="cont",
+    )
+    return tensors, shape
+
+
+def lower_contiguous_scale_or_clamp_tensors(
+    case: ImportedCase,
+) -> tuple[dict[str, ConcreteTensor], dict[str, int]]:
+    return _lower_contiguous_extent_tensors(case, extent_key="ne", shape_prefix="pointwise")
+
+
+def lower_set_rows_tensors(
+    case: ImportedCase,
+) -> tuple[dict[str, ConcreteTensor], dict[str, int]]:
+    ne = case.normalized_params.get("ne")
+    nr23 = case.normalized_params.get("nr23")
+    row_count = case.normalized_params.get("r")
+    view_mode = case.normalized_params.get("v", 0)
+    if not isinstance(ne, list) or len(ne) != 4:
+        raise ValueError("SET_ROWS lowering requires a 4-D ne extent list")
+    if not isinstance(nr23, list) or len(nr23) != 2:
+        raise ValueError("SET_ROWS lowering requires a 2-D nr23 extent list")
+    if any(not isinstance(value, int) for value in (*ne, *nr23)):
+        raise ValueError("SET_ROWS lowering requires integer extents")
+    if not isinstance(row_count, int):
+        raise ValueError("SET_ROWS lowering requires integer r")
+    if not isinstance(view_mode, int):
+        raise ValueError("SET_ROWS lowering requires integer v")
+    if view_mode != 0:
+        raise ValueError("SET_ROWS lowering requires contiguous source input (v=0)")
+    if row_count <= 0:
+        raise ValueError("SET_ROWS lowering requires r >= 1")
+    dst_extents = [int(value) for value in ne]
+    src0_extents = [int(ne[0]), int(row_count), int(ne[2]), int(ne[3])]
+    src1_extents = [int(row_count), int(nr23[0]), int(nr23[1]), 1]
+    src1_strides = [1, int(row_count), int(row_count), int(row_count)]
     tensors = {
-        tensor_name: ConcreteTensor(dtype=dtype, dimensions=dimensions)
-        for tensor_name in ("src0", "dst")
+        "src0": ConcreteTensor(
+            dtype=str(case.dtype.get("type", "")).upper(),
+            dimensions=_dimensions_from_extents(src0_extents),
+        ),
+        "src1": ConcreteTensor(
+            dtype=str(case.dtype.get("type_idx", "")).upper(),
+            dimensions=_dimensions_from_extents_and_strides(src1_extents, src1_strides),
+        ),
+        "dst": ConcreteTensor(
+            dtype=str(case.dtype.get("type", "")).upper(),
+            dimensions=_dimensions_from_extents(dst_extents),
+        ),
     }
-    return tensors, _shape_from_extents(ne)
+    return tensors, _shape_from_extents(dst_extents)
 
 
 def lower_contiguous_copy_tensors(
@@ -392,6 +517,12 @@ def lower_tensors_for_route(
 ) -> tuple[dict[str, ConcreteTensor], dict[str, int]]:
     if route.op == "ABS":
         return lower_contiguous_unary_tensors(case)
+    if route.op == "CLAMP" or route.op == "SCALE":
+        return lower_contiguous_scale_or_clamp_tensors(case)
+    if route.op == "CONT":
+        return lower_contiguous_cont_tensors(case)
+    if route.op == "SET_ROWS":
+        return lower_set_rows_tensors(case)
     if route.lowering_kind == LOWERING_KIND_COPY_CONTIGUOUS:
         return lower_contiguous_copy_tensors(case)
     if route.lowering_kind == LOWERING_KIND_COPY_NON_CONTIGUOUS_4D:
@@ -412,7 +543,13 @@ def shape_for_resolved_route(
 ) -> EncodedRouteShape:
     if not route.tensors:
         return EncodedRouteShape(items=tuple((str(name), int(value)) for name, value in fallback_shape.items()))
-    return encode_route_shape(route, tensors)
+    encoded = list(encode_route_shape(route, tensors).items)
+    present = {name for name, _ in encoded}
+    for name, value in fallback_shape.items():
+        if str(name) in present:
+            continue
+        encoded.append((str(name), int(value)))
+    return EncodedRouteShape(items=tuple(encoded))
 
 
 def resolve_route_for_case(

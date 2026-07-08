@@ -6,12 +6,14 @@ from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Any, Mapping
 
-VALUE_OPERATION_ARITY: dict[str, int] = {
-    "contiguous_strides": 1,
-    "product": 1,
-    "inverse_permutation": 1,
-    "chain_permutations": 2,
-    "permuted_contiguous_strides": 2,
+VALUE_OPERATION_SPEC: dict[str, tuple[int, int]] = {
+    "contiguous_strides": (1, 0),
+    "product": (1, 0),
+    "inverse_permutation": (1, 0),
+    "head": (1, 1),
+    "tail": (1, 1),
+    "chain_permutations": (2, 0),
+    "permuted_contiguous_strides": (2, 0),
 }
 
 LOWERING_KIND_COPY_CONTIGUOUS = "copy_contiguous"
@@ -40,6 +42,8 @@ def _freeze_mapping(mapping: Mapping[str, Any]) -> Mapping[str, Any]:
 class ConstraintCheck:
     name: str | None = None
     length: int | None = None
+    rank_min: int | None = None
+    rank_max: int | None = None
     index: int | None = None
     min: int | None = None
     max: int | None = None
@@ -59,14 +63,20 @@ class ValueDefinition:
     name: str
     operation_kind: str
     sources: tuple[str, ...]
+    parameters: tuple[int, ...] = ()
 
     def __post_init__(self) -> None:
-        expected_arity = VALUE_OPERATION_ARITY.get(self.operation_kind)
-        if expected_arity is None:
+        operation_spec = VALUE_OPERATION_SPEC.get(self.operation_kind)
+        if operation_spec is None:
             raise ValueError(f"unsupported value operation kind: {self.operation_kind!r}")
-        if len(self.sources) != expected_arity:
+        expected_sources, expected_parameters = operation_spec
+        if len(self.sources) != expected_sources:
             raise ValueError(
-                f"value operation {self.operation_kind!r} requires {expected_arity} source(s), got {len(self.sources)}"
+                f"value operation {self.operation_kind!r} requires {expected_sources} source(s), got {len(self.sources)}"
+            )
+        if len(self.parameters) != expected_parameters:
+            raise ValueError(
+                f"value operation {self.operation_kind!r} requires {expected_parameters} parameter(s), got {len(self.parameters)}"
             )
 
 

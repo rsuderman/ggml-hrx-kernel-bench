@@ -5,6 +5,12 @@
       "abs_f16.json",
       "abs_f32.json"
     ],
+    "CLAMP": [
+      "clamp_f32.json"
+    ],
+    "CONT": [
+      "cont/cont_f32_contiguous_4d.json"
+    ],
     "ADD": [
       "add/add_f16_contiguous_2d.json",
       "add/add_f16_rhs_row_broadcast_2d.json",
@@ -40,6 +46,12 @@
       "mul/mul_f32_contiguous_1d.json",
       "mul/mul_f32_generic_2d.json",
       "mul/mul_f32_generic_4d.json"
+    ],
+    "SCALE": [
+      "scale_f32.json"
+    ],
+    "SET_ROWS": [
+      "set_rows/set_rows_f32_f32_contiguous_4d.json"
     ],
     "SUB": [
       "sub/sub_f16_contiguous_2d.json",

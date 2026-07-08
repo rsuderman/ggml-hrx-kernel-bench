@@ -34,6 +34,10 @@ from ggml_hrx_kernel_bench.routing.v2.manifest import build_manifest
 from ggml_hrx_kernel_bench.routing.v2.query import load_route_catalog, routes_for_op
 
 
+ACTUAL_V2_ROUTING_DIR = Path(__file__).resolve().parents[1] / "catalog" / "v2"
+ACTUAL_V2_KERNEL_DIR = Path(__file__).resolve().parents[1] / "kernels" / "v2"
+
+
 def _write_v2_descriptor(routing_dir: Path) -> None:
     routing_dir.mkdir(parents=True, exist_ok=True)
     (routing_dir / "router.json").write_text(
@@ -435,6 +439,340 @@ def test_v2_copy_catalog_infers_lowering_kinds_from_generated_descriptors(tmp_pa
 
     assert by_id["copy_f32_f16_contiguous_1d"].lowering_kind == "copy_contiguous"
     assert by_id["copy_f32_f32_non_contiguous_4d"].lowering_kind == "copy_non_contiguous_4d"
+
+
+def test_v2_resolve_cont_route_for_contiguous_f32_case() -> None:
+    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
+    case = ImportedCase(
+        op="CONT",
+        dtype={"type": "f32"},
+        raw_case={},
+        normalized_params={
+            "ne": [2, 3, 5, 7],
+            "use_view_slice": 0,
+        },
+        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_group_index=0,
+        source_case_index=0,
+    )
+
+    route, shape, reason, detail = resolve_route_for_case(case, list(routes_for_op(catalog, "CONT")))
+
+    assert reason is None
+    assert detail is None
+    assert route is not None
+    assert route.id == "cont_f32_contiguous_4d"
+    assert shape == {"d0": 2, "d1": 3, "d2": 5, "d3": 7, "cont.d1": 105}
+
+
+def test_v2_resolve_cont_route_for_rank2_f32_case() -> None:
+    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
+    case = ImportedCase(
+        op="CONT",
+        dtype={"type": "f32"},
+        raw_case={},
+        normalized_params={
+            "ne": [7, 5],
+            "use_view_slice": 0,
+        },
+        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_group_index=0,
+        source_case_index=0,
+    )
+
+    route, shape, reason, detail = resolve_route_for_case(case, list(routes_for_op(catalog, "CONT")))
+
+    assert reason is None
+    assert detail is None
+    assert route is not None
+    assert route.id == "cont_f32_contiguous_4d"
+    assert shape == {"d0": 7, "d1": 5, "cont.d1": 5}
+
+
+def test_v2_resolve_cont_route_for_rank3_f32_case() -> None:
+    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
+    case = ImportedCase(
+        op="CONT",
+        dtype={"type": "f32"},
+        raw_case={},
+        normalized_params={
+            "ne": [4, 3, 2],
+            "use_view_slice": 0,
+        },
+        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_group_index=0,
+        source_case_index=0,
+    )
+
+    route, shape, reason, detail = resolve_route_for_case(case, list(routes_for_op(catalog, "CONT")))
+
+    assert reason is None
+    assert detail is None
+    assert route is not None
+    assert route.id == "cont_f32_contiguous_4d"
+    assert shape == {"d0": 4, "d1": 3, "d2": 2, "cont.d1": 6}
+
+
+def test_v2_default_cont_candidate_derives_rank_polymorphic_shape_bindings() -> None:
+    router = create_router(version="v2", kernel_dir=ACTUAL_V2_KERNEL_DIR, routing_dir=ACTUAL_V2_ROUTING_DIR)
+
+    candidate = next(
+        current for current in router.candidates(CandidateQuery()) if current.route_id == "cont_f32_contiguous_4d"
+    )
+
+    assert candidate.shape == {"d0": 1, "d1": 1}
+    assert candidate.config == {
+        "@hrx2.shape.cont.d0": "1",
+        "@hrx2.shape.cont.d1": "1",
+        "@hrx2.shape.cont.ne1": "1",
+        "@hrx2.shape.cont.ne2": "1",
+        "@hrx2.stride.cont.src_nb1": "1",
+        "@hrx2.stride.cont.src_nb2": "1",
+        "@hrx2.stride.cont.src_nb3": "1",
+        "@hrx2.tuning.cont.workgroup_size": "256",
+    }
+
+
+def test_v2_resolve_scale_route_for_f32_case() -> None:
+    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
+    case = ImportedCase(
+        op="SCALE",
+        dtype={"type": "f32"},
+        raw_case={},
+        normalized_params={
+            "ne": [10, 10, 10, 10],
+            "scale": 2.0,
+            "bias": 1.0,
+            "inplace": 0,
+        },
+        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_group_index=0,
+        source_case_index=0,
+    )
+
+    route, shape, reason, detail = resolve_route_for_case(case, list(routes_for_op(catalog, "SCALE")))
+
+    assert reason is None
+    assert detail is None
+    assert route is not None
+    assert route.id == "scale_f32_contiguous_4d"
+    assert shape == {"d0": 10, "d1": 10, "d2": 10, "d3": 10, "pointwise.d1": 1000}
+
+
+def test_v2_resolve_scale_route_for_rank2_f32_case() -> None:
+    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
+    case = ImportedCase(
+        op="SCALE",
+        dtype={"type": "f32"},
+        raw_case={},
+        normalized_params={
+            "ne": [7, 5],
+            "scale": 2.0,
+            "bias": 1.0,
+            "inplace": 0,
+        },
+        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_group_index=0,
+        source_case_index=0,
+    )
+
+    route, shape, reason, detail = resolve_route_for_case(case, list(routes_for_op(catalog, "SCALE")))
+
+    assert reason is None
+    assert detail is None
+    assert route is not None
+    assert route.id == "scale_f32_contiguous_4d"
+    assert shape == {"d0": 7, "d1": 5, "pointwise.d1": 5}
+
+
+def test_v2_resolve_scale_route_for_rank3_f32_case() -> None:
+    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
+    case = ImportedCase(
+        op="SCALE",
+        dtype={"type": "f32"},
+        raw_case={},
+        normalized_params={
+            "ne": [4, 3, 2],
+            "scale": 2.0,
+            "bias": 1.0,
+            "inplace": 0,
+        },
+        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_group_index=0,
+        source_case_index=0,
+    )
+
+    route, shape, reason, detail = resolve_route_for_case(case, list(routes_for_op(catalog, "SCALE")))
+
+    assert reason is None
+    assert detail is None
+    assert route is not None
+    assert route.id == "scale_f32_contiguous_4d"
+    assert shape == {"d0": 4, "d1": 3, "d2": 2, "pointwise.d1": 6}
+
+
+def test_v2_resolve_clamp_route_for_f32_case() -> None:
+    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
+    case = ImportedCase(
+        op="CLAMP",
+        dtype={"type": "f32"},
+        raw_case={},
+        normalized_params={
+            "ne": [7, 1, 5, 3],
+            "min": -0.5,
+            "max": 0.5,
+        },
+        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_group_index=0,
+        source_case_index=0,
+    )
+
+    route, shape, reason, detail = resolve_route_for_case(case, list(routes_for_op(catalog, "CLAMP")))
+
+    assert reason is None
+    assert detail is None
+    assert route is not None
+    assert route.id == "clamp_f32_contiguous_4d"
+    assert shape == {"d0": 7, "d1": 1, "d2": 5, "d3": 3, "pointwise.d1": 15}
+
+
+def test_v2_resolve_clamp_route_for_rank2_f32_case() -> None:
+    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
+    case = ImportedCase(
+        op="CLAMP",
+        dtype={"type": "f32"},
+        raw_case={},
+        normalized_params={
+            "ne": [7, 5],
+            "min": -0.5,
+            "max": 0.5,
+        },
+        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_group_index=0,
+        source_case_index=0,
+    )
+
+    route, shape, reason, detail = resolve_route_for_case(case, list(routes_for_op(catalog, "CLAMP")))
+
+    assert reason is None
+    assert detail is None
+    assert route is not None
+    assert route.id == "clamp_f32_contiguous_4d"
+    assert shape == {"d0": 7, "d1": 5, "pointwise.d1": 5}
+
+
+def test_v2_resolve_clamp_route_for_rank3_f32_case() -> None:
+    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
+    case = ImportedCase(
+        op="CLAMP",
+        dtype={"type": "f32"},
+        raw_case={},
+        normalized_params={
+            "ne": [4, 3, 2],
+            "min": -0.5,
+            "max": 0.5,
+        },
+        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_group_index=0,
+        source_case_index=0,
+    )
+
+    route, shape, reason, detail = resolve_route_for_case(case, list(routes_for_op(catalog, "CLAMP")))
+
+    assert reason is None
+    assert detail is None
+    assert route is not None
+    assert route.id == "clamp_f32_contiguous_4d"
+    assert shape == {"d0": 4, "d1": 3, "d2": 2, "pointwise.d1": 6}
+
+
+def test_v2_resolve_set_rows_route_for_f32_i64_case() -> None:
+    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
+    case = ImportedCase(
+        op="SET_ROWS",
+        dtype={"type": "f32", "type_idx": "i64"},
+        raw_case={},
+        normalized_params={
+            "ne": [256, 5, 7, 3],
+            "nr23": [1, 1],
+            "r": 1,
+            "v": 0,
+        },
+        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_group_index=0,
+        source_case_index=0,
+    )
+
+    route, shape, reason, detail = resolve_route_for_case(case, list(routes_for_op(catalog, "SET_ROWS")))
+
+    assert reason is None
+    assert detail is None
+    assert route is not None
+    assert route.id == "set_rows_f32_f32_contiguous_4d"
+    assert shape == {
+        "d0": 256,
+        "d1": 5,
+        "d2": 7,
+        "d3": 3,
+        "src0_d1": 1,
+        "src1_d0": 1,
+        "src1_d1": 1,
+        "src1_d2": 1,
+        "src1_d3": 1,
+    }
+
+
+def test_v2_set_rows_i32_indices_remain_unmapped_without_dtype_route() -> None:
+    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
+    case = ImportedCase(
+        op="SET_ROWS",
+        dtype={"type": "f32", "type_idx": "i32"},
+        raw_case={},
+        normalized_params={
+            "ne": [1, 8, 1, 3],
+            "nr23": [1, 1],
+            "r": 2,
+            "v": 0,
+        },
+        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_group_index=0,
+        source_case_index=0,
+    )
+
+    route, shape, reason, detail = resolve_route_for_case(case, list(routes_for_op(catalog, "SET_ROWS")))
+
+    assert route is None
+    assert shape is None
+    assert reason is not None
+    assert reason.value == "no_dtype_mapping"
+    assert detail == "matching v2 op mapping exists, but not for this dtype combination"
+
+
+def test_v2_resolve_set_rows_route_preserves_non_contiguous_idx_stride() -> None:
+    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
+    case = ImportedCase(
+        op="SET_ROWS",
+        dtype={"type": "f32", "type_idx": "i64"},
+        raw_case={},
+        normalized_params={
+            "ne": [31, 3, 7, 1],
+            "nr23": [2, 3],
+            "r": 2,
+            "v": 0,
+        },
+        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_group_index=0,
+        source_case_index=0,
+    )
+
+    route, shape, reason, detail = resolve_route_for_case(case, list(routes_for_op(catalog, "SET_ROWS")))
+
+    assert reason is None
+    assert detail is None
+    assert route is not None
+    assert route.id == "set_rows_f32_f32_contiguous_4d"
+    assert shape is not None
+    assert shape["src1_d2_stride"] == 2
 
 
 def test_v2_catalog_rejects_binding_with_source_and_value(tmp_path: Path) -> None:

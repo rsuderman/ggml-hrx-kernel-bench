@@ -991,6 +991,59 @@ def _get_rows_arrays(np: Any, candidate: Candidate, seed: int) -> dict[str, Any]
 
 
 def _set_rows_arrays(np: Any, candidate: Candidate, seed: int) -> dict[str, Any]:
+    common_dims = _ranked_shape(candidate)
+    if common_dims is not None:
+        src0_dims = _copy_tensor_dims(candidate, "src0", common_dims)
+        src1_dims = _copy_tensor_dims(candidate, "src1", common_dims)
+        dst_dims = _copy_tensor_dims(candidate, "dst", common_dims)
+        src0_strides = _copy_tensor_strides(candidate, "src0", src0_dims)
+        src1_strides = _copy_tensor_strides(candidate, "src1", src1_dims)
+        dst_strides = _copy_tensor_strides(candidate, "dst", dst_dims)
+        src0_buffer_len = _buffer_length(src0_dims, src0_strides)
+        src1_buffer_len = _buffer_length(src1_dims, src1_strides)
+        dst_buffer_len = _buffer_length(dst_dims, dst_strides)
+        src = f32_pattern(np, (src0_buffer_len,), seed=seed)
+        dst = f32_pattern(np, (dst_buffer_len,), seed=seed + 1, scale=0.25)
+        indices = np.zeros((src1_buffer_len * 2,), dtype=np.int32)
+        for i12 in range(src1_dims[2]):
+            for i11 in range(src1_dims[1]):
+                for i in range(src1_dims[0]):
+                    logical = (
+                        i * src1_strides[0]
+                        + i11 * src1_strides[1]
+                        + i12 * src1_strides[2]
+                    )
+                    indices[logical * 2] = np.int32((i + i11 + i12) % dst_dims[1])
+        expected = dst.copy()
+        for i3 in range(src0_dims[3]):
+            for i2 in range(src0_dims[2]):
+                i11 = i2 % src1_dims[1]
+                i12 = i3 % src1_dims[2]
+                for i in range(src0_dims[1]):
+                    idx_element = i * src1_strides[0] + i11 * src1_strides[1] + i12 * src1_strides[2]
+                    row = int(indices[idx_element * 2])
+                    for i0 in range(src0_dims[0]):
+                        src_index = i0 + i * src0_strides[1] + i2 * src0_strides[2] + i3 * src0_strides[3]
+                        dst_index = i0 + row * dst_strides[1] + i2 * dst_strides[2] + i3 * dst_strides[3]
+                        expected[dst_index] = src[src_index]
+        if "f16" in candidate.root_symbol:
+            dst_bits = dst.astype(np.float16).view(np.uint16).reshape(dst_buffer_len).view(np.int16)
+            expected_bits = expected.astype(np.float16).view(np.uint16).reshape(dst_buffer_len).view(np.int16)
+        else:
+            dst_bits = dst.reshape(dst_buffer_len)
+            expected_bits = expected.reshape(dst_buffer_len)
+        return {
+            "arrays": {
+                "src0": src.reshape(src0_buffer_len),
+                "indices": indices,
+                "dst_init": dst_bits,
+                "expected": expected_bits,
+            },
+            "metadata": {
+                "dst_type": "i16" if "f16" in candidate.root_symbol else "f32",
+                "idx_i32_count": int(indices.size),
+            },
+        }
     ncols, nrows, elems = _dims(candidate)
     dst = f32_pattern(np, (nrows, ncols), seed=seed, scale=0.25)
     src = f32_pattern(np, (nrows, ncols), seed=seed + 1)
@@ -1630,19 +1683,29 @@ def _write_softmax_workbench(candidate: Candidate, linked_source: Path, workbenc
 
 
 def _write_set_rows_workbench(candidate: Candidate, linked_source: Path, workbench_path: Path, fixture_dir: Path) -> tuple[str, dict[str, Any]]:
-    ncols, nrows, elems = _dims(candidate)
-    idx_elems = nrows * 2
+    common_dims = _ranked_shape(candidate)
+    if common_dims is not None:
+        src0_dims = _copy_tensor_dims(candidate, "src0", common_dims)
+        src1_dims = _copy_tensor_dims(candidate, "src1", common_dims)
+        dst_dims = _copy_tensor_dims(candidate, "dst", common_dims)
+        elems = _buffer_length(dst_dims, _copy_tensor_strides(candidate, "dst", dst_dims))
+        src0_elems = _buffer_length(src0_dims, _copy_tensor_strides(candidate, "src0", src0_dims))
+        idx_elems = _buffer_length(src1_dims, _copy_tensor_strides(candidate, "src1", src1_dims)) * 2
+    else:
+        _, nrows, elems = _dims(candidate)
+        src0_elems = elems
+        idx_elems = nrows * 2
     f16_dst = "f16" in candidate.root_symbol
     dst_type = "xi16" if f16_dst else "xf32"
     reader = _read_i16 if f16_dst else _read_f32
     expect = "equal" if f16_dst else "close"
     case_name, bench_name = _case_names(candidate)
     lines = [
-        _read_f32(workbench_path, fixture_dir, "src0", elems),
+        _read_f32(workbench_path, fixture_dir, "src0", src0_elems),
         _read_i32(workbench_path, fixture_dir, "indices", idx_elems).replace("%indices", "%idx"),
         reader(workbench_path, fixture_dir, "dst_init", elems).replace("%dst_init", "%dst"),
         reader(workbench_path, fixture_dir, "expected", elems),
-        f"  func.call {candidate.root_symbol}(%src0, %idx, %dst) : (tensor<{elems}xf32>, tensor<{idx_elems}xi32>, tensor<{elems}{dst_type}>)",
+        f"  func.call {candidate.root_symbol}(%src0, %idx, %dst) : (tensor<{src0_elems}xf32>, tensor<{idx_elems}xi32>, tensor<{elems}{dst_type}>)",
     ]
     if expect == "equal":
         lines.append(f"  check.expect.equal actual(%dst) expected(%expected) : tensor<{elems}{dst_type}>")

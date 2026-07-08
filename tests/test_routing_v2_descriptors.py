@@ -233,6 +233,91 @@ def test_route_values_can_chain_permutations_and_derive_strides() -> None:
     assert values["effective_src0_strides"] == (1, 12, 4, 1)
 
 
+def test_route_values_support_head_tail_and_product_composition() -> None:
+    route = V2Route(
+        id="clamp_f32_polymorphic",
+        family="clamp_f32",
+        op="CLAMP",
+        source_id="pointwise_f32",
+        kernel_path="clamp/contiguous_4d.loom",
+        root_symbol="@clamp_f32",
+        export_name="clamp_f32",
+        tensors={
+            "src0": TensorDescriptor(dtype="F32", dimensions_capture="src0_dimensions", strides_capture="src0_strides"),
+            "dst": TensorDescriptor(dtype="F32", dimensions_capture="dst_dimensions", strides_capture="dst_strides"),
+        },
+        values=(
+            ValueDefinition(name="leading_dimensions", operation_kind="head", sources=("dst_dimensions",), parameters=(1,)),
+            ValueDefinition(name="trailing_dimensions", operation_kind="tail", sources=("dst_dimensions",), parameters=(1,)),
+            ValueDefinition(
+                name="flattened_trailing_dimensions",
+                operation_kind="product",
+                sources=("trailing_dimensions",),
+            ),
+        ),
+        constraints=RouteConstraints(checks=(ConstraintCheck(name="dst_dimensions", rank_min=2, rank_max=4),)),
+        launch={"workgroup_size": [256, 1, 1]},
+        bindings=(),
+    )
+    tensors = {
+        "src0": ConcreteTensor(
+            dtype="F32",
+            dimensions=(
+                ConcreteTensorDimension(name="d0", size=7, stride=1),
+                ConcreteTensorDimension(name="d1", size=5, stride=7),
+                ConcreteTensorDimension(name="d2", size=3, stride=35),
+            ),
+        ),
+        "dst": ConcreteTensor(
+            dtype="F32",
+            dimensions=(
+                ConcreteTensorDimension(name="d0", size=7, stride=1),
+                ConcreteTensorDimension(name="d1", size=5, stride=7),
+                ConcreteTensorDimension(name="d2", size=3, stride=35),
+            ),
+        ),
+    }
+
+    values = route_values(route, tensors)
+
+    assert values is not None
+    assert values["leading_dimensions"] == (7,)
+    assert values["trailing_dimensions"] == (5, 3)
+    assert values["flattened_trailing_dimensions"] == 15
+
+
+def test_route_summary_serializes_explicit_head_and_tail_operands() -> None:
+    route = V2Route(
+        id="clamp_f32_polymorphic",
+        family="clamp_f32",
+        op="CLAMP",
+        source_id="pointwise_f32",
+        kernel_path="clamp/contiguous_4d.loom",
+        root_symbol="@clamp_f32",
+        export_name="clamp_f32",
+        tensors={
+            "src0": TensorDescriptor(dtype="F32", dimensions_capture="src0_dimensions", strides_capture="src0_strides"),
+            "dst": TensorDescriptor(dtype="F32", dimensions_capture="dst_dimensions", strides_capture="dst_strides"),
+        },
+        values=(
+            ValueDefinition(name="leading_dimensions", operation_kind="head", sources=("dst_dimensions",), parameters=(1,)),
+            ValueDefinition(name="trailing_dimensions", operation_kind="tail", sources=("dst_dimensions",), parameters=(1,)),
+        ),
+        constraints=RouteConstraints(checks=(ConstraintCheck(name="dst_dimensions", rank_min=2, rank_max=4),)),
+        launch={"workgroup_size": [256, 1, 1]},
+        bindings=(),
+    )
+
+    from ggml_hrx_kernel_bench.routing.v2.serialization import route_summary_json
+
+    summary = route_summary_json(route)
+
+    assert summary["values"] == [
+        {"name": "leading_dimensions", "head": {"source": "dst_dimensions", "take": 1}},
+        {"name": "trailing_dimensions", "tail": {"source": "dst_dimensions", "drop": 1}},
+    ]
+
+
 def test_route_accepts_tensors_requires_equal_dimension_lists() -> None:
     route = V2Route(
         id="add_f32_contiguous_1d",
@@ -464,6 +549,31 @@ def test_materialize_rank2_tensors_models_rhs_row_broadcast_route() -> None:
 
     assert tuple(dimension.size for dimension in tensors["src1"].dimensions) == (128, 1)
     assert tuple(dimension.stride for dimension in tensors["src1"].dimensions) == (1, 0)
+
+
+def test_materialize_rank_polymorphic_route_infers_rank_from_shape() -> None:
+    route = V2Route(
+        id="clamp_f32_contiguous",
+        family="clamp_f32",
+        op="CLAMP",
+        source_id="pointwise_f32",
+        kernel_path="clamp/contiguous_4d.loom",
+        root_symbol="@clamp_f32",
+        export_name="clamp_f32",
+        tensors={
+            "src0": TensorDescriptor(dtype="F32", dimensions_capture="src0_dimensions", strides_capture="src0_strides"),
+            "dst": TensorDescriptor(dtype="F32", dimensions_capture="dst_dimensions", strides_capture="dst_strides"),
+        },
+        values=(),
+        constraints=RouteConstraints(checks=(ConstraintCheck(name="dst_dimensions", rank_min=2, rank_max=4),)),
+        launch={"workgroup_size": [256, 1, 1]},
+        bindings=(),
+    )
+
+    tensors = materialize_route_tensors(route, {"d0": 8, "d1": 4, "d2": 2})
+
+    assert tuple(dimension.name for dimension in tensors["dst"].dimensions) == ("d0", "d1", "d2")
+    assert tuple(dimension.size for dimension in tensors["dst"].dimensions) == (8, 4, 2)
 
 
 def test_materialize_rank2_tensors_models_explicit_row_stride_hints() -> None:

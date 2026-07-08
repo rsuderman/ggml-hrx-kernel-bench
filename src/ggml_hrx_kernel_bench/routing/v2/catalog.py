@@ -100,6 +100,8 @@ def _parse_value_definition(path: Path, route_index: Any, raw: Any) -> ValueDefi
     contiguous_strides = raw.get("contiguous_strides")
     product = raw.get("product")
     inverse_permutation = raw.get("inverse_permutation")
+    head = raw.get("head")
+    tail = raw.get("tail")
     chain_permutations = raw.get("chain_permutations")
     permuted_contiguous_strides = raw.get("permuted_contiguous_strides")
     operations = sum(
@@ -108,6 +110,8 @@ def _parse_value_definition(path: Path, route_index: Any, raw: Any) -> ValueDefi
             contiguous_strides,
             product,
             inverse_permutation,
+            head,
+            tail,
             chain_permutations,
             permuted_contiguous_strides,
         )
@@ -130,6 +134,24 @@ def _parse_value_definition(path: Path, route_index: Any, raw: Any) -> ValueDefi
         raise RuntimeError(
             f"v2 route {route_index} value definition {name!r} inverse_permutation must reference a capture name: {path}"
         )
+    for operation_name, operation_value in (("head", head), ("tail", tail)):
+        if operation_value is None:
+            continue
+        if not isinstance(operation_value, dict):
+            raise RuntimeError(
+                f"v2 route {route_index} value definition {name!r} {operation_name} must be a JSON object: {path}"
+            )
+        source = operation_value.get("source")
+        amount_key = "take" if operation_name == "head" else "drop"
+        amount = operation_value.get(amount_key)
+        if not isinstance(source, str) or not source.strip():
+            raise RuntimeError(
+                f"v2 route {route_index} value definition {name!r} {operation_name}.source must reference a capture name: {path}"
+            )
+        if not isinstance(amount, int) or amount < 0:
+            raise RuntimeError(
+                f"v2 route {route_index} value definition {name!r} {operation_name}.{amount_key} must be a non-negative integer: {path}"
+            )
     if chain_permutations is not None:
         if (
             not isinstance(chain_permutations, list)
@@ -171,6 +193,20 @@ def _parse_value_definition(path: Path, route_index: Any, raw: Any) -> ValueDefi
             name=name,
             operation_kind="inverse_permutation",
             sources=(inverse_permutation.strip(),),
+        )
+    if head is not None:
+        return ValueDefinition(
+            name=name,
+            operation_kind="head",
+            sources=(str(head["source"]).strip(),),
+            parameters=(int(head["take"]),),
+        )
+    if tail is not None:
+        return ValueDefinition(
+            name=name,
+            operation_kind="tail",
+            sources=(str(tail["source"]).strip(),),
+            parameters=(int(tail["drop"]),),
         )
     if chain_permutations is not None:
         return ValueDefinition(
@@ -225,11 +261,31 @@ def _parse_capture_constraint(path: Path, route_index: Any, raw: Any) -> Constra
     if not name:
         raise RuntimeError(f"v2 route {route_index} constraints require name: {path}")
     length = raw.get("length")
+    rank_min = raw.get("rank_min")
+    rank_max = raw.get("rank_max")
     index = raw.get("index")
     lower = raw.get("min")
     upper = raw.get("max")
     multiple_of = raw.get("multiple_of")
     iota = raw.get("iota")
+    if rank_min is not None or rank_max is not None:
+        if length is not None or index is not None or lower is not None or upper is not None or multiple_of is not None or iota is not None:
+            raise RuntimeError(
+                f"v2 route {route_index} rank constraints cannot mix length/index/min/max/multiple_of/iota fields: {path}"
+            )
+        normalized_rank_min = None if rank_min is None else int(rank_min)
+        normalized_rank_max = None if rank_max is None else int(rank_max)
+        if normalized_rank_min is not None and normalized_rank_min <= 0:
+            raise RuntimeError(f"v2 route {route_index} rank_min must be positive: {path}")
+        if normalized_rank_max is not None and normalized_rank_max <= 0:
+            raise RuntimeError(f"v2 route {route_index} rank_max must be positive: {path}")
+        if (
+            normalized_rank_min is not None
+            and normalized_rank_max is not None
+            and normalized_rank_min > normalized_rank_max
+        ):
+            raise RuntimeError(f"v2 route {route_index} rank_min must be <= rank_max: {path}")
+        return ConstraintCheck(name=name, rank_min=normalized_rank_min, rank_max=normalized_rank_max)
     if length is not None:
         if index is not None or lower is not None or upper is not None or multiple_of is not None or iota is not None:
             raise RuntimeError(

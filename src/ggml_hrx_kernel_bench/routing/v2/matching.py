@@ -32,13 +32,10 @@ def _normalize_dtype(value: Any) -> str | None:
 
 
 def route_accepts_dtype(route: V2Route, dtype: Mapping[str, Any]) -> bool:
-    if "type" in dtype:
-        actual = _normalize_dtype(dtype["type"])
-        return all(descriptor.dtype in {None, actual} for descriptor in route.tensors.values())
     for tensor_name, keys in (
-        ("src0", ("type_src0", "type_src")),
-        ("src1", ("type_src1", "type_src")),
-        ("dst", ("type_dst",)),
+        ("src0", ("type_src0", "type_src", "type")),
+        ("src1", ("type_src1", "type_idx", "type_src")),
+        ("dst", ("type_dst", "type")),
     ):
         descriptor = route.tensors.get(tensor_name)
         expected = None if descriptor is None else descriptor.dtype
@@ -69,6 +66,22 @@ def _product(dimensions: tuple[int, ...]) -> int:
     for size in dimensions:
         total *= int(size)
     return total
+
+
+def _rank_accepts(
+    rank: int,
+    *,
+    exact: int | None = None,
+    minimum: int | None = None,
+    maximum: int | None = None,
+) -> bool:
+    if exact is not None and rank != exact:
+        return False
+    if minimum is not None and rank < minimum:
+        return False
+    if maximum is not None and rank > maximum:
+        return False
+    return True
 
 
 def _store_capture(
@@ -139,6 +152,18 @@ def _resolve_values(
                 return None
             resolved[definition.name] = inverse
             continue
+        if definition.operation_kind == "head":
+            source = lookup(definition.sources[0])
+            if not isinstance(source, tuple):
+                return None
+            resolved[definition.name] = tuple(int(value) for value in source[: definition.parameters[0]])
+            continue
+        if definition.operation_kind == "tail":
+            source = lookup(definition.sources[0])
+            if not isinstance(source, tuple):
+                return None
+            resolved[definition.name] = tuple(int(value) for value in source[definition.parameters[0] :])
+            continue
         if definition.operation_kind == "chain_permutations":
             first = lookup(definition.sources[0])
             second = lookup(definition.sources[1])
@@ -194,6 +219,10 @@ def _constraint_accepts(check: ConstraintCheck, values: Mapping[str, CapturedVal
         if not isinstance(captured, tuple):
             return False
         return len(captured) == check.length
+    if check.rank_min is not None or check.rank_max is not None:
+        if not isinstance(captured, tuple):
+            return False
+        return _rank_accepts(len(captured), minimum=check.rank_min, maximum=check.rank_max)
     if check.index is not None:
         if not isinstance(captured, tuple):
             return False
@@ -295,25 +324,35 @@ def shape_permutations_for_route(
 def _constraint_for_capture(
     route: V2Route,
     capture_name: str,
-) -> tuple[int | None, dict[int, tuple[int | None, int | None]]]:
-    rank: int | None = None
+) -> tuple[int | None, int | None, int | None, dict[int, tuple[int | None, int | None]]]:
+    exact_rank: int | None = None
+    rank_min: int | None = None
+    rank_max: int | None = None
     bounds: dict[int, tuple[int | None, int | None]] = {}
     for check in route.constraints.checks:
         if check.name != capture_name:
             continue
         if check.length is not None:
-            rank = check.length
+            exact_rank = check.length
+            continue
+        if check.rank_min is not None or check.rank_max is not None:
+            if check.rank_min is not None:
+                rank_min = check.rank_min if rank_min is None else max(rank_min, check.rank_min)
+            if check.rank_max is not None:
+                rank_max = check.rank_max if rank_max is None else min(rank_max, check.rank_max)
             continue
         if check.index is not None:
             bounds[check.index] = (check.min, check.max)
-    return rank, bounds
+    return exact_rank, rank_min, rank_max, bounds
 
 
-def _shape_capture_for_route(route: V2Route) -> tuple[str, int, dict[int, tuple[int | None, int | None]]]:
+def _shape_capture_for_route(
+    route: V2Route,
+) -> tuple[str, int | None, int | None, int | None, dict[int, tuple[int | None, int | None]]]:
     for descriptor in route.tensors.values():
-        rank, bounds = _constraint_for_capture(route, descriptor.dimensions_capture)
-        if rank is not None:
-            return descriptor.dimensions_capture, rank, bounds
+        exact_rank, rank_min, rank_max, bounds = _constraint_for_capture(route, descriptor.dimensions_capture)
+        if exact_rank is not None or rank_min is not None or rank_max is not None:
+            return descriptor.dimensions_capture, exact_rank, rank_min, rank_max, bounds
     raise RuntimeError(f"v2 route {route.id!r} does not constrain tensor rank")
 
 
@@ -336,11 +375,12 @@ def default_shape_for_route(route: V2Route) -> dict[str, int]:
     if not route.tensors:
         return {}
     try:
-        _, rank, bounds = _shape_capture_for_route(route)
+        _, exact_rank, rank_min, rank_max, bounds = _shape_capture_for_route(route)
     except RuntimeError:
         total_size_min = _scalar_constraint_min(route, "total_size")
         default_cols = total_size_min if total_size_min is not None else int(route.launch.get("workgroup_size", [1])[0] or 1)
         return {"d0": default_cols, "d1": 1}
+    rank = exact_rank if exact_rank is not None else rank_min if rank_min is not None else rank_max
     if rank <= 0:
         raise RuntimeError(f"v2 route {route.id!r} requires unsupported rank {rank!r} for default shape")
     return {
@@ -352,7 +392,7 @@ def default_shape_for_route(route: V2Route) -> dict[str, int]:
 def materialize_route_tensors(route: V2Route, sizes: Mapping[str, int]) -> dict[str, ConcreteTensor]:
     normalized_sizes = {str(name): int(value) for name, value in sizes.items()}
     try:
-        _, rank, _ = _shape_capture_for_route(route)
+        _, exact_rank, rank_min, rank_max, _ = _shape_capture_for_route(route)
     except RuntimeError:
         if "d0" not in normalized_sizes:
             raise KeyError("d0")
@@ -379,6 +419,26 @@ def materialize_route_tensors(route: V2Route, sizes: Mapping[str, int]) -> dict[
             tensor_name: ConcreteTensor(dtype=descriptor.dtype or "", dimensions=dimensions)
             for tensor_name, descriptor in route.tensors.items()
         }
+    rank = exact_rank
+    if rank is None:
+        ranked_dimension_names = sorted(
+            (
+                (int(name[1:]), name)
+                for name in normalized_sizes
+                if name.startswith("d") and name[1:].isdigit()
+            ),
+            key=lambda item: item[0],
+        )
+        if ranked_dimension_names:
+            dimension_names = tuple(name for _, name in ranked_dimension_names)
+            if tuple(index for index, _ in ranked_dimension_names) != tuple(range(len(dimension_names))):
+                raise KeyError(",".join(f"d{index}" for index in range(len(dimension_names))))
+            inferred_rank = len(dimension_names)
+            if not _rank_accepts(inferred_rank, minimum=rank_min, maximum=rank_max):
+                raise RuntimeError(f"v2 route {route.id!r} rank {inferred_rank!r} does not satisfy supported rank range")
+            rank = inferred_rank
+        else:
+            rank = rank_min if rank_min is not None else rank_max
     if rank <= 0:
         raise RuntimeError(f"v2 route {route.id!r} requires unsupported rank {rank!r} for materialization")
     dimension_names = _rank_dimension_names(rank)
