@@ -376,6 +376,45 @@ def lower_rms_norm_tensors(
     return tensors, _shape_from_extents(extents)
 
 
+def lower_swiglu_tensors(
+    case: ImportedCase,
+) -> tuple[dict[str, ConcreteTensor], dict[str, int]]:
+    ne = case.normalized_params.get("ne_a")
+    split = case.normalized_params.get("split", False)
+    swapped = case.normalized_params.get("swapped", 0)
+    view_mode = case.normalized_params.get("v", 0)
+    if not isinstance(ne, list) or len(ne) != 4:
+        raise ValueError("SWIGLU lowering requires a 4-D ne_a extent list")
+    if any(not isinstance(value, int) for value in ne):
+        raise ValueError("SWIGLU lowering requires integer ne_a extents")
+    if not isinstance(split, bool):
+        raise ValueError("SWIGLU lowering requires boolean split")
+    if not isinstance(swapped, int):
+        raise ValueError("SWIGLU lowering requires integer swapped")
+    if not isinstance(view_mode, int):
+        raise ValueError("SWIGLU lowering requires integer v")
+    if view_mode != 0:
+        raise ValueError("SWIGLU v2 routing requires contiguous input (v=0)")
+    if split:
+        raise ValueError("SWIGLU v2 routing currently requires packed input (split=false)")
+    if swapped != 0:
+        raise ValueError("SWIGLU v2 routing currently requires swapped=0")
+    extents = [int(value) for value in ne]
+    src0_extents = [int(extents[0]) * 2, *extents[1:]]
+    dtype = str(case.dtype.get("type", "")).upper()
+    tensors = {
+        "src0": ConcreteTensor(
+            dtype=dtype,
+            dimensions=_dimensions_from_extents(src0_extents),
+        ),
+        "dst": ConcreteTensor(
+            dtype=dtype,
+            dimensions=_dimensions_from_extents(extents),
+        ),
+    }
+    return tensors, _shape_from_extents(extents)
+
+
 def lower_sum_rows_tensors(
     case: ImportedCase,
 ) -> tuple[dict[str, ConcreteTensor], dict[str, int]]:
@@ -593,6 +632,8 @@ def lower_tensors_for_route(
         return lower_contiguous_cont_tensors(case)
     if route.op == "RMS_NORM":
         return lower_rms_norm_tensors(case)
+    if route.op == "SWIGLU":
+        return lower_swiglu_tensors(case)
     if route.op == "SUM_ROWS":
         return lower_sum_rows_tensors(case)
     if route.op == "SET_ROWS":

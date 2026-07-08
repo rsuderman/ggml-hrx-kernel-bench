@@ -290,6 +290,34 @@ def test_rms_norm_oracle_and_workbench_use_ranked_shape(tmp_path: Path) -> None:
     assert "check.expect.close" in workbench
 
 
+def test_swiglu_oracle_and_workbench_use_packed_src_shape(tmp_path: Path) -> None:
+    candidate = _candidate(
+        candidate_id="swiglu_f32_ranked_4d",
+        shape={"d0": 64, "d1": 5, "d2": 4, "d3": 3, "src0_d0": 128},
+        family="swiglu_f32",
+        source_id="swiglu_f32",
+        root_symbol="@hrx2_swiglu_f32",
+        export_name="hrx2_swiglu_f32",
+        op="SWIGLU",
+        source_path="kernels/v2/swiglu/contiguous_4d.loom",
+    )
+
+    result = generate_oracle(candidate, tmp_path / "fixtures", force=True)
+
+    assert result.status == "fixtures_ready"
+    assert np.load(tmp_path / "fixtures" / "src0.npy").shape == (7680,)
+    assert np.load(tmp_path / "fixtures" / "expected.npy").shape == (3840,)
+
+    linked_source = tmp_path / "linked.loom"
+    linked_source.write_text('kernel.def export("hrx2_swiglu_f32") @hrx2_swiglu_f32() {}\n', encoding="utf-8")
+    _, metadata = write_workbench(candidate, linked_source, tmp_path / "workbench.loom", tmp_path / "fixtures")
+
+    assert metadata["status"] == "ok"
+    workbench = (tmp_path / "workbench.loom").read_text(encoding="utf-8")
+    assert "tensor<7680xf32>, tensor<3840xf32>" in workbench
+    assert "check.expect.close" in workbench
+
+
 @pytest.mark.parametrize(
     ("family", "op", "root_symbol", "export_name", "source_path"),
     (

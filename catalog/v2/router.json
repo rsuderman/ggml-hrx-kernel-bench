@@ -90,6 +90,9 @@
       "sub/sub_f32_contiguous_1d.json",
       "sub/sub_f32_generic_2d.json",
       "sub/sub_f32_generic_4d.json"
+    ],
+    "SWIGLU": [
+      "swiglu/swiglu_f32_packed_contiguous_4d.json"
     ]
   }
 }

@@ -19,6 +19,7 @@ VALIDATED_IMPORT_OPS = frozenset(
         "SQR",
         "SQRT",
         "SUB",
+        "SWIGLU",
         "SUM_ROWS",
     }
 )

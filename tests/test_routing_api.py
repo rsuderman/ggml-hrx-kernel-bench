@@ -1423,3 +1423,84 @@ def test_v2_rms_norm_nonzero_eps_case_stays_unmapped() -> None:
     assert reason is not None
     assert reason.value == "shape_lowering_not_implemented"
     assert detail == "RMS_NORM v2 routing currently requires eps=0.0"
+
+
+def test_v2_swiglu_route_resolves_for_packed_contiguous_case() -> None:
+    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
+    case = ImportedCase(
+        op="SWIGLU",
+        dtype={"type": "f32"},
+        raw_case={},
+        normalized_params={
+            "ne_a": [128, 2, 2, 2],
+            "swapped": 0,
+            "v": 0,
+        },
+        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_group_index=0,
+        source_case_index=0,
+    )
+
+    swiglu_routes = list(routes_for_op(catalog, "SWIGLU"))
+
+    resolved_route, shape, reason, detail = resolve_route_for_case(case, swiglu_routes)
+
+    assert reason is None
+    assert detail is None
+    assert resolved_route is not None
+    assert resolved_route.id == "swiglu_f32_packed_contiguous_4d"
+    assert shape == {"d0": 128, "d1": 2, "d2": 2, "d3": 2, "src0_d0": 256}
+
+
+def test_v2_swiglu_split_case_stays_unmapped_without_split_route() -> None:
+    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
+    case = ImportedCase(
+        op="SWIGLU",
+        dtype={"type": "f32"},
+        raw_case={},
+        normalized_params={
+            "ne_a": [128, 2, 2, 2],
+            "split": True,
+            "v": 0,
+        },
+        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_group_index=0,
+        source_case_index=0,
+    )
+
+    swiglu_routes = list(routes_for_op(catalog, "SWIGLU"))
+
+    resolved_route, shape, reason, detail = resolve_route_for_case(case, swiglu_routes)
+
+    assert resolved_route is None
+    assert shape is None
+    assert reason is not None
+    assert reason.value == "shape_lowering_not_implemented"
+    assert detail == "SWIGLU v2 routing currently requires packed input (split=false)"
+
+
+def test_v2_swiglu_swapped_case_stays_unmapped() -> None:
+    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
+    case = ImportedCase(
+        op="SWIGLU",
+        dtype={"type": "f32"},
+        raw_case={},
+        normalized_params={
+            "ne_a": [5, 7, 11, 13],
+            "swapped": 1,
+            "v": 0,
+        },
+        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_group_index=0,
+        source_case_index=0,
+    )
+
+    swiglu_routes = list(routes_for_op(catalog, "SWIGLU"))
+
+    resolved_route, shape, reason, detail = resolve_route_for_case(case, swiglu_routes)
+
+    assert resolved_route is None
+    assert shape is None
+    assert reason is not None
+    assert reason.value == "shape_lowering_not_implemented"
+    assert detail == "SWIGLU v2 routing currently requires swapped=0"
