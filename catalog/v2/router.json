@@ -39,6 +39,9 @@
       "exp/exp_f16.json",
       "exp/exp_f32.json"
     ],
+    "GET_ROWS": [
+      "get_rows/get_rows_f32_embedding_rows_2d.json"
+    ],
     "MUL": [
       "mul/mul_f16_contiguous_2d.json",
       "mul/mul_f16_rhs_row_broadcast_2d.json",

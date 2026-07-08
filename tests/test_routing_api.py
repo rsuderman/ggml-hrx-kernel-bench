@@ -1504,3 +1504,100 @@ def test_v2_swiglu_swapped_case_stays_unmapped() -> None:
     assert reason is not None
     assert reason.value == "shape_lowering_not_implemented"
     assert detail == "SWIGLU v2 routing currently requires swapped=0"
+
+
+def test_v2_get_rows_route_resolves_for_base_f32_case() -> None:
+    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
+    case = ImportedCase(
+        op="GET_ROWS",
+        dtype={"type": "f32"},
+        raw_case={},
+        normalized_params={
+            "be1": 1,
+            "be2": 1,
+            "m": 5,
+            "n": 256,
+            "r": 4,
+            "v": 0,
+        },
+        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_group_index=0,
+        source_case_index=0,
+    )
+
+    get_rows_routes = list(routes_for_op(catalog, "GET_ROWS"))
+
+    resolved_route, shape, reason, detail = resolve_route_for_case(case, get_rows_routes)
+
+    assert reason is None
+    assert detail is None
+    assert resolved_route is not None
+    assert resolved_route.id == "get_rows_f32_embedding_rows_2d"
+    assert shape == {
+        "d0": 256,
+        "d1": 4,
+        "src0_d1": 5,
+        "src1_d0": 1,
+        "get_rows.src0_nrows": 5,
+        "get_rows.idx_row_stride": 1,
+    }
+
+
+def test_v2_get_rows_view_case_stays_unmapped() -> None:
+    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
+    case = ImportedCase(
+        op="GET_ROWS",
+        dtype={"type": "f32"},
+        raw_case={},
+        normalized_params={
+            "be1": 1,
+            "be2": 1,
+            "m": 5,
+            "n": 256,
+            "r": 4,
+            "v": 1,
+        },
+        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_group_index=0,
+        source_case_index=0,
+    )
+
+    get_rows_routes = list(routes_for_op(catalog, "GET_ROWS"))
+
+    resolved_route, shape, reason, detail = resolve_route_for_case(case, get_rows_routes)
+
+    assert resolved_route is None
+    assert shape is None
+    assert reason is not None
+    assert reason.value == "shape_lowering_not_implemented"
+    assert detail == "GET_ROWS v2 routing requires contiguous input (v=0)"
+
+
+def test_v2_get_rows_non_unit_be1_case_stays_unmapped() -> None:
+    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
+    case = ImportedCase(
+        op="GET_ROWS",
+        dtype={"type": "f32"},
+        raw_case={},
+        normalized_params={
+            "be1": 7,
+            "be2": 1,
+            "m": 5,
+            "n": 256,
+            "r": 4,
+            "v": 0,
+        },
+        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_group_index=0,
+        source_case_index=0,
+    )
+
+    get_rows_routes = list(routes_for_op(catalog, "GET_ROWS"))
+
+    resolved_route, shape, reason, detail = resolve_route_for_case(case, get_rows_routes)
+
+    assert resolved_route is None
+    assert shape is None
+    assert reason is not None
+    assert reason.value == "shape_lowering_not_implemented"
+    assert detail == "GET_ROWS v2 routing currently requires be1=1"

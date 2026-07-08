@@ -415,6 +415,54 @@ def lower_swiglu_tensors(
     return tensors, _shape_from_extents(extents)
 
 
+def lower_get_rows_tensors(
+    case: ImportedCase,
+) -> tuple[dict[str, ConcreteTensor], dict[str, int]]:
+    embedding_extent_1 = case.normalized_params.get("be1")
+    embedding_extent_2 = case.normalized_params.get("be2")
+    src0_nrows = case.normalized_params.get("m")
+    ncols = case.normalized_params.get("n")
+    nrows = case.normalized_params.get("r")
+    view_mode = case.normalized_params.get("v", 0)
+    for name, value in (
+        ("be1", embedding_extent_1),
+        ("be2", embedding_extent_2),
+        ("m", src0_nrows),
+        ("n", ncols),
+        ("r", nrows),
+        ("v", view_mode),
+    ):
+        if not isinstance(value, int):
+            raise ValueError(f"GET_ROWS lowering requires integer {name}")
+    if view_mode != 0:
+        raise ValueError("GET_ROWS v2 routing requires contiguous input (v=0)")
+    if embedding_extent_1 != 1:
+        raise ValueError("GET_ROWS v2 routing currently requires be1=1")
+    if embedding_extent_2 != 1:
+        raise ValueError("GET_ROWS v2 routing currently requires be2=1")
+    dst_extents = [int(ncols), int(nrows)]
+    src0_row_count = max(int(src0_nrows), int(nrows), 1)
+    tensors = {
+        "src0": ConcreteTensor(
+            dtype=str(case.dtype.get("type", "")).upper(),
+            dimensions=_dimensions_from_extents([int(ncols), src0_row_count]),
+        ),
+        "src1": ConcreteTensor(
+            dtype="I32",
+            dimensions=_dimensions_from_extents([1, int(nrows)]),
+        ),
+        "dst": ConcreteTensor(
+            dtype=str(case.dtype.get("type", "")).upper(),
+            dimensions=_dimensions_from_extents(dst_extents),
+        ),
+    }
+    return tensors, {
+        **_shape_from_extents(dst_extents),
+        "get_rows.src0_nrows": src0_row_count,
+        "get_rows.idx_row_stride": 1,
+    }
+
+
 def lower_sum_rows_tensors(
     case: ImportedCase,
 ) -> tuple[dict[str, ConcreteTensor], dict[str, int]]:
@@ -630,6 +678,8 @@ def lower_tensors_for_route(
         return lower_contiguous_scale_or_clamp_tensors(case)
     if route.op == "CONT":
         return lower_contiguous_cont_tensors(case)
+    if route.op == "GET_ROWS":
+        return lower_get_rows_tensors(case)
     if route.op == "RMS_NORM":
         return lower_rms_norm_tensors(case)
     if route.op == "SWIGLU":
