@@ -2167,11 +2167,7 @@ def _write_quantized_mul_mat_static_workbench(
     fixture_dir: Path,
 ) -> tuple[str, dict[str, Any]]:
     k, rows, cols = _matmul_dims(candidate)
-    if candidate.family == "mul_mat_q5_k_f32":
-        src0_elems = q5_k_bytes(k, rows)
-        atol = 0.12
-        rtol = 0.04
-    elif candidate.family == "mul_mat_q6_k_f32":
+    if candidate.family == "mul_mat_q6_k_f32":
         src0_elems = q6_k_bytes(k, rows)
         atol = 0.12
         rtol = 0.04

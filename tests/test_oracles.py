@@ -451,6 +451,39 @@ def test_mul_mat_q6_k_oracle_and_workbench_use_packed_kernel_abi_buffers(tmp_pat
     assert "check.expect.close" in workbench
 
 
+def test_mul_mat_q8_0_oracle_and_workbench_use_packed_kernel_abi_buffers(tmp_path: Path) -> None:
+    candidate = _candidate(
+        candidate_id="mul_mat_q8_0_f32_contiguous_2d",
+        shape={"k": 256, "rows": 16, "cols": 8},
+        family="mul_mat_q8_0_f32",
+        source_id="mul_mat_q8_0_f32",
+        root_symbol="@hrx2_mul_mat_q8_0_f32_static",
+        export_name="hrx2_mul_mat_q8_0_f32_static",
+        op="MUL_MAT",
+        source_path="kernels/v2/mul_mat/q8_0_f32_static.loom",
+    )
+
+    result = generate_oracle(candidate, tmp_path / "fixtures", force=True)
+
+    assert result.status == "fixtures_ready"
+    assert np.load(tmp_path / "fixtures" / "src0.npy").shape == (4352,)
+    assert np.load(tmp_path / "fixtures" / "src1.npy").shape == (2048,)
+    assert np.load(tmp_path / "fixtures" / "dst_init.npy").shape == (128,)
+    assert np.load(tmp_path / "fixtures" / "expected.npy").shape == (128,)
+
+    linked_source = tmp_path / "linked.loom"
+    linked_source.write_text(
+        'kernel.def export("hrx2_mul_mat_q8_0_f32_static") @hrx2_mul_mat_q8_0_f32_static() {}\n',
+        encoding="utf-8",
+    )
+    _, metadata = write_workbench(candidate, linked_source, tmp_path / "workbench.loom", tmp_path / "fixtures")
+
+    assert metadata["status"] == "ok"
+    workbench = (tmp_path / "workbench.loom").read_text(encoding="utf-8")
+    assert "tensor<4352xi8>, tensor<2048xf32>, tensor<128xf32>" in workbench
+    assert "check.expect.close" in workbench
+
+
 def test_rope_oracle_and_workbench_use_shape_rope_values(tmp_path: Path) -> None:
     candidate = Candidate(
         id="rope_f32_normal_n128_h32_t2_contiguous_4d",
