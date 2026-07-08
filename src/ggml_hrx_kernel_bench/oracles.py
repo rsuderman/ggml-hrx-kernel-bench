@@ -576,6 +576,22 @@ def _matmul_dims(candidate: Candidate) -> tuple[int, int, int]:
     return k, rows, cols
 
 
+def _captured_tensor_dims(candidate: Candidate, tensor_name: str) -> tuple[int, int, int, int] | None:
+    keys = tuple(f"{tensor_name}_d{index}" for index in range(4))
+    if all(key in candidate.shape for key in keys):
+        return tuple(int(candidate.shape[key]) for key in keys)
+    anchor_keys = tuple(f"d{index}" for index in range(4))
+    if all(key in candidate.shape for key in anchor_keys):
+        anchor_dims = tuple(int(candidate.shape[key]) for key in anchor_keys)
+        if tensor_name == "dst":
+            return anchor_dims
+        dims: list[int] = []
+        for index, anchor_dim in enumerate(anchor_dims):
+            dims.append(int(candidate.shape.get(f"{tensor_name}_d{index}", anchor_dim)))
+        return tuple(dims)
+    return None
+
+
 def _write_arrays(np: Any, fixture_dir: Path, arrays: Mapping[str, Any]) -> dict[str, str]:
     paths: dict[str, str] = {}
     for name, array in arrays.items():
@@ -649,6 +665,10 @@ def _read_f32(workbench_path: Path, fixture_dir: Path, name: str, elems: int) ->
 
 def _read_i32(workbench_path: Path, fixture_dir: Path, name: str, elems: int) -> str:
     return f"""  %{name} = check.file.read.npy path(\"{_rel_fixture(workbench_path, fixture_dir, name + ".npy")}\") : tensor<{elems}xi32>"""
+
+
+def _read_i64(workbench_path: Path, fixture_dir: Path, name: str, elems: int) -> str:
+    return f"""  %{name} = check.file.read.npy path(\"{_rel_fixture(workbench_path, fixture_dir, name + ".npy")}\") : tensor<{elems}xi64>"""
 
 
 def _read_i16(workbench_path: Path, fixture_dir: Path, name: str, elems: int) -> str:
@@ -1235,6 +1255,90 @@ def _rms_norm_mul_quantize_arrays(np: Any, candidate: Candidate, seed: int) -> d
 
 
 def _rope_arrays(np: Any, candidate: Candidate, seed: int) -> dict[str, Any]:
+    if candidate.family == "rope_set_rows_f32":
+        src0_dims = _captured_tensor_dims(candidate, "src0")
+        dst_dims = _captured_tensor_dims(candidate, "dst")
+        idx_dims = _captured_tensor_dims(candidate, "src1")
+        if src0_dims is None or dst_dims is None or idx_dims is None:
+            raise ValueError("rope_set_rows_f32 oracle requires encoded src0, src1, and dst tensor dimensions")
+        ncols = int(candidate.values.get("shape.rope.ncols") or src0_dims[0])
+        n_dims = int(candidate.values.get("shape.rope.n_dims") or ncols)
+        nheads = int(candidate.values.get("shape.rope.nheads") or src0_dims[1])
+        ntokens = int(candidate.values.get("shape.rope.ntokens") or src0_dims[2])
+        src_elems = src0_dims[0] * src0_dims[1] * src0_dims[2] * src0_dims[3]
+        dst_elems = dst_dims[0] * dst_dims[1] * dst_dims[2] * dst_dims[3]
+        idx_elems = idx_dims[0] * idx_dims[1] * idx_dims[2] * idx_dims[3]
+        pos_token_stride = int(candidate.values.get("shape.rope.pos_token_stride") or 1)
+        pos_elems = max(pos_token_stride * ntokens, 1)
+        src = f32_pattern(np, (src_elems,), seed=seed)
+        positions = np.zeros((pos_elems,), dtype=np.int32)
+        for token in range(ntokens):
+            positions[token * pos_token_stride] = token + 1
+        half_dims = max(n_dims // 2, 1)
+        freq = (np.arange(half_dims, dtype=np.float32) * np.float32(0.125) + np.float32(1.0)).astype(np.float32)
+        indices = (np.arange(idx_elems, dtype=np.int64) + np.int64(1)) % np.int64(dst_dims[1])
+        theta_scale = np.float32(0.75)
+        freq_scale = np.float32(1.1)
+        attn_factor = np.float32(0.9)
+        src_view = src.reshape(src0_dims[3], src0_dims[2], src0_dims[1], src0_dims[0])
+        dst_init = f16_pattern(np, (dst_elems,), seed=seed + 2, scale=0.25).reshape(dst_dims[3], dst_dims[2], dst_dims[1], dst_dims[0])
+        expected = dst_init.copy()
+        half_cols = ncols // 2
+        pairs = np.arange(half_cols, dtype=np.int32)
+        idx0 = pairs * 2
+        idx1 = idx0 + 1
+        active = pairs < (n_dims // 2)
+        if np.any(active):
+            active_pairs = pairs[active]
+            pos = positions[np.arange(ntokens, dtype=np.int64) * pos_token_stride].astype(np.float32)
+            theta = (
+                pos[:, None]
+                * np.power(theta_scale, active_pairs.astype(np.float32)).astype(np.float32)[None, :]
+            ).astype(np.float32)
+            theta = (theta / freq[active_pairs][None, :]).astype(np.float32)
+            theta = (theta * freq_scale).astype(np.float32)
+            c = (np.cos(theta).astype(np.float32) * attn_factor).astype(np.float32)
+            s = (np.sin(theta).astype(np.float32) * attn_factor).astype(np.float32)
+        for token in range(ntokens):
+            dst_row = int(indices[token])
+            token_src = src_view[0, token]
+            token_dst = expected[0, 0, dst_row].reshape(nheads, ncols)
+            x0 = token_src[:, idx0].copy()
+            x1 = token_src[:, idx1].copy()
+            out0 = x0.copy()
+            out1 = x1.copy()
+            if np.any(active):
+                out0[:, active] = (
+                    x0[:, active] * c[token][None, :] - x1[:, active] * s[token][None, :]
+                ).astype(np.float32)
+                out1[:, active] = (
+                    x0[:, active] * s[token][None, :] + x1[:, active] * c[token][None, :]
+                ).astype(np.float32)
+            token_dst[:, idx0] = out0.astype(np.float16)
+            token_dst[:, idx1] = out1.astype(np.float16)
+        return {
+            "arrays": {
+                "src0": src.astype(np.float32),
+                "positions": positions,
+                "freq": freq.astype(np.float32),
+                "indices": indices.astype(np.int64),
+                "dst_init": _f16_bits(np, dst_init),
+                "expected": _f16_bits(np, expected),
+                "dst_f32_init": np.zeros((dst_elems,), dtype=np.float32),
+                "expected_f32": expected.astype(np.float32).reshape(-1),
+            },
+            "metadata": {
+                "theta_scale": float(theta_scale),
+                "freq_scale": float(freq_scale),
+                "attn_factor": float(attn_factor),
+                "src_elems": src_elems,
+                "dst_elems": dst_elems,
+                "idx_elems": idx_elems,
+                "pos_elems": pos_elems,
+                "freq_elems": int(freq.size),
+            },
+        }
+
     ncols = int(candidate.values.get("shape.rope.ncols") or candidate.shape.get("ncols", 1))
     n_dims = int(candidate.values.get("shape.rope.n_dims") or candidate.shape.get("n_dims", ncols))
     nheads = int(candidate.values.get("shape.rope.nheads") or candidate.shape.get("rows", 1))
@@ -1841,7 +1945,74 @@ def _write_mul_mat_q8_0_workbench(candidate: Candidate, linked_source: Path, wor
 
 def _write_rope_workbench(candidate: Candidate, linked_source: Path, workbench_path: Path, fixture_dir: Path) -> tuple[str | None, dict[str, Any]]:
     if candidate.family == "rope_set_rows_f32":
-        return None, {"status": "unsupported_workbench", "message": "ROPE set_rows f16 ABI writer is not implemented yet"}
+        src0_dims = _captured_tensor_dims(candidate, "src0")
+        dst_dims = _captured_tensor_dims(candidate, "dst")
+        idx_dims = _captured_tensor_dims(candidate, "src1")
+        if src0_dims is None or dst_dims is None or idx_dims is None:
+            return None, {"status": "unsupported_workbench", "message": "ROPE set_rows requires encoded src0, src1, and dst tensor dimensions"}
+        src0_elems = src0_dims[0] * src0_dims[1] * src0_dims[2] * src0_dims[3]
+        dst_elems = dst_dims[0] * dst_dims[1] * dst_dims[2] * dst_dims[3]
+        idx_elems = idx_dims[0] * idx_dims[1] * idx_dims[2] * idx_dims[3]
+        ntokens = int(candidate.values.get("shape.rope.ntokens") or src0_dims[2])
+        pos_elems = int(candidate.values.get("shape.rope.pos_token_stride") or 1) * ntokens
+        freq_elems = max(int(candidate.values.get("shape.rope.n_dims") or src0_dims[0]) // 2, 1)
+        case_name, bench_name = _case_names(candidate)
+        unpack_symbol = f"@hrx2_test_unpack_f16_to_f32_{candidate.id}"
+        suffix = f"""
+kernel.def export("hrx2_test_unpack_f16_to_f32_{candidate.id}") {unpack_symbol}() {{
+  %unit = index.constant 1 : index
+  %minus_one = index.constant -1 : index
+  %count = index.constant {dst_elems} : index
+  %workgroup_size = index.constant 256 : index
+  %rounding = index.add %workgroup_size, %minus_one : index
+  %rounded = index.add %count, %rounding : index
+  %workgroups = index.div %rounded, %workgroup_size : index
+  kernel.launch.config workgroups(%workgroups, %unit, %unit) workgroup_size(%workgroup_size, %unit, %unit) : index
+}} launch(%src: buffer, %dst: buffer) {{
+  %base = index.constant 0 : offset
+  %count = index.constant {dst_elems} : index
+  %workgroup_size = index.constant 256 : index
+  %workgroup = kernel.workgroup.id<x> : index
+  %lane = kernel.workitem.id<x> : index
+  %linear_mul = index.mul %workgroup, %workgroup_size : index
+  %linear = index.add %linear_mul, %lane : index
+  %in_bounds = index.cmp ult, %linear, %count : index
+
+  %src_global = buffer.assume.memory_space<global> %src : buffer
+  %dst_global = buffer.assume.memory_space<global> %dst : buffer
+  %src_noalias, %dst_noalias = buffer.assume.noalias %src_global, %dst_global : buffer, buffer
+  %src_view = buffer.view %src_noalias[%base] : buffer -> view<{dst_elems}xf16, #dense>
+  %dst_view = buffer.view %dst_noalias[%base] : buffer -> view<{dst_elems}xf32, #dense>
+
+  scf.if %in_bounds {{
+    %half = view.load %src_view[%linear] : view<{dst_elems}xf16, #dense> -> f16
+    %value = scalar.extf %half : f16 to f32
+    view.store %value, %dst_view[%linear] : f32, view<{dst_elems}xf32, #dense>
+  }}
+  kernel.return
+}}
+
+check.case public {case_name} {{
+  %theta_scale = check.literal value(0.75) : f32
+  %freq_scale = check.literal value(1.1) : f32
+  %attn_factor = check.literal value(0.9) : f32
+{_read_f32(workbench_path, fixture_dir, "src0", src0_elems)}
+{_read_i32(workbench_path, fixture_dir, "positions", pos_elems).replace("%positions", "%pos")}
+{_read_f32(workbench_path, fixture_dir, "freq", freq_elems)}
+{_read_i64(workbench_path, fixture_dir, "indices", idx_elems).replace("%indices", "%idx")}
+{_read_i16(workbench_path, fixture_dir, "dst_init", dst_elems).replace("%dst_init", "%dst_bits")}
+{_read_f32(workbench_path, fixture_dir, "dst_f32_init", dst_elems).replace("%dst_f32_init", "%dst")}
+{_read_f32(workbench_path, fixture_dir, "expected_f32", dst_elems).replace("%expected_f32", "%expected")}
+  func.call {candidate.root_symbol}(%theta_scale, %freq_scale, %attn_factor, %src0, %pos, %freq, %idx, %dst_bits) : (f32, f32, f32, tensor<{src0_elems}xf32>, tensor<{pos_elems}xi32>, tensor<{freq_elems}xf32>, tensor<{idx_elems}xi64>, tensor<{dst_elems}xi16>)
+  func.call {unpack_symbol}(%dst_bits, %dst) : (tensor<{dst_elems}xi16>, tensor<{dst_elems}xf32>)
+  check.expect.close actual(%dst) expected(%expected) atol(0.0005) rtol(0.0005) nan(same) : tensor<{dst_elems}xf32>
+  check.return
+}}
+
+check.benchmark<{case_name}> {bench_name}
+"""
+        _source_plus_case(linked_source, workbench_path, suffix)
+        return bench_name, {"status": "ok", "workbench_path": str(workbench_path)}
     ncols = int(candidate.values.get("shape.rope.ncols") or candidate.shape.get("ncols", 1))
     n_dims = int(candidate.values.get("shape.rope.n_dims") or candidate.shape.get("n_dims", ncols))
     nheads = int(candidate.values.get("shape.rope.nheads") or candidate.shape.get("rows", 1))
@@ -2009,6 +2180,11 @@ ORACLE_SPECS: tuple[OracleSpec, ...] = (
     OracleSpec(
         family_ids=("rope_f32", "rope_neox_f32", "rope_scale_f32"),
         generate=_logical_generate(LogicalOracleSpec(("rope_f32", "rope_neox_f32", "rope_scale_f32"), "rope_f32_numpy", {"atol": 5e-4, "rtol": 5e-4}, _rope_arrays, exact_kernel_abi=True)),
+        write_workbench=_write_rope_workbench,
+    ),
+    OracleSpec(
+        family_ids=("rope_set_rows_f32",),
+        generate=_logical_generate(LogicalOracleSpec(("rope_set_rows_f32",), "rope_set_rows_f32_numpy", {"atol": 0.0, "rtol": 0.0}, _rope_arrays, exact_kernel_abi=True)),
         write_workbench=_write_rope_workbench,
     ),
     OracleSpec(

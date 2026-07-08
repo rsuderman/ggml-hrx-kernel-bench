@@ -1,0 +1,309 @@
+{
+  "id": "rope_set_rows_f16_normal_n128_h32_t1_contiguous_4d",
+  "family": "rope_set_rows_f32",
+  "kernel": {
+    "source_id": "rope_set_rows_f32",
+    "path": "rope_set_rows/f32.loom",
+    "root_symbol": "@hrx2_rope_normal_f32_freq_set_rows_f16",
+    "export_name": "hrx2_rope_normal_f32_freq_set_rows_f16"
+  },
+  "tensors": {
+    "src0": {
+      "dimensions": "src0_dimensions",
+      "strides": "src0_strides"
+    },
+    "pos": {
+      "dtype": "I32",
+      "dimensions": "pos_dimensions",
+      "strides": "pos_strides"
+    },
+    "freq": {
+      "dtype": "F32",
+      "dimensions": "freq_dimensions",
+      "strides": "freq_strides"
+    },
+    "src1": {
+      "dtype": "I64",
+      "dimensions": "src1_dimensions",
+      "strides": "src1_strides"
+    },
+    "dst": {
+      "dtype": "F16",
+      "dimensions": "dst_dimensions",
+      "strides": "dst_strides"
+    }
+  },
+  "values": [
+    {
+      "name": "src0_contiguous_strides",
+      "contiguous_strides": "src0_dimensions"
+    },
+    {
+      "name": "pos_contiguous_strides",
+      "contiguous_strides": "pos_dimensions"
+    },
+    {
+      "name": "freq_contiguous_strides",
+      "contiguous_strides": "freq_dimensions"
+    },
+    {
+      "name": "src1_contiguous_strides",
+      "contiguous_strides": "src1_dimensions"
+    },
+    {
+      "name": "dst_contiguous_strides",
+      "contiguous_strides": "dst_dimensions"
+    }
+  ],
+  "constraints": [
+    {
+      "name": "src0_dimensions",
+      "length": 4
+    },
+    {
+      "name": "src0_dimensions",
+      "index": 0,
+      "min": 128,
+      "max": 128
+    },
+    {
+      "name": "src0_dimensions",
+      "index": 1,
+      "min": 32,
+      "max": 32
+    },
+    {
+      "name": "src0_dimensions",
+      "index": 2,
+      "min": 1,
+      "max": 1
+    },
+    {
+      "name": "src0_dimensions",
+      "index": 3,
+      "min": 1,
+      "max": 1
+    },
+    {
+      "name": "pos_dimensions",
+      "length": 4
+    },
+    {
+      "name": "pos_dimensions",
+      "index": 0,
+      "min": 1,
+      "max": 1
+    },
+    {
+      "name": "pos_dimensions",
+      "index": 1,
+      "min": 1,
+      "max": 1
+    },
+    {
+      "name": "pos_dimensions",
+      "index": 2,
+      "min": 1,
+      "max": 1
+    },
+    {
+      "name": "pos_dimensions",
+      "index": 3,
+      "min": 1,
+      "max": 1
+    },
+    {
+      "name": "freq_dimensions",
+      "length": 4
+    },
+    {
+      "name": "freq_dimensions",
+      "index": 0,
+      "min": 64,
+      "max": 64
+    },
+    {
+      "name": "freq_dimensions",
+      "index": 1,
+      "min": 1,
+      "max": 1
+    },
+    {
+      "name": "freq_dimensions",
+      "index": 2,
+      "min": 1,
+      "max": 1
+    },
+    {
+      "name": "freq_dimensions",
+      "index": 3,
+      "min": 1,
+      "max": 1
+    },
+    {
+      "name": "src1_dimensions",
+      "length": 4
+    },
+    {
+      "name": "src1_dimensions",
+      "index": 0,
+      "min": 1,
+      "max": 1
+    },
+    {
+      "name": "src1_dimensions",
+      "index": 1,
+      "min": 1,
+      "max": 1
+    },
+    {
+      "name": "src1_dimensions",
+      "index": 2,
+      "min": 1,
+      "max": 1
+    },
+    {
+      "name": "src1_dimensions",
+      "index": 3,
+      "min": 1,
+      "max": 1
+    },
+    {
+      "name": "dst_dimensions",
+      "length": 4
+    },
+    {
+      "name": "dst_dimensions",
+      "index": 0,
+      "min": 4096,
+      "max": 4096
+    },
+    {
+      "name": "dst_dimensions",
+      "index": 1,
+      "min": 4,
+      "max": 4
+    },
+    {
+      "name": "dst_dimensions",
+      "index": 2,
+      "min": 1,
+      "max": 1
+    },
+    {
+      "name": "dst_dimensions",
+      "index": 3,
+      "min": 1,
+      "max": 1
+    },
+    {
+      "equals": [
+        "src0_contiguous_strides",
+        "src0_strides"
+      ]
+    },
+    {
+      "equals": [
+        "pos_contiguous_strides",
+        "pos_strides"
+      ]
+    },
+    {
+      "equals": [
+        "freq_contiguous_strides",
+        "freq_strides"
+      ]
+    },
+    {
+      "equals": [
+        "src1_contiguous_strides",
+        "src1_strides"
+      ]
+    },
+    {
+      "equals": [
+        "dst_contiguous_strides",
+        "dst_strides"
+      ]
+    }
+  ],
+  "launch": {
+    "workgroup_size": [
+      256,
+      1,
+      1
+    ]
+  },
+  "config": {
+    "bindings": [
+      {
+        "key": "@hrx2.shape.rope.ncols",
+        "source": "shape.rope.ncols"
+      },
+      {
+        "key": "@hrx2.shape.rope.n_dims",
+        "source": "shape.rope.n_dims"
+      },
+      {
+        "key": "@hrx2.shape.rope.nheads",
+        "source": "shape.rope.nheads"
+      },
+      {
+        "key": "@hrx2.shape.rope.ntokens",
+        "source": "shape.rope.ntokens"
+      },
+      {
+        "key": "@hrx2.shape.rope.src0_head_stride",
+        "source": "shape.rope.src0_head_stride"
+      },
+      {
+        "key": "@hrx2.shape.rope.src0_token_stride",
+        "source": "shape.rope.src0_token_stride"
+      },
+      {
+        "key": "@hrx2.shape.rope.pos_token_stride",
+        "source": "shape.rope.pos_token_stride"
+      },
+      {
+        "key": "@hrx2.shape.set_rows.ne1",
+        "source": "shape.set_rows.ne1"
+      },
+      {
+        "key": "@hrx2.shape.set_rows.ne11",
+        "source": "shape.set_rows.ne11"
+      },
+      {
+        "key": "@hrx2.shape.set_rows.ne12",
+        "source": "shape.set_rows.ne12"
+      },
+      {
+        "key": "@hrx2.stride.set_rows.idx_nb0",
+        "source": "tensor.src1.dimensions.d0.stride"
+      },
+      {
+        "key": "@hrx2.stride.set_rows.idx_nb1",
+        "source": "tensor.src1.dimensions.d1.stride"
+      },
+      {
+        "key": "@hrx2.stride.set_rows.idx_nb2",
+        "source": "tensor.src1.dimensions.d2.stride"
+      },
+      {
+        "key": "@hrx2.stride.set_rows.dst_nb1",
+        "source": "tensor.dst.dimensions.d1.stride"
+      },
+      {
+        "key": "@hrx2.stride.set_rows.dst_nb2",
+        "source": "tensor.dst.dimensions.d2.stride"
+      },
+      {
+        "key": "@hrx2.stride.set_rows.dst_nb3",
+        "source": "tensor.dst.dimensions.d3.stride"
+      },
+      {
+        "key": "@hrx2.tuning.rope_set_rows.workgroup_size",
+        "value": "256"
+      }
+    ]
+  }
+}

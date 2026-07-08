@@ -155,3 +155,94 @@ def test_run_generated_kernel_tests_executes_all_cases(
     assert calls[0][2] != calls[1][2]
     assert calls[0][2].name.endswith("n1")
     assert calls[1][2].name.endswith("n2")
+
+
+def test_run_generated_kernel_tests_truncates_long_case_directory_names(
+    tmp_path: Path, monkeypatch
+) -> None:
+    module = _load_script_module(
+        "tests/infra/run_generated_kernel_tests.py",
+        "test_run_generated_kernel_tests_long_names",
+    )
+    config_path = tmp_path / ("config-" + ("x" * 180) + ".json")
+    config_path.write_text(
+        json.dumps(
+            {
+                "kernel": "rope_set_rows_f32",
+                "params": ["n"],
+                "cases": [[1]],
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    manifest_path = tmp_path / "generated-kernel-tests.json"
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "schema": "ggml_hrx_kernel_bench.generated_kernel_tests.v1",
+                "source_path": "test.yaml",
+                "entry_count": 1,
+                "entries": [
+                    {
+                        "config_path": str(config_path),
+                        "config_name": config_path.name,
+                        "kernel": "rope_set_rows_f32",
+                        "case_count": 1,
+                        "route_id": "rope_set_rows_f16_normal_n128_h32_t1_512_contiguous_4d",
+                        "op": "ROPE_SET_ROWS",
+                    }
+                ],
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    calls: list[Path] = []
+
+    class _FakeContext:
+        kernel_dir = None
+        routing_dir = None
+
+    class _FakeRouter:
+        context = _FakeContext()
+
+        def select_cases(self, config: dict[str, object], selectors):
+            assert selectors is None
+            assert config["cases"] == [[1]]
+            return [("case-" + ("y" * 240), [1])]
+
+        def execute_case(self, request) -> dict[str, object]:
+            output_dir = Path(request.output_dir)
+            calls.append(output_dir)
+            return {
+                "case_id": request.current_case_id,
+                "values": list(request.current_case_values),
+                "status": "ran",
+                "correctness_ok": True,
+                "results_path": str(output_dir / "results.json"),
+            }
+
+        def case_result(self, execution: dict[str, object]) -> dict[str, object]:
+            return dict(execution)
+
+    monkeypatch.setattr(module, "create_router", lambda **_: _FakeRouter())
+    monkeypatch.setattr(module, "load_config", lambda _: json.loads(config_path.read_text()))
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "run_generated_kernel_tests.py",
+            str(manifest_path),
+            "--output-dir",
+            str(tmp_path / "runtime-output"),
+            "--routing-version",
+            "v2",
+        ],
+    )
+
+    assert module.main() == 0
+    assert len(calls) == 1
+    assert len(calls[0].parent.name) <= 100
+    assert len(calls[0].name) <= 100

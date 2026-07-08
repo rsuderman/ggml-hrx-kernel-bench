@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 from pathlib import Path
 
@@ -16,8 +17,15 @@ def _expect(condition: bool, message: str) -> None:
         raise RuntimeError(message)
 
 
-def _safe_name(value: str) -> str:
-    return ''.join(ch.lower() if ch.isalnum() else '-' for ch in value).strip('-') or 'generated'
+def _safe_name(value: str, *, max_length: int = 96) -> str:
+    safe = ''.join(ch.lower() if ch.isalnum() else '-' for ch in value).strip('-') or 'generated'
+    if len(safe) <= max_length:
+        return safe
+    digest = hashlib.sha1(value.encode("utf-8")).hexdigest()[:12]
+    prefix_length = max_length - len(digest) - 1
+    if prefix_length <= 0:
+        return digest[:max_length]
+    return f"{safe[:prefix_length].rstrip('-')}-{digest}"
 
 
 def _runtime_environment_blocked(result: dict) -> bool:

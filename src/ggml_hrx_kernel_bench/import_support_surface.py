@@ -15,6 +15,7 @@ VALIDATED_IMPORT_OPS = frozenset(
         "MUL",
         "NEG",
         "ROPE",
+        "ROPE_SET_ROWS",
         "RMS_NORM",
         "RELU",
         "SCALE",

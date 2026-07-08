@@ -477,6 +477,77 @@ def test_rope_neox_oracle_and_workbench_use_shape_rope_values(tmp_path: Path) ->
     assert "check.expect.close" in workbench
 
 
+def test_rope_set_rows_oracle_and_workbench_use_f16_dst_abi(tmp_path: Path) -> None:
+    candidate = Candidate(
+        id="rope_set_rows_f16_normal_n128_h32_t1_contiguous_4d",
+        family="rope_set_rows_f32",
+        op="ROPE_SET_ROWS",
+        source_id="rope_set_rows_f32",
+        source_path=Path("kernels/v2/rope_set_rows/f32.loom"),
+        root_symbol="@hrx2_rope_normal_f32_freq_set_rows_f16",
+        export_name="hrx2_rope_normal_f32_freq_set_rows_f16",
+        route_id="rope_set_rows_f16_normal_n128_h32_t1_contiguous_4d",
+        route=None,
+        shape={
+            "d0": 4096,
+            "d1": 4,
+            "d2": 1,
+            "d3": 1,
+            "src0_d0": 128,
+            "src0_d1": 32,
+            "pos_d0": 1,
+            "pos_d1": 1,
+            "freq_d0": 64,
+            "freq_d1": 1,
+            "src1_d0": 1,
+            "src1_d1": 1,
+        },
+        values={
+            "shape.rope.ncols": 128,
+            "shape.rope.n_dims": 128,
+            "shape.rope.nheads": 32,
+            "shape.rope.ntokens": 1,
+            "shape.rope.src0_head_stride": 128,
+            "shape.rope.src0_token_stride": 4096,
+            "shape.rope.pos_token_stride": 1,
+            "shape.set_rows.ne1": 4,
+            "shape.set_rows.ne11": 1,
+            "shape.set_rows.ne12": 1,
+        },
+        config={},
+        dispatch={},
+        supports={},
+        coverage="route_backed",
+    )
+
+    result = generate_oracle(candidate, tmp_path / "fixtures", force=True)
+
+    assert result.status == "fixtures_ready"
+    assert np.load(tmp_path / "fixtures" / "src0.npy").shape == (4096,)
+    assert np.load(tmp_path / "fixtures" / "positions.npy").shape == (1,)
+    assert np.load(tmp_path / "fixtures" / "freq.npy").shape == (64,)
+    assert np.load(tmp_path / "fixtures" / "indices.npy").shape == (1,)
+    assert np.load(tmp_path / "fixtures" / "dst_init.npy").shape == (16384,)
+    assert np.load(tmp_path / "fixtures" / "expected.npy").shape == (16384,)
+    assert np.load(tmp_path / "fixtures" / "dst_f32_init.npy").shape == (16384,)
+    assert np.load(tmp_path / "fixtures" / "expected_f32.npy").shape == (16384,)
+
+    linked_source = tmp_path / "linked.loom"
+    linked_source.write_text(
+        'kernel.def export("hrx2_rope_normal_f32_freq_set_rows_f16") @hrx2_rope_normal_f32_freq_set_rows_f16() {}\n',
+        encoding="utf-8",
+    )
+    _, metadata = write_workbench(candidate, linked_source, tmp_path / "workbench.loom", tmp_path / "fixtures")
+
+    assert metadata["status"] == "ok"
+    workbench = (tmp_path / "workbench.loom").read_text(encoding="utf-8")
+    assert "tensor<4096xf32>" in workbench
+    assert "tensor<1xi64>" in workbench
+    assert "tensor<16384xi16>" in workbench
+    assert "tensor<16384xf32>" in workbench
+    assert "check.expect.close" in workbench
+
+
 def test_soft_max_oracle_and_workbench_use_flattened_rows(tmp_path: Path) -> None:
     candidate = _candidate(
         candidate_id="soft_max_f32_ranked_2d",

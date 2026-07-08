@@ -65,6 +65,9 @@
       "rope/rope_f32_normal_n128_h32_t2_contiguous_4d.json",
       "rope/rope_neox_f32_n64_h128_t2_contiguous_4d.json"
     ],
+    "ROPE_SET_ROWS": [
+      "rope_set_rows/rope_set_rows_f16_normal_n128_h32_t1_contiguous_4d.json"
+    ],
     "RMS_NORM": [
       "rms_norm/rms_norm_f32_contiguous_4d.json"
     ],

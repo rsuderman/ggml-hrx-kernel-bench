@@ -704,6 +704,77 @@ def lower_set_rows_tensors(
     return tensors, _shape_from_extents(dst_extents)
 
 
+def _rope_set_rows_route_properties(route: V2Route) -> tuple[int, int]:
+    if route.root_symbol == "@hrx2_rope_normal_f32_freq_set_rows_f16":
+        return 0, 128
+    if route.root_symbol == "@hrx2_rope_neox_f32_freq_set_rows_f16":
+        return 2, 96
+    raise ValueError(f"ROPE_SET_ROWS v2 routing is not implemented for {route.root_symbol}")
+
+
+def lower_rope_set_rows_tensors(
+    case: ImportedCase,
+    route: V2Route,
+) -> tuple[dict[str, ConcreteTensor], dict[str, int]]:
+    ne = case.normalized_params.get("ne_a")
+    mode = case.normalized_params.get("mode")
+    if not isinstance(ne, list) or len(ne) != 4:
+        raise ValueError("ROPE_SET_ROWS lowering requires a 4-D ne_a extent list")
+    if any(not isinstance(value, int) for value in ne):
+        raise ValueError("ROPE_SET_ROWS lowering requires integer ne_a extents")
+    if not isinstance(mode, int):
+        raise ValueError("ROPE_SET_ROWS lowering requires integer mode")
+    expected_mode, n_dims = _rope_set_rows_route_properties(route)
+    if mode != expected_mode:
+        raise ValueError(f"ROPE_SET_ROWS v2 routing currently requires mode={expected_mode}")
+    extents = [int(value) for value in ne]
+    if extents[3] != 1:
+        raise ValueError("ROPE_SET_ROWS v2 routing currently requires ne_a[3]=1")
+    ncols = extents[0]
+    nheads = extents[1]
+    ntokens = extents[2]
+    dst_rows = max(ntokens + 2, 4)
+    src0_extents = [ncols, nheads, ntokens, 1]
+    pos_extents = [ntokens, 1, 1, 1]
+    freq_extents = [max(n_dims // 2, 1), 1, 1, 1]
+    idx_extents = [ntokens, 1, 1, 1]
+    dst_extents = [ncols * nheads, dst_rows, 1, 1]
+    tensors = {
+        "src0": ConcreteTensor(
+            dtype="F32",
+            dimensions=_dimensions_from_extents(src0_extents),
+        ),
+        "pos": ConcreteTensor(
+            dtype="I32",
+            dimensions=_dimensions_from_extents(pos_extents),
+        ),
+        "freq": ConcreteTensor(
+            dtype="F32",
+            dimensions=_dimensions_from_extents(freq_extents),
+        ),
+        "src1": ConcreteTensor(
+            dtype=str(case.dtype.get("type_idx", "")).upper(),
+            dimensions=_dimensions_from_extents(idx_extents),
+        ),
+        "dst": ConcreteTensor(
+            dtype="F16",
+            dimensions=_dimensions_from_extents(dst_extents),
+        ),
+    }
+    return tensors, {
+        "rope.ncols": ncols,
+        "rope.n_dims": n_dims,
+        "rope.nheads": nheads,
+        "rope.ntokens": ntokens,
+        "rope.src0_head_stride": ncols,
+        "rope.src0_token_stride": ncols * nheads,
+        "rope.pos_token_stride": 1,
+        "set_rows.ne1": dst_rows,
+        "set_rows.ne11": 1,
+        "set_rows.ne12": 1,
+    }
+
+
 def lower_contiguous_copy_tensors(
     case: ImportedCase,
 ) -> tuple[dict[str, ConcreteTensor], dict[str, int]]:
@@ -865,6 +936,8 @@ def lower_tensors_for_route(
         return lower_sum_rows_tensors(case)
     if route.op == "SET_ROWS":
         return lower_set_rows_tensors(case)
+    if route.op == "ROPE_SET_ROWS":
+        return lower_rope_set_rows_tensors(case, route)
     if route.lowering_kind == LOWERING_KIND_COPY_CONTIGUOUS:
         return lower_contiguous_copy_tensors(case)
     if route.lowering_kind == LOWERING_KIND_COPY_NON_CONTIGUOUS_4D:

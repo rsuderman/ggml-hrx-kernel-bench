@@ -1903,6 +1903,116 @@ def test_v2_rope_neox_partial_dims_case_stays_unmapped() -> None:
     assert detail == "ROPE NEOX v2 routing currently requires n_dims == ne_a[0]"
 
 
+def test_v2_rope_set_rows_route_resolves_for_f16_mode0_case() -> None:
+    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
+    case = ImportedCase(
+        op="ROPE_SET_ROWS",
+        dtype={"type": "f16", "type_idx": "i64"},
+        raw_case={},
+        normalized_params={
+            "mode": 0,
+            "ne_a": [128, 32, 1, 1],
+        },
+        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_group_index=0,
+        source_case_index=0,
+    )
+
+    routes = list(routes_for_op(catalog, "ROPE_SET_ROWS"))
+    resolved_route, shape, reason, detail = resolve_route_for_case(case, routes)
+
+    assert reason is None
+    assert detail is None
+    assert resolved_route is not None
+    assert resolved_route.id == "rope_set_rows_f16_normal_n128_h32_t1_contiguous_4d"
+    assert shape is not None
+    assert shape["d0"] == 4096
+    assert shape["d1"] == 4
+    assert shape["d2"] == 1
+    assert shape["d3"] == 1
+    assert shape["src0_d0"] == 128
+    assert shape["src0_d1"] == 32
+    assert shape["rope.ncols"] == 128
+    assert shape["rope.n_dims"] == 128
+    assert shape["rope.nheads"] == 32
+    assert shape["rope.ntokens"] == 1
+    assert shape["set_rows.ne1"] == 4
+
+
+def test_v2_rope_set_rows_f32_case_stays_unmapped() -> None:
+    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
+    case = ImportedCase(
+        op="ROPE_SET_ROWS",
+        dtype={"type": "f32", "type_idx": "i64"},
+        raw_case={},
+        normalized_params={
+            "mode": 0,
+            "ne_a": [128, 32, 8, 1],
+        },
+        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_group_index=1,
+        source_case_index=4,
+    )
+
+    routes = list(routes_for_op(catalog, "ROPE_SET_ROWS"))
+    resolved_route, shape, reason, detail = resolve_route_for_case(case, routes)
+
+    assert resolved_route is None
+    assert shape is None
+    assert reason is not None
+    assert reason.value == "no_dtype_mapping"
+    assert detail == "matching v2 op mapping exists, but not for this dtype combination"
+
+
+def test_v2_rope_set_rows_batch_case_stays_unmapped() -> None:
+    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
+    case = ImportedCase(
+        op="ROPE_SET_ROWS",
+        dtype={"type": "f16", "type_idx": "i64"},
+        raw_case={},
+        normalized_params={
+            "mode": 0,
+            "ne_a": [128, 32, 8, 3],
+        },
+        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_group_index=0,
+        source_case_index=5,
+    )
+
+    routes = list(routes_for_op(catalog, "ROPE_SET_ROWS"))
+    resolved_route, shape, reason, detail = resolve_route_for_case(case, routes)
+
+    assert resolved_route is None
+    assert shape is None
+    assert reason is not None
+    assert reason.value == "shape_lowering_not_implemented"
+    assert detail == "ROPE_SET_ROWS v2 routing currently requires ne_a[3]=1"
+
+
+def test_v2_rope_set_rows_multi_token_case_stays_unmapped() -> None:
+    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
+    case = ImportedCase(
+        op="ROPE_SET_ROWS",
+        dtype={"type": "f16", "type_idx": "i64"},
+        raw_case={},
+        normalized_params={
+            "mode": 0,
+            "ne_a": [128, 32, 8, 1],
+        },
+        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_group_index=0,
+        source_case_index=4,
+    )
+
+    routes = list(routes_for_op(catalog, "ROPE_SET_ROWS"))
+    resolved_route, shape, reason, detail = resolve_route_for_case(case, routes)
+
+    assert resolved_route is None
+    assert shape is None
+    assert reason is not None
+    assert reason.value == "no_route_match"
+
+
 def test_v2_soft_max_route_resolves_for_plain_f32_case() -> None:
     catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
     case = ImportedCase(
