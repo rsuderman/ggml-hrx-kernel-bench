@@ -816,6 +816,10 @@ def _read_f32(workbench_path: Path, fixture_dir: Path, name: str, elems: int) ->
     return f"""  %{name} = check.file.read.npy path(\"{_rel_fixture(workbench_path, fixture_dir, name + ".npy")}\") : tensor<{elems}xf32>"""
 
 
+def _read_f16(workbench_path: Path, fixture_dir: Path, name: str, elems: int) -> str:
+    return f"""  %{name} = check.file.read.npy path(\"{_rel_fixture(workbench_path, fixture_dir, name + ".npy")}\") : tensor<{elems}xf16>"""
+
+
 def _read_i32(workbench_path: Path, fixture_dir: Path, name: str, elems: int) -> str:
     return f"""  %{name} = check.file.read.npy path(\"{_rel_fixture(workbench_path, fixture_dir, name + ".npy")}\") : tensor<{elems}xi32>"""
 
@@ -1286,6 +1290,22 @@ def _matmul_f32_arrays(np: Any, candidate: Candidate, seed: int) -> dict[str, An
     }
 
 
+def _matmul_f16_f32_arrays(np: Any, candidate: Candidate, seed: int) -> dict[str, Any]:
+    k, rows, cols = _matmul_dims(candidate)
+    lhs = f16_pattern(np, (rows, k), seed=seed)
+    rhs = f32_pattern(np, (cols, k), seed=seed + 1)
+    expected = np.matmul(lhs.astype(np.float32), rhs.T.astype(np.float32)).T.astype(np.float32)
+    return {
+        "arrays": {
+            "src0": lhs.reshape(rows * k),
+            "src1": rhs.reshape(cols * k),
+            "dst_init": f32_pattern(np, (rows * cols,), seed=seed + 2, scale=0.25),
+            "expected": expected.reshape(rows * cols),
+        },
+        "metadata": {"logical_packed_weight_fixture": False},
+    }
+
+
 def _write_mul_mat_f32_workbench(candidate: Candidate, linked_source: Path, workbench_path: Path, fixture_dir: Path) -> tuple[str, dict[str, Any]]:
     k, rows, cols = _matmul_dims(candidate)
     src0_elems = rows * k
@@ -1299,6 +1319,28 @@ def _write_mul_mat_f32_workbench(candidate: Candidate, linked_source: Path, work
         _read_f32(workbench_path, fixture_dir, "expected", dst_elems),
         f"  func.call {candidate.root_symbol}(%src0, %src1, %dst) : (tensor<{src0_elems}xf32>, tensor<{src1_elems}xf32>, tensor<{dst_elems}xf32>)",
         f"  check.expect.close actual(%dst) expected(%expected) atol(0.0001) rtol(0.0001) nan(same) : tensor<{dst_elems}xf32>",
+    ]
+    return _emit_case(linked_source, workbench_path, case_name, bench_name, "\n".join(lines))
+
+
+def _write_mul_mat_f16_f32_batched_workbench(
+    candidate: Candidate,
+    linked_source: Path,
+    workbench_path: Path,
+    fixture_dir: Path,
+) -> tuple[str, dict[str, Any]]:
+    k, rows, cols = _matmul_dims(candidate)
+    src0_elems = rows * k
+    src1_elems = cols * k
+    dst_elems = rows * cols
+    case_name, bench_name = _case_names(candidate)
+    lines = [
+        _read_f16(workbench_path, fixture_dir, "src0", src0_elems),
+        _read_f32(workbench_path, fixture_dir, "src1", src1_elems),
+        _read_f32(workbench_path, fixture_dir, "dst_init", dst_elems).replace("%dst_init", "%dst"),
+        _read_f32(workbench_path, fixture_dir, "expected", dst_elems),
+        f"  func.call {candidate.root_symbol}(%src0, %src1, %dst) : (tensor<{src0_elems}xf16>, tensor<{src1_elems}xf32>, tensor<{dst_elems}xf32>)",
+        f"  check.expect.close actual(%dst) expected(%expected) atol(0.08) rtol(0.02) nan(same) : tensor<{dst_elems}xf32>",
     ]
     return _emit_case(linked_source, workbench_path, case_name, bench_name, "\n".join(lines))
 
@@ -2430,6 +2472,11 @@ ORACLE_SPECS: tuple[OracleSpec, ...] = (
         family_ids=("mul_mat_f32_f32",),
         generate=_logical_generate(LogicalOracleSpec(("mul_mat_f32_f32",), "mul_mat_f32_f32_numpy", {"atol": 1e-4, "rtol": 1e-4}, _matmul_f32_arrays, exact_kernel_abi=True)),
         write_workbench=_write_mul_mat_f32_workbench,
+    ),
+    OracleSpec(
+        family_ids=("mul_mat_f16_f32_batched",),
+        generate=_logical_generate(LogicalOracleSpec(("mul_mat_f16_f32_batched",), "mul_mat_numpy_logical", {"atol": 0.08, "rtol": 0.02}, _matmul_f16_f32_arrays, exact_kernel_abi=True)),
+        write_workbench=_write_mul_mat_f16_f32_batched_workbench,
     ),
     OracleSpec(
         family_ids=("rope_f32", "rope_neox_f32", "rope_scale_f32"),

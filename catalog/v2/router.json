@@ -50,7 +50,9 @@
       "mul_mat/mul_mat_q5_k_f32_dot16_contiguous_cols1_2d.json",
       "mul_mat/mul_mat_q6_k_f32_rows2_contiguous_cols1_2d.json",
       "mul_mat/mul_mat_q6_k_f32_direct_contiguous_2d.json",
-      "mul_mat/mul_mat_f32_f32_contiguous_small_2d.json"
+      "mul_mat/mul_mat_f32_f32_contiguous_small_2d.json",
+      "mul_mat/mul_mat_f32_f32_contiguous_logits_cols1_2d.json",
+      "mul_mat/mul_mat_f16_f32_batched_logits_cols1_2d.json"
     ],
     "MUL": [
       "mul/mul_f16_contiguous_2d.json",

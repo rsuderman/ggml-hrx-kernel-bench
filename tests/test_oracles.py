@@ -418,6 +418,39 @@ def test_mul_mat_f32_oracle_and_workbench_use_kernel_abi_buffers(tmp_path: Path)
     assert "check.expect.close" in workbench
 
 
+def test_mul_mat_f16_f32_batched_oracle_and_workbench_use_kernel_abi_buffers(tmp_path: Path) -> None:
+    candidate = _candidate(
+        candidate_id="mul_mat_f16_f32_batched_logits_cols1_2d",
+        shape={"k": 1056, "rows": 128, "cols": 1},
+        family="mul_mat_f16_f32_batched",
+        source_id="mul_mat_f16_f32_batched",
+        root_symbol="@hrx2_mul_mat_f16_f32_batched",
+        export_name="hrx2_mul_mat_f16_f32_batched",
+        op="MUL_MAT",
+        source_path="kernels/v2/mul_mat/f16_f32_batched.loom",
+    )
+
+    result = generate_oracle(candidate, tmp_path / "fixtures", force=True)
+
+    assert result.status == "fixtures_ready"
+    assert np.load(tmp_path / "fixtures" / "src0.npy").shape == (135168,)
+    assert np.load(tmp_path / "fixtures" / "src1.npy").shape == (1056,)
+    assert np.load(tmp_path / "fixtures" / "dst_init.npy").shape == (128,)
+    assert np.load(tmp_path / "fixtures" / "expected.npy").shape == (128,)
+
+    linked_source = tmp_path / "linked.loom"
+    linked_source.write_text(
+        'kernel.def export("hrx2_mul_mat_f16_f32_batched") @hrx2_mul_mat_f16_f32_batched() {}\n',
+        encoding="utf-8",
+    )
+    _, metadata = write_workbench(candidate, linked_source, tmp_path / "workbench.loom", tmp_path / "fixtures")
+
+    assert metadata["status"] == "ok"
+    workbench = (tmp_path / "workbench.loom").read_text(encoding="utf-8")
+    assert "tensor<135168xf16>, tensor<1056xf32>, tensor<128xf32>" in workbench
+    assert "check.expect.close" in workbench
+
+
 def test_mul_mat_q6_k_oracle_and_workbench_use_packed_kernel_abi_buffers(tmp_path: Path) -> None:
     candidate = _candidate(
         candidate_id="mul_mat_q6_k_f32_direct_contiguous_2d",
