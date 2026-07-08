@@ -1133,6 +1133,23 @@ def _matmul_f32_arrays(np: Any, candidate: Candidate, seed: int) -> dict[str, An
     }
 
 
+def _write_mul_mat_f32_workbench(candidate: Candidate, linked_source: Path, workbench_path: Path, fixture_dir: Path) -> tuple[str, dict[str, Any]]:
+    k, rows, cols = _matmul_dims(candidate)
+    src0_elems = rows * k
+    src1_elems = cols * k
+    dst_elems = rows * cols
+    case_name, bench_name = _case_names(candidate)
+    lines = [
+        _read_f32(workbench_path, fixture_dir, "src0_logical_f32", src0_elems).replace("%src0_logical_f32", "%src0"),
+        _read_f32(workbench_path, fixture_dir, "src1", src1_elems),
+        _read_f32(workbench_path, fixture_dir, "dst_init", dst_elems).replace("%dst_init", "%dst"),
+        _read_f32(workbench_path, fixture_dir, "expected", dst_elems),
+        f"  func.call {candidate.root_symbol}(%src0, %src1, %dst) : (tensor<{src0_elems}xf32>, tensor<{src1_elems}xf32>, tensor<{dst_elems}xf32>)",
+        f"  check.expect.close actual(%dst) expected(%expected) atol(0.0001) rtol(0.0001) nan(same) : tensor<{dst_elems}xf32>",
+    ]
+    return _emit_case(linked_source, workbench_path, case_name, bench_name, "\n".join(lines))
+
+
 def _mul_mat_q8_0_arrays(np: Any, candidate: Candidate, seed: int) -> dict[str, Any]:
     if "q8_1" in candidate.root_symbol:
         data = _matmul_f32_arrays(np, candidate, seed)
@@ -1487,7 +1504,7 @@ LOGICAL_ORACLE_SPECS: tuple[LogicalOracleSpec, ...] = (
     LogicalOracleSpec(("argsort_f32_i32",), "argsort_f32_i32_numpy_desc", {"atol": 0.0, "rtol": 0.0}, _argsort_arrays),
     LogicalOracleSpec(("get_rows_f32", "get_rows_q4_k_f32", "get_rows_q5_k_f32", "get_rows_q6_k_f32", "get_rows_q8_0_f32"), "get_rows_numpy_logical", {"atol": 1e-5, "rtol": 1e-5}, _get_rows_arrays),
     LogicalOracleSpec(("get_rows_moe_weights_f32",), "get_rows_moe_weights_numpy_logical", {"atol": 1e-5, "rtol": 1e-5}, _get_rows_arrays),
-    LogicalOracleSpec(("mul_mat_f32_f32", "mul_mat_f16_f32_batched", "mul_mat_f16_f32_batched_cont"), "mul_mat_numpy_logical", {"atol": 0.08, "rtol": 0.02}, _matmul_f32_arrays),
+    LogicalOracleSpec(("mul_mat_f16_f32_batched", "mul_mat_f16_f32_batched_cont"), "mul_mat_numpy_logical", {"atol": 0.08, "rtol": 0.02}, _matmul_f32_arrays),
     LogicalOracleSpec(("mul_mat_q5_k_f32", "mul_mat_q6_k_f32", "mul_mat_q8_0_f32", "mul_mat_q4_k_swiglu_f32", "mul_mat_id_q4_k_f32", "mul_mat_id_q5_k_f32", "mul_mat_id_q6_k_f32"), "quantized_mul_mat_numpy_logical", {"atol": 0.12, "rtol": 0.04}, _quantized_matmul_arrays),
     LogicalOracleSpec(("quantize_q8_1_f32",), "quantize_q8_1_numpy", {"atol": 0.0, "rtol": 0.0}, _quantize_q8_1_arrays),
     LogicalOracleSpec(("rms_norm_mul_f32",), "rms_norm_mul_f32_numpy", {"atol": 1e-4, "rtol": 1e-4}, _rms_norm_mul_arrays),
@@ -2176,6 +2193,11 @@ ORACLE_SPECS: tuple[OracleSpec, ...] = (
         family_ids=("mul_mat_q8_0_f32",),
         generate=_logical_generate(LogicalOracleSpec(("mul_mat_q8_0_f32",), "mul_mat_q8_0_f32_numpy_dequant_matmul", {"atol": 0.08, "rtol": 0.02}, _mul_mat_q8_0_arrays, exact_kernel_abi=True)),
         write_workbench=_write_mul_mat_q8_0_workbench,
+    ),
+    OracleSpec(
+        family_ids=("mul_mat_f32_f32",),
+        generate=_logical_generate(LogicalOracleSpec(("mul_mat_f32_f32",), "mul_mat_f32_f32_numpy", {"atol": 1e-4, "rtol": 1e-4}, _matmul_f32_arrays, exact_kernel_abi=True)),
+        write_workbench=_write_mul_mat_f32_workbench,
     ),
     OracleSpec(
         family_ids=("rope_f32", "rope_neox_f32", "rope_scale_f32"),

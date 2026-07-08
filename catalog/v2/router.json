@@ -45,6 +45,9 @@
     "GET_ROWS": [
       "get_rows/get_rows_f32_embedding_rows_2d.json"
     ],
+    "MUL_MAT": [
+      "mul_mat/mul_mat_f32_f32_contiguous_small_2d.json"
+    ],
     "MUL": [
       "mul/mul_f16_contiguous_2d.json",
       "mul/mul_f16_rhs_row_broadcast_2d.json",

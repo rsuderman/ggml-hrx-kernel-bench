@@ -492,6 +492,61 @@ def lower_get_rows_tensors(
     }
 
 
+def lower_mul_mat_tensors(
+    case: ImportedCase,
+) -> tuple[dict[str, ConcreteTensor], dict[str, int]]:
+    bs = case.normalized_params.get("bs")
+    k = case.normalized_params.get("k")
+    rows = case.normalized_params.get("m")
+    cols = case.normalized_params.get("n")
+    nr = case.normalized_params.get("nr")
+    output_count = case.normalized_params.get("o", 1)
+    permutation = case.normalized_params.get("per", list(POINTWISE_BASE_PERMUTATION))
+    if not isinstance(bs, list) or len(bs) != 2:
+        raise ValueError("MUL_MAT lowering requires a 2-D bs extent list")
+    if not isinstance(nr, list) or len(nr) != 2:
+        raise ValueError("MUL_MAT lowering requires a 2-D nr extent list")
+    if not all(isinstance(value, int) for value in (*bs, *nr)):
+        raise ValueError("MUL_MAT lowering requires integer bs and nr extents")
+    for name, value in (("k", k), ("m", rows), ("n", cols), ("o", output_count)):
+        if not isinstance(value, int):
+            raise ValueError(f"MUL_MAT lowering requires integer {name}")
+    if not isinstance(permutation, list) or len(permutation) != 4:
+        raise ValueError("MUL_MAT lowering requires a 4-D per permutation list")
+    if any(not isinstance(value, int) for value in permutation):
+        raise ValueError("MUL_MAT lowering requires integer per values")
+    if [int(value) for value in bs] != [1, 1]:
+        raise ValueError("MUL_MAT v2 routing currently requires bs=[1, 1]")
+    if [int(value) for value in nr] != [1, 1]:
+        raise ValueError("MUL_MAT v2 routing currently requires nr=[1, 1]")
+    if int(output_count) != 1:
+        raise ValueError("MUL_MAT v2 routing currently requires o=1")
+    if [int(value) for value in permutation] != list(POINTWISE_BASE_PERMUTATION):
+        raise ValueError("MUL_MAT v2 routing currently requires per=[0, 1, 2, 3]")
+    k_extent = int(k)
+    row_extent = int(rows)
+    col_extent = int(cols)
+    tensors = {
+        "src0": ConcreteTensor(
+            dtype=str(case.dtype.get("type_a", "")).upper(),
+            dimensions=_dimensions_from_extents([k_extent, row_extent]),
+        ),
+        "src1": ConcreteTensor(
+            dtype=str(case.dtype.get("type_b", "")).upper(),
+            dimensions=_dimensions_from_extents([k_extent, col_extent]),
+        ),
+        "dst": ConcreteTensor(
+            dtype="F32",
+            dimensions=_dimensions_from_extents([row_extent, col_extent]),
+        ),
+    }
+    return tensors, {
+        "k": k_extent,
+        "rows": row_extent,
+        "cols": col_extent,
+    }
+
+
 def _rope_route_mode_and_freq(route: V2Route) -> tuple[int, int]:
     if route.root_symbol == "@hrx2_rope_normal_f32":
         return 0, 0
@@ -924,6 +979,8 @@ def lower_tensors_for_route(
         return lower_contiguous_cont_tensors(case)
     if route.op == "GET_ROWS":
         return lower_get_rows_tensors(case)
+    if route.op == "MUL_MAT":
+        return lower_mul_mat_tensors(case)
     if route.op == "ROPE":
         return lower_rope_tensors(case, route)
     if route.op == "RMS_NORM":

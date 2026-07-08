@@ -1681,6 +1681,111 @@ def test_v2_argsort_non_route_shape_case_stays_unmapped() -> None:
     assert detail == "lowered tensor descriptors did not satisfy any v2 route"
 
 
+def test_v2_mul_mat_route_resolves_for_small_contiguous_f32_case() -> None:
+    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
+    case = ImportedCase(
+        op="MUL_MAT",
+        dtype={"type_a": "f32", "type_b": "f32"},
+        raw_case={},
+        normalized_params={
+            "bs": [1, 1],
+            "k": 256,
+            "k_v": 0,
+            "m": 16,
+            "n": 8,
+            "nr": [1, 1],
+            "o": 1,
+            "per": [0, 1, 2, 3],
+        },
+        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_group_index=0,
+        source_case_index=0,
+    )
+
+    routes = list(routes_for_op(catalog, "MUL_MAT"))
+
+    resolved_route, shape, reason, detail = resolve_route_for_case(case, routes)
+
+    assert reason is None
+    assert detail is None
+    assert resolved_route is not None
+    assert resolved_route.id == "mul_mat_f32_f32_contiguous_small_2d"
+    assert shape == {
+        "d0": 16,
+        "d1": 8,
+        "src0_d0": 256,
+        "src0_d1": 16,
+        "src1_d0": 256,
+        "k": 256,
+        "rows": 16,
+        "cols": 8,
+    }
+
+
+def test_v2_mul_mat_broadcast_case_stays_unmapped() -> None:
+    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
+    case = ImportedCase(
+        op="MUL_MAT",
+        dtype={"type_a": "f32", "type_b": "f32"},
+        raw_case={},
+        normalized_params={
+            "bs": [1, 1],
+            "k": 1056,
+            "k_v": 2112,
+            "m": 128,
+            "n": 1,
+            "nr": [4, 1],
+            "o": 1,
+            "per": [0, 1, 2, 3],
+        },
+        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_group_index=0,
+        source_case_index=0,
+    )
+
+    routes = list(routes_for_op(catalog, "MUL_MAT"))
+
+    resolved_route, shape, reason, detail = resolve_route_for_case(case, routes)
+
+    assert resolved_route is None
+    assert shape is None
+    assert reason is not None
+    assert reason.value == "shape_lowering_not_implemented"
+    assert detail == "MUL_MAT v2 routing currently requires nr=[1, 1]"
+
+
+def test_v2_mul_mat_permuted_case_stays_unmapped() -> None:
+    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
+    case = ImportedCase(
+        op="MUL_MAT",
+        dtype={"type_a": "f32", "type_b": "f32"},
+        raw_case={},
+        normalized_params={
+            "bs": [1, 1],
+            "k": 128,
+            "k_v": 0,
+            "m": 1056,
+            "n": 1,
+            "nr": [1, 1],
+            "o": 1,
+            "per": [0, 2, 1, 3],
+        },
+        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_group_index=0,
+        source_case_index=0,
+    )
+
+    routes = list(routes_for_op(catalog, "MUL_MAT"))
+
+    resolved_route, shape, reason, detail = resolve_route_for_case(case, routes)
+
+    assert resolved_route is None
+    assert shape is None
+    assert reason is not None
+    assert reason.value == "shape_lowering_not_implemented"
+    assert detail == "MUL_MAT v2 routing currently requires per=[0, 1, 2, 3]"
+
+
 def test_v2_rope_route_resolves_for_plain_f32_case() -> None:
     catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
     case = ImportedCase(
