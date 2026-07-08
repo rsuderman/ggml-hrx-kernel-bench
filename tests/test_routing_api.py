@@ -1367,3 +1367,59 @@ def test_v2_sum_rows_permuted_case_stays_unmapped() -> None:
     assert reason is not None
     assert reason.value == "shape_lowering_not_implemented"
     assert detail == "SUM_ROWS v2 routing requires permute=0"
+
+
+def test_v2_rms_norm_route_resolves_for_contiguous_eps0_case() -> None:
+    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
+    case = ImportedCase(
+        op="RMS_NORM",
+        dtype={"type": "f32"},
+        raw_case={},
+        normalized_params={
+            "eps": 0.0,
+            "inplace": 0,
+            "ne": [1025, 5, 4, 3],
+            "v": 0,
+        },
+        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_group_index=0,
+        source_case_index=0,
+    )
+
+    rms_norm_routes = list(routes_for_op(catalog, "RMS_NORM"))
+
+    resolved_route, shape, reason, detail = resolve_route_for_case(case, rms_norm_routes)
+
+    assert reason is None
+    assert detail is None
+    assert resolved_route is not None
+    assert resolved_route.id == "rms_norm_f32_contiguous_4d"
+    assert shape == {"d0": 1025, "d1": 5, "d2": 4, "d3": 3}
+
+
+def test_v2_rms_norm_nonzero_eps_case_stays_unmapped() -> None:
+    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
+    case = ImportedCase(
+        op="RMS_NORM",
+        dtype={"type": "f32"},
+        raw_case={},
+        normalized_params={
+            "eps": 1.0e-4,
+            "inplace": 0,
+            "ne": [64, 5, 4, 3],
+            "v": 0,
+        },
+        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_group_index=0,
+        source_case_index=0,
+    )
+
+    rms_norm_routes = list(routes_for_op(catalog, "RMS_NORM"))
+
+    resolved_route, shape, reason, detail = resolve_route_for_case(case, rms_norm_routes)
+
+    assert resolved_route is None
+    assert shape is None
+    assert reason is not None
+    assert reason.value == "shape_lowering_not_implemented"
+    assert detail == "RMS_NORM v2 routing currently requires eps=0.0"

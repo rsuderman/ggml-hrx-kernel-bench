@@ -1,8 +1,8 @@
 {
   "schema": "ggml_hrx_kernel_bench.import_test_coverage.v1",
   "operation_count": 115,
-  "total_pass_case_count": 457,
-  "total_fail_case_count": 10875,
+  "total_pass_case_count": 459,
+  "total_fail_case_count": 10873,
   "operations": [
     {
       "op": "ABS",
@@ -371,8 +371,8 @@
     },
     {
       "op": "RMS_NORM",
-      "pass_case_count": 0,
-      "fail_case_count": 21
+      "pass_case_count": 2,
+      "fail_case_count": 19
     },
     {
       "op": "RMS_NORM_BACK",

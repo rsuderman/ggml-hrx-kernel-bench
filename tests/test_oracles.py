@@ -261,6 +261,35 @@ def test_sum_rows_oracle_and_workbench_use_reduced_dst_shape(tmp_path: Path) -> 
     assert "check.expect.close" in workbench
 
 
+def test_rms_norm_oracle_and_workbench_use_ranked_shape(tmp_path: Path) -> None:
+    candidate = _candidate(
+        candidate_id="rms_norm_f32_ranked_4d",
+        shape={"d0": 64, "d1": 5, "d2": 4, "d3": 3},
+        family="rms_norm_f32",
+        source_id="rms_norm_f32",
+        root_symbol="@hrx2_rms_norm_f32",
+        export_name="hrx2_rms_norm_f32",
+        op="RMS_NORM",
+        source_path="kernels/v2/rms_norm/contiguous_4d.loom",
+    )
+
+    result = generate_oracle(candidate, tmp_path / "fixtures", force=True)
+
+    assert result.status == "fixtures_ready"
+    assert np.load(tmp_path / "fixtures" / "src.npy").shape == (3840,)
+    assert np.load(tmp_path / "fixtures" / "expected.npy").shape == (3840,)
+
+    linked_source = tmp_path / "linked.loom"
+    linked_source.write_text('kernel.def export("hrx2_rms_norm_f32") @hrx2_rms_norm_f32() {}\n', encoding="utf-8")
+    _, metadata = write_workbench(candidate, linked_source, tmp_path / "workbench.loom", tmp_path / "fixtures")
+
+    assert metadata["status"] == "ok"
+    workbench = (tmp_path / "workbench.loom").read_text(encoding="utf-8")
+    assert "%eps = check.literal value(0.0) : f32" in workbench
+    assert "tensor<3840xf32>, tensor<3840xf32>" in workbench
+    assert "check.expect.close" in workbench
+
+
 @pytest.mark.parametrize(
     ("family", "op", "root_symbol", "export_name", "source_path"),
     (

@@ -334,6 +334,48 @@ def lower_contiguous_scale_or_clamp_tensors(
     return _lower_contiguous_extent_tensors(case, extent_key="ne", shape_prefix="pointwise")
 
 
+def lower_rms_norm_tensors(
+    case: ImportedCase,
+) -> tuple[dict[str, ConcreteTensor], dict[str, int]]:
+    ne = case.normalized_params.get("ne")
+    eps = case.normalized_params.get("eps", 0.0)
+    inplace = case.normalized_params.get("inplace", 0)
+    view_mode = case.normalized_params.get("v", 0)
+    if not isinstance(ne, list) or len(ne) != 4:
+        raise ValueError("RMS_NORM lowering requires a 4-D ne extent list")
+    if any(not isinstance(value, int) for value in ne):
+        raise ValueError("RMS_NORM lowering requires integer ne extents")
+    if isinstance(eps, bool):
+        raise ValueError("RMS_NORM lowering requires numeric eps")
+    if isinstance(eps, str):
+        try:
+            eps_value = float(eps)
+        except ValueError as exc:
+            raise ValueError("RMS_NORM lowering requires numeric eps") from exc
+    elif isinstance(eps, (int, float)):
+        eps_value = float(eps)
+    else:
+        raise ValueError("RMS_NORM lowering requires numeric eps")
+    if not isinstance(inplace, int):
+        raise ValueError("RMS_NORM lowering requires integer inplace")
+    if not isinstance(view_mode, int):
+        raise ValueError("RMS_NORM lowering requires integer v")
+    if view_mode != 0:
+        raise ValueError("RMS_NORM v2 routing requires contiguous input (v=0)")
+    if inplace != 0:
+        raise ValueError("RMS_NORM v2 routing requires inplace=0")
+    if eps_value != 0.0:
+        raise ValueError("RMS_NORM v2 routing currently requires eps=0.0")
+    extents = [int(value) for value in ne]
+    dimensions = _dimensions_from_extents(extents)
+    dtype = str(case.dtype.get("type", "")).upper()
+    tensors = {
+        "src0": ConcreteTensor(dtype=dtype, dimensions=dimensions),
+        "dst": ConcreteTensor(dtype=dtype, dimensions=dimensions),
+    }
+    return tensors, _shape_from_extents(extents)
+
+
 def lower_sum_rows_tensors(
     case: ImportedCase,
 ) -> tuple[dict[str, ConcreteTensor], dict[str, int]]:
@@ -549,6 +591,8 @@ def lower_tensors_for_route(
         return lower_contiguous_scale_or_clamp_tensors(case)
     if route.op == "CONT":
         return lower_contiguous_cont_tensors(case)
+    if route.op == "RMS_NORM":
+        return lower_rms_norm_tensors(case)
     if route.op == "SUM_ROWS":
         return lower_sum_rows_tensors(case)
     if route.op == "SET_ROWS":

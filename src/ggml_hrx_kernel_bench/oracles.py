@@ -1459,8 +1459,7 @@ check.benchmark<{case_name}> {bench_name}
 
 
 def _write_rms_norm_workbench(candidate: Candidate, linked_source: Path, workbench_path: Path, fixture_dir: Path) -> tuple[str, dict[str, Any]]:
-    ncols = int(candidate.shape.get("ncols", candidate.shape.get("cols", 1)))
-    nrows = int(candidate.shape.get("nrows", candidate.shape.get("rows", 1)))
+    ncols, nrows, _ = _dims(candidate)
     elems = ncols * nrows
     case_name = f"@case_{candidate.id}"
     bench_name = f"@bench_{candidate.id}"

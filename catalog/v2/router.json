@@ -55,6 +55,9 @@
       "neg/neg_f16.json",
       "neg/neg_f32.json"
     ],
+    "RMS_NORM": [
+      "rms_norm/rms_norm_f32_contiguous_4d.json"
+    ],
     "RELU": [
       "relu/relu_f16.json",
       "relu/relu_f32.json"
