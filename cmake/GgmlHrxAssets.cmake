@@ -47,6 +47,18 @@ function(add_materialized_asset_target)
     ${CMAKE_SOURCE_DIR}/catalog/v2/copy/*.tmpl
   )
   list(TRANSFORM ggml_hrx_copy_route_templates PREPEND ${CMAKE_SOURCE_DIR}/)
+  file(GLOB ggml_hrx_pointwise_kernel_templates
+    CONFIGURE_DEPENDS
+    RELATIVE ${CMAKE_SOURCE_DIR}
+    ${CMAKE_SOURCE_DIR}/kernels/v2/pointwise/*.tmpl
+  )
+  list(TRANSFORM ggml_hrx_pointwise_kernel_templates PREPEND ${CMAKE_SOURCE_DIR}/)
+  file(GLOB ggml_hrx_pointwise_route_templates
+    CONFIGURE_DEPENDS
+    RELATIVE ${CMAKE_SOURCE_DIR}
+    ${CMAKE_SOURCE_DIR}/catalog/v2/pointwise/*.tmpl
+  )
+  list(TRANSFORM ggml_hrx_pointwise_route_templates PREPEND ${CMAKE_SOURCE_DIR}/)
 
   set(ggml_hrx_materialize_command
     ${Python3_EXECUTABLE}
@@ -67,6 +79,8 @@ function(add_materialized_asset_target)
       ${ggml_hrx_route_sources}
       ${ggml_hrx_copy_kernel_templates}
       ${ggml_hrx_copy_route_templates}
+      ${ggml_hrx_pointwise_kernel_templates}
+      ${ggml_hrx_pointwise_route_templates}
       ${CMAKE_SOURCE_DIR}/scripts/materialize_assets.py
       ${CMAKE_SOURCE_DIR}/src/ggml_hrx_kernel_bench/materialized_assets.py
       ${ggml_hrx_copy_generator_sources}
