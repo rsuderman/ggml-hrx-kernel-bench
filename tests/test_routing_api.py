@@ -23,7 +23,6 @@ from ggml_hrx_kernel_bench.import_route_resolution import resolve_case_routes
 from ggml_hrx_kernel_bench.routing.v2.import_resolution import resolve_imported_suite, resolve_route_for_case
 from ggml_hrx_kernel_bench.routing.v2.candidates import candidate_from_shape
 from ggml_hrx_kernel_bench.routing.v1.routes import DEFAULT_V1_ROUTING_DIR, iter_routes
-from ggml_hrx_kernel_bench.routing.v2.query import load_route_catalog
 from ggml_hrx_kernel_bench.routing.v2.models import (
     ConstraintCheck,
     RouteConstraints,
@@ -1605,6 +1604,39 @@ def test_v1_oversized_contiguous_add_case_falls_back_to_generic_route() -> None:
     assert resolution.shape == {"ncols": 1, "nrows": 102400, "cols": 1, "rows": 102400}
 
 
+def test_v1_copy_route_uses_role_specific_dtypes() -> None:
+    case = ImportedCase(
+        op="CPY",
+        dtype={"type": "f16", "type_dst": "f16", "type_src": "f32"},
+        raw_case={
+            "_src_transpose": 0,
+            "ne": [1, 2, 3, 4],
+            "permute_dst": [0, 0, 0, 0],
+            "permute_src": [0, 0, 0, 0],
+        },
+        normalized_params={
+            "_src_transpose": 0,
+            "ne": [1, 2, 3, 4],
+            "permute_dst": [0, 0, 0, 0],
+            "permute_src": [0, 0, 0, 0],
+        },
+        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_group_index=0,
+        source_case_index=0,
+    )
+    copy_routes = [
+        route for route in iter_routes(DEFAULT_V1_ROUTING_DIR) if str(route.get("op") or "") == "CPY"
+    ]
+
+    resolution, _, reason, detail = resolve_case_routes(case, copy_routes)
+
+    assert reason is None
+    assert detail is None
+    assert resolution is not None
+    assert resolution.route["id"] == "copy_f32_f16_generic_wg256"
+    assert resolution.shape == {"ncols": 24, "nrows": 1, "cols": 24, "rows": 1}
+
+
 def test_v2_oversized_contiguous_pointwise_case_becomes_unmapped() -> None:
     case = ImportedCase(
         op="ADD",
@@ -1877,7 +1909,12 @@ def test_v2_get_rows_route_resolves_for_q8_0_case() -> None:
     catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
     case = ImportedCase(
         op="GET_ROWS",
-        dtype={"type": "q8_0"},
+        dtype={
+            "type": "q8_0",
+            "type_dst": "q8_0",
+            "type_idx": "i32",
+            "type_src": "q8_0",
+        },
         raw_case={},
         normalized_params={
             "be1": 1,

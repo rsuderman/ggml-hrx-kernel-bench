@@ -1,8 +1,8 @@
 {
   "schema": "ggml_hrx_kernel_bench.import_test_coverage.v1",
   "operation_count": 10,
-  "total_pass_case_count": 2,
-  "total_fail_case_count": 30,
+  "total_pass_case_count": 4,
+  "total_fail_case_count": 28,
   "operations": [
     {
       "op": "ADD",
@@ -11,8 +11,8 @@
     },
     {
       "op": "CPY",
-      "pass_case_count": 0,
-      "fail_case_count": 2
+      "pass_case_count": 2,
+      "fail_case_count": 0
     },
     {
       "op": "FLASH_ATTN_EXT",

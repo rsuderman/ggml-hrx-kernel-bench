@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from collections import Counter, defaultdict
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 import yaml
 
@@ -24,6 +26,18 @@ IMPORT_TEST_COVERAGE_SCHEMA = "ggml_hrx_kernel_bench.import_test_coverage.v1"
 GENERATED_KERNEL_TESTS_SCHEMA = "ggml_hrx_kernel_bench.generated_kernel_tests.v1"
 
 
+@dataclass(frozen=True)
+class TensorSourceDescriptor:
+    dtype: str
+    extents: tuple[int, ...]
+    byte_strides: tuple[int, ...] | None = None
+
+
+_TENSOR_SOURCE_RE = re.compile(
+    r"^\s*(?P<dtype>[A-Za-z0-9_]+)\[(?P<extents>[0-9,\s]+)\](?:nb\[(?P<byte_strides>[0-9,\s]+)\])?\s*$"
+)
+
+
 def _expect(condition: bool, message: str) -> None:
     if not condition:
         raise RuntimeError(message)
@@ -38,6 +52,89 @@ def _normalize_value(value: Any) -> Any:
     if isinstance(value, list):
         return [_normalize_value(current) for current in value]
     return value
+
+
+def _parse_int_tuple(raw: str) -> tuple[int, ...]:
+    values: list[int] = []
+    for item in raw.split(","):
+        text = item.strip()
+        if not text:
+            raise ValueError("empty tensor descriptor integer field")
+        values.append(int(text))
+    return tuple(values)
+
+
+def _split_tensor_sources(raw: str) -> list[str]:
+    parts: list[str] = []
+    start = 0
+    depth = 0
+    for index, char in enumerate(raw):
+        if char == "[":
+            depth += 1
+        elif char == "]":
+            depth -= 1
+            if depth < 0:
+                raise ValueError("unbalanced tensor source descriptor")
+        elif char == "," and depth == 0:
+            parts.append(raw[start:index].strip())
+            start = index + 1
+    if depth != 0:
+        raise ValueError("unbalanced tensor source descriptor")
+    tail = raw[start:].strip()
+    if tail:
+        parts.append(tail)
+    return parts
+
+
+def _parse_tensor_sources(raw: Any) -> list[TensorSourceDescriptor]:
+    if not isinstance(raw, str) or not raw.strip():
+        return []
+    descriptors: list[TensorSourceDescriptor] = []
+    for part in _split_tensor_sources(raw):
+        match = _TENSOR_SOURCE_RE.match(part)
+        if match is None:
+            return []
+        byte_strides = match.group("byte_strides")
+        descriptors.append(
+            TensorSourceDescriptor(
+                dtype=match.group("dtype"),
+                extents=_parse_int_tuple(match.group("extents")),
+                byte_strides=_parse_int_tuple(byte_strides) if byte_strides else None,
+            )
+        )
+    return descriptors
+
+
+def _normalize_case_dtype_for_op(
+    op_name: str,
+    group_dtype: dict[str, Any],
+    normalized_case: dict[str, Any],
+) -> dict[str, Any]:
+    dtype = dict(group_dtype)
+    sources = _parse_tensor_sources(normalized_case.get("sources"))
+    if sources:
+        for index, source in enumerate(sources):
+            dtype.setdefault(f"type_src{index}", source.dtype)
+        dtype.setdefault("type_src", sources[0].dtype)
+
+    if op_name == "CPY" and len(sources) == 2:
+        dtype.setdefault("type_dst", sources[1].dtype)
+
+    if op_name in {"GET_ROWS", "ROPE", "SET_ROWS"} and len(sources) > 1:
+        dtype.setdefault("type_idx", sources[1].dtype)
+    if op_name in {"GET_ROWS", "ROPE"}:
+        dtype.setdefault("type_idx", "i32")
+
+    if op_name == "MUL_MAT" and len(sources) > 1:
+        dtype.setdefault("type_a", sources[0].dtype)
+        dtype.setdefault("type_b", sources[1].dtype)
+
+    if op_name == "GET_ROWS" and "type" not in dtype and "type_src" in dtype:
+        dtype["type"] = dtype["type_src"]
+    if "type" not in dtype and "type_dst" in dtype:
+        dtype["type"] = dtype["type_dst"]
+
+    return _normalize_value(dtype)
 
 
 def _dtype_label(dtype: dict[str, Any]) -> str:
@@ -103,10 +200,11 @@ def load_grouped_yaml_suite(path: Path) -> ImportedSuite:
                     f"ops.{op_name}[{group_index}].cases[{case_index}] must be a mapping",
                 )
                 normalized_case = _normalize_value(raw_case)
+                case_dtype = _normalize_case_dtype_for_op(op_name, dtype, normalized_case)
                 cases.append(
                     ImportedCase(
                         op=op_name,
-                        dtype=dtype,
+                        dtype=case_dtype,
                         raw_case=normalized_case,
                         normalized_params=normalized_case,
                         source_path=str(path),

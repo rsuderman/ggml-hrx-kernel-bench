@@ -1,7 +1,8 @@
 ops:
   ADD:
     - dtype:
-        type: f32
+        type_dst: f32
+        type_src: f32
       cases:
         - name: ffn_inp-0
           ne: [4096, 1, 1, 1]
@@ -13,7 +14,8 @@ ops:
           sources: "f32[4096,512,1,1],f32[4096,512,1,1]"
   CPY:
     - dtype:
-        type: f16
+        type_dst: f16
+        type_src: f32
       cases:
         - name: attn_inp_kq_mask
           ne: [8192, 1, 1, 1]
@@ -25,7 +27,8 @@ ops:
           sources: "f32[8192,512,1,1],f16[8192,512,1,1]"
   FLASH_ATTN_EXT:
     - dtype:
-        type: f32
+        type_dst: f32
+        type_src: f32
       cases:
         - name: __fattn__-0
           ne: [128, 32, 1, 1]
@@ -37,7 +40,20 @@ ops:
           sources: "f32[128,512,32,1]nb[4,16384,512,8388608],f16[128,8192,8,1]nb[2,2048,256,16777216],f16[128,8192,8,1]nb[2,2048,256,16777216],f16[8192,512,1,1]"
   GET_ROWS:
     - dtype:
-        type: f32
+        type_dst: f32
+        type_src: f32
+      cases:
+        - name: node_986
+          ne: [4096, 1, 1, 1]
+          op_params: []
+          sources: "f32[4096,1,1,1],i32[1,1,1,1]"
+        - name: node_986
+          ne: [4096, 512, 1, 1]
+          op_params: []
+          sources: "f32[4096,512,1,1],i32[512,1,1,1]"
+    - dtype:
+        type_dst: f32
+        type_src: q8_0
       cases:
         - name: embd
           ne: [4096, 1, 1, 1]
@@ -47,17 +63,10 @@ ops:
           ne: [4096, 512, 1, 1]
           op_params: []
           sources: "q8_0[4096,128256,1,1],i32[512,1,1,1]"
-        - name: node_986
-          ne: [4096, 1, 1, 1]
-          op_params: []
-          sources: "f32[4096,1,1,1],i32[1,1,1,1]"
-        - name: node_986
-          ne: [4096, 512, 1, 1]
-          op_params: []
-          sources: "f32[4096,512,1,1],i32[512,1,1,1]"
   MUL:
     - dtype:
-        type: f32
+        type_dst: f32
+        type_src: f32
       cases:
         - name: attn_norm-0
           ne: [4096, 1, 1, 1]
@@ -69,7 +78,8 @@ ops:
           sources: "f32[4096,512,1,1],f32[4096,1,1,1]"
   MUL_MAT:
     - dtype:
-        type: f32
+        type_dst: f32
+        type_src: q8_0
       cases:
         - name: Qcur-0
           ne: [4096, 1, 1, 1]
@@ -113,7 +123,8 @@ ops:
           sources: "q8_0[4096,128256,1,1],f32[4096,512,1,1]"
   RMS_NORM:
     - dtype:
-        type: f32
+        type_dst: f32
+        type_src: f32
       cases:
         - name: norm-0
           ne: [4096, 1, 1, 1]
@@ -125,7 +136,8 @@ ops:
           sources: "f32[4096,512,1,1]"
   ROPE:
     - dtype:
-        type: f32
+        type_dst: f32
+        type_src: f32
       cases:
         - name: Kcur-0
           ne: [128, 8, 1, 1]
@@ -145,7 +157,8 @@ ops:
           sources: "f32[128,32,512,1],i32[512,1,1,1]"
   SET_ROWS:
     - dtype:
-        type: f16
+        type_dst: f16
+        type_src: f32
       cases:
         - name: cache_k_l0
           ne: [1024, 8192, 1, 1]
@@ -157,7 +170,8 @@ ops:
           sources: "f32[1024,512,1,1],i64[512,1,1,1],f16[1024,8192,1,1]"
   SWIGLU:
     - dtype:
-        type: f32
+        type_dst: f32
+        type_src: f32
       cases:
         - name: ffn_swiglu-0
           ne: [14336, 1, 1, 1]

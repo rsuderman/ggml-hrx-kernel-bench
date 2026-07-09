@@ -1,7 +1,8 @@
 ops:
   ABS:
     - dtype:
-        type: f16
+        type_dst: f16
+        type_src: f16
       cases:
         - ne_a: [128, 2, 2, 2]
           v: 0
@@ -12,7 +13,8 @@ ops:
         - ne_a: [5, 7, 11, 13]
           v: 1
     - dtype:
-        type: f32
+        type_dst: f32
+        type_src: f32
       cases:
         - ne_a: [128, 2, 2, 2]
           v: 0
@@ -24,7 +26,8 @@ ops:
           v: 1
   ACC:
     - dtype:
-        type: f32
+        type_dst: f32
+        type_src: f32
       cases:
         - ne_a: [256, 17, 1, 1]
           ne_b: [256, 16, 1, 1]
@@ -46,7 +49,8 @@ ops:
           stride_dim: 3
   ADD:
     - dtype:
-        type: f16
+        type_dst: f16
+        type_src: f16
       cases:
         - ne: [1, 1, 1, 1]
           nf: 1
@@ -229,7 +233,8 @@ ops:
           nr: [1, 1, 1, 1]
           perm1: [0, 1, 2, 3]
     - dtype:
-        type: f32
+        type_dst: f32
+        type_src: f32
       cases:
         - ne: [1, 1, 1, 1]
           nf: 1
@@ -445,7 +450,8 @@ ops:
           perm1: [0, 1, 2, 3]
   ADD1:
     - dtype:
-        type: f32
+        type_dst: f32
+        type_src: f32
       cases:
         - ne: [10, 5, 4, 3]
         - ne: [1024, 1024, 1, 1]
@@ -600,7 +606,8 @@ ops:
           n_token: 32
   ADD_RMS_NORM:
     - dtype:
-        type: f32
+        type_dst: f32
+        type_src: f32
       cases:
         - broadcast: 0
           eps: 0.0
@@ -679,7 +686,8 @@ ops:
           ne: [64, 5, 4, 3]
   ARANGE:
     - dtype:
-        type: f32
+        type_dst: f32
+        type_src: f32
       cases:
         - start: 0.0
           step: 1.0
@@ -689,7 +697,8 @@ ops:
           stop: 1048576.0
   ARGMAX:
     - dtype:
-        type: f32
+        type_dst: f32
+        type_src: f32
       cases:
         - ne: [100, 10, 1, 1]
         - ne: [1024, 10, 1, 1]
@@ -700,7 +709,8 @@ ops:
         - ne: [5438, 3, 1, 1]
   ARGSORT:
     - dtype:
-        type: f32
+        type_dst: f32
+        type_src: f32
       cases:
         - ne: [1023, 1, 1, 1]
           order: 0
@@ -820,7 +830,8 @@ ops:
           order: 0
   CEIL:
     - dtype:
-        type: f16
+        type_dst: f16
+        type_src: f16
       cases:
         - ne: [10, 2, 2, 2]
         - ne: [1024, 1024, 1, 1]
@@ -834,7 +845,8 @@ ops:
         - ne_a: [5, 7, 11, 13]
           v: 1
     - dtype:
-        type: f32
+        type_dst: f32
+        type_src: f32
       cases:
         - ne: [10, 2, 2, 2]
         - ne: [1024, 1024, 1, 1]
@@ -849,7 +861,8 @@ ops:
           v: 1
   CLAMP:
     - dtype:
-        type: f16
+        type_dst: f16
+        type_src: f16
       cases:
         - max: 0.5
           min: -0.5
@@ -861,7 +874,8 @@ ops:
           min: -0.5
           ne: [7, 1, 5, 3]
     - dtype:
-        type: f32
+        type_dst: f32
+        type_src: f32
       cases:
         - max: 0.5
           min: -0.5
@@ -874,7 +888,8 @@ ops:
           ne: [7, 1, 5, 3]
   CONCAT:
     - dtype:
-        type: f32
+        type_dst: f32
+        type_src: f32
       cases:
         - dim: 0
           ne_a: [11, 12, 1, 1]
@@ -957,7 +972,8 @@ ops:
           ne_b_d: 7
           v: 3
     - dtype:
-        type: i32
+        type_dst: i32
+        type_src: i32
       cases:
         - dim: 0
           ne_a: [11, 12, 13, 14]
@@ -1025,7 +1041,8 @@ ops:
           v: 3
   CONT:
     - dtype:
-        type: bf16
+        type_dst: bf16
+        type_src: bf16
       cases:
         - ne: [1, 4, 4, 1]
           use_view_slice: 0
@@ -1040,7 +1057,8 @@ ops:
         - ne: [2, 3, 5, 7]
           use_view_slice: 0
     - dtype:
-        type: f16
+        type_dst: f16
+        type_src: f16
       cases:
         - ne: [1, 4, 4, 1]
           use_view_slice: 0
@@ -1055,7 +1073,8 @@ ops:
         - ne: [2, 3, 5, 7]
           use_view_slice: 0
     - dtype:
-        type: f32
+        type_dst: f32
+        type_src: f32
       cases:
         - ne: [1, 4, 4, 1]
           use_view_slice: 0
@@ -1082,7 +1101,8 @@ ops:
         - ne: [2, 3, 5, 7]
           use_view_slice: 1
     - dtype:
-        type: i32
+        type_dst: i32
+        type_src: i32
       cases:
         - ne: [1, 4, 4, 1]
           use_view_slice: 0
@@ -18496,20 +18516,23 @@ ops:
           stride: 1
   COS:
     - dtype:
-        type: f16
+        type_dst: f16
+        type_src: f16
       cases:
         - ne: [10, 2, 2, 2]
         - ne: [1024, 1024, 1, 1]
         - ne: [7, 1, 5, 3]
     - dtype:
-        type: f32
+        type_dst: f32
+        type_src: f32
       cases:
         - ne: [10, 2, 2, 2]
         - ne: [1024, 1024, 1, 1]
         - ne: [7, 1, 5, 3]
   COUNT_EQUAL:
     - dtype:
-        type: f32
+        type_dst: f32
+        type_src: f32
       cases:
         - ne: [4, 500, 1, 1]
         - ne: [4, 5000, 1, 1]
@@ -20664,19 +20687,22 @@ ops:
           permute_src: [0, 3, 1, 2]
   CROSS_ENTROPY_LOSS:
     - dtype:
-        type: f32
+        type_dst: f32
+        type_src: f32
       cases:
         - ne: [10, 5, 4, 3]
         - ne: [30000, 1, 1, 1]
   CROSS_ENTROPY_LOSS_BACK:
     - dtype:
-        type: f32
+        type_dst: f32
+        type_src: f32
       cases:
         - ne: [10, 5, 4, 3]
         - ne: [30000, 1, 1, 1]
   CUMSUM:
     - dtype:
-        type: f32
+        type_dst: f32
+        type_src: f32
       cases:
         - ne: [10, 5, 4, 3]
         - ne: [1023, 5, 4, 3]
@@ -20695,14 +20721,16 @@ ops:
         - ne: [512, 5, 4, 3]
   DIAG:
     - dtype:
-        type: f32
+        type_dst: f32
+        type_src: f32
       cases:
         - ne: [10, 1, 4, 3]
         - ne: [256, 1, 8, 16]
         - ne: [79, 1, 19, 13]
   DIAG_MASK_INF:
     - dtype:
-        type: f32
+        type_dst: f32
+        type_src: f32
       cases:
         - n_past: 5
           ne: [10, 10, 1, 1]
@@ -20712,7 +20740,8 @@ ops:
           ne: [10, 10, 3, 2]
   DIV:
     - dtype:
-        type: f16
+        type_dst: f16
+        type_src: f16
       cases:
         - ne: [1, 1, 1, 1]
           nf: 1
@@ -20895,7 +20924,8 @@ ops:
           nr: [1, 1, 1, 1]
           perm1: [0, 1, 2, 3]
     - dtype:
-        type: f32
+        type_dst: f32
+        type_src: f32
       cases:
         - ne: [1, 1, 1, 1]
           nf: 1
@@ -21083,7 +21113,8 @@ ops:
           perm1: [0, 1, 2, 3]
   DUP:
     - dtype:
-        type: f16
+        type_dst: f16
+        type_src: f16
       cases:
         - ne: [10, 10, 20, 1]
         - ne: [10, 10, 5, 1]
@@ -21091,7 +21122,8 @@ ops:
         - ne: [10, 10, 5, 1]
           permute: [1, 0, 2, 3]
     - dtype:
-        type: f32
+        type_dst: f32
+        type_src: f32
       cases:
         - ne: [10, 10, 20, 1]
         - ne: [10, 10, 5, 1]
@@ -21099,7 +21131,8 @@ ops:
         - ne: [10, 10, 5, 1]
           permute: [1, 0, 2, 3]
     - dtype:
-        type: i16
+        type_dst: i16
+        type_src: i16
       cases:
         - ne: [10, 10, 20, 1]
         - ne: [10, 8, 3, 1]
@@ -21107,12 +21140,14 @@ ops:
         - ne: [10, 8, 3, 1]
           permute: [1, 2, 0, 3]
     - dtype:
-        type: i32
+        type_dst: i32
+        type_src: i32
       cases:
         - ne: [10, 10, 20, 1]
   ELU:
     - dtype:
-        type: f16
+        type_dst: f16
+        type_src: f16
       cases:
         - ne_a: [128, 2, 2, 2]
           v: 0
@@ -21123,7 +21158,8 @@ ops:
         - ne_a: [5, 7, 11, 13]
           v: 1
     - dtype:
-        type: f32
+        type_dst: f32
+        type_src: f32
       cases:
         - ne_a: [128, 2, 2, 2]
           v: 0
@@ -21135,7 +21171,8 @@ ops:
           v: 1
   EXP:
     - dtype:
-        type: f16
+        type_dst: f16
+        type_src: f16
       cases:
         - ne_a: [128, 2, 2, 2]
           v: 0
@@ -21146,7 +21183,8 @@ ops:
         - ne_a: [5, 7, 11, 13]
           v: 1
     - dtype:
-        type: f32
+        type_dst: f32
+        type_src: f32
       cases:
         - ne_a: [128, 2, 2, 2]
           v: 0
@@ -21158,7 +21196,8 @@ ops:
           v: 1
   EXPM1:
     - dtype:
-        type: f16
+        type_dst: f16
+        type_src: f16
       cases:
         - ne_a: [128, 2, 2, 2]
           v: 0
@@ -21169,7 +21208,8 @@ ops:
         - ne_a: [5, 7, 11, 13]
           v: 1
     - dtype:
-        type: f32
+        type_dst: f32
+        type_src: f32
       cases:
         - ne_a: [128, 2, 2, 2]
           v: 0
@@ -21181,7 +21221,8 @@ ops:
           v: 1
   FILL:
     - dtype:
-        type: f32
+        type_dst: f32
+        type_src: f32
       cases:
         - c: -152.0
           ne: [800, 600, 4, 4]
@@ -21449,7 +21490,8 @@ ops:
           sinks: 1
   FLOOR:
     - dtype:
-        type: f16
+        type_dst: f16
+        type_src: f16
       cases:
         - ne: [10, 2, 2, 2]
         - ne: [1024, 1024, 1, 1]
@@ -21463,7 +21505,8 @@ ops:
         - ne_a: [5, 7, 11, 13]
           v: 1
     - dtype:
-        type: f32
+        type_dst: f32
+        type_src: f32
       cases:
         - ne: [10, 2, 2, 2]
         - ne: [1024, 1024, 1, 1]
@@ -21478,7 +21521,8 @@ ops:
           v: 1
   GATED_DELTA_NET:
     - dtype:
-        type: f32
+        type_dst: f32
+        type_src: f32
       cases:
         - head_count: 16
           head_size: 64
@@ -21608,7 +21652,8 @@ ops:
           v_repeat: 2
   GATED_LINEAR_ATTN:
     - dtype:
-        type: f32
+        type_dst: f32
+        type_src: f32
       cases:
         - head_count: 32
           head_size: 64
@@ -21628,7 +21673,8 @@ ops:
           n_seqs: 4
   GEGLU:
     - dtype:
-        type: f16
+        type_dst: f16
+        type_src: f16
       cases:
         - ne_a: [128, 2, 2, 2]
           split: true
@@ -21667,7 +21713,8 @@ ops:
           swapped: 1
           v: 1
     - dtype:
-        type: f32
+        type_dst: f32
+        type_src: f32
       cases:
         - ne_a: [128, 2, 2, 2]
           split: true
@@ -21707,7 +21754,8 @@ ops:
           v: 1
   GEGLU_ERF:
     - dtype:
-        type: f16
+        type_dst: f16
+        type_src: f16
       cases:
         - ne_a: [128, 2, 2, 2]
           split: true
@@ -21746,7 +21794,8 @@ ops:
           swapped: 1
           v: 1
     - dtype:
-        type: f32
+        type_dst: f32
+        type_src: f32
       cases:
         - ne_a: [128, 2, 2, 2]
           split: true
@@ -21786,7 +21835,8 @@ ops:
           v: 1
   GEGLU_QUICK:
     - dtype:
-        type: f16
+        type_dst: f16
+        type_src: f16
       cases:
         - ne_a: [128, 2, 2, 2]
           split: true
@@ -21825,7 +21875,8 @@ ops:
           swapped: 1
           v: 1
     - dtype:
-        type: f32
+        type_dst: f32
+        type_src: f32
       cases:
         - ne_a: [128, 2, 2, 2]
           split: true
@@ -21865,7 +21916,8 @@ ops:
           v: 1
   GELU:
     - dtype:
-        type: f16
+        type_dst: f16
+        type_src: f16
       cases:
         - ne_a: [128, 2, 2, 2]
           v: 0
@@ -21876,7 +21928,8 @@ ops:
         - ne_a: [5, 7, 11, 13]
           v: 1
     - dtype:
-        type: f32
+        type_dst: f32
+        type_src: f32
       cases:
         - ne_a: [128, 2, 2, 2]
           v: 0
@@ -21888,7 +21941,8 @@ ops:
           v: 1
   GELU_ERF:
     - dtype:
-        type: f16
+        type_dst: f16
+        type_src: f16
       cases:
         - ne_a: [128, 2, 2, 2]
           v: 0
@@ -21899,7 +21953,8 @@ ops:
         - ne_a: [5, 7, 11, 13]
           v: 1
     - dtype:
-        type: f32
+        type_dst: f32
+        type_src: f32
       cases:
         - ne_a: [128, 2, 2, 2]
           v: 0
@@ -21911,7 +21966,8 @@ ops:
           v: 1
   GELU_QUICK:
     - dtype:
-        type: f16
+        type_dst: f16
+        type_src: f16
       cases:
         - ne_a: [128, 2, 2, 2]
           v: 0
@@ -21922,7 +21978,8 @@ ops:
         - ne_a: [5, 7, 11, 13]
           v: 1
     - dtype:
-        type: f32
+        type_dst: f32
+        type_src: f32
       cases:
         - ne_a: [128, 2, 2, 2]
           v: 0
@@ -21934,7 +21991,8 @@ ops:
           v: 1
   GET_ROWS:
     - dtype:
-        type: bf16
+        type_dst: bf16
+        type_src: bf16
       cases:
         - be1: 1
           be2: 1
@@ -21961,7 +22019,8 @@ ops:
           r: 4
           v: 1
     - dtype:
-        type: f16
+        type_dst: f16
+        type_src: f16
       cases:
         - be1: 1
           be2: 1
@@ -21988,7 +22047,8 @@ ops:
           r: 4
           v: 1
     - dtype:
-        type: f32
+        type_dst: f32
+        type_src: f32
       cases:
         - be1: 1
           be2: 1
@@ -22039,7 +22099,8 @@ ops:
           r: 4
           v: 0
     - dtype:
-        type: i32
+        type_dst: i32
+        type_src: i32
       cases:
         - be1: 1
           be2: 1
@@ -22066,7 +22127,8 @@ ops:
           r: 4
           v: 1
     - dtype:
-        type: iq1_m
+        type_dst: iq1_m
+        type_src: iq1_m
       cases:
         - be1: 1
           be2: 1
@@ -22093,7 +22155,8 @@ ops:
           r: 4
           v: 1
     - dtype:
-        type: iq1_s
+        type_dst: iq1_s
+        type_src: iq1_s
       cases:
         - be1: 1
           be2: 1
@@ -22120,7 +22183,8 @@ ops:
           r: 4
           v: 1
     - dtype:
-        type: iq2_s
+        type_dst: iq2_s
+        type_src: iq2_s
       cases:
         - be1: 1
           be2: 1
@@ -22147,7 +22211,8 @@ ops:
           r: 4
           v: 1
     - dtype:
-        type: iq2_xs
+        type_dst: iq2_xs
+        type_src: iq2_xs
       cases:
         - be1: 1
           be2: 1
@@ -22174,7 +22239,8 @@ ops:
           r: 4
           v: 1
     - dtype:
-        type: iq2_xxs
+        type_dst: iq2_xxs
+        type_src: iq2_xxs
       cases:
         - be1: 1
           be2: 1
@@ -22201,7 +22267,8 @@ ops:
           r: 4
           v: 1
     - dtype:
-        type: iq3_s
+        type_dst: iq3_s
+        type_src: iq3_s
       cases:
         - be1: 1
           be2: 1
@@ -22228,7 +22295,8 @@ ops:
           r: 4
           v: 1
     - dtype:
-        type: iq3_xxs
+        type_dst: iq3_xxs
+        type_src: iq3_xxs
       cases:
         - be1: 1
           be2: 1
@@ -22255,7 +22323,8 @@ ops:
           r: 4
           v: 1
     - dtype:
-        type: iq4_nl
+        type_dst: iq4_nl
+        type_src: iq4_nl
       cases:
         - be1: 1
           be2: 1
@@ -22282,7 +22351,8 @@ ops:
           r: 4
           v: 1
     - dtype:
-        type: iq4_xs
+        type_dst: iq4_xs
+        type_src: iq4_xs
       cases:
         - be1: 1
           be2: 1
@@ -22309,7 +22379,8 @@ ops:
           r: 4
           v: 1
     - dtype:
-        type: mxfp4
+        type_dst: mxfp4
+        type_src: mxfp4
       cases:
         - be1: 1
           be2: 1
@@ -22336,7 +22407,8 @@ ops:
           r: 4
           v: 1
     - dtype:
-        type: nvfp4
+        type_dst: nvfp4
+        type_src: nvfp4
       cases:
         - be1: 1
           be2: 1
@@ -22363,7 +22435,8 @@ ops:
           r: 4
           v: 1
     - dtype:
-        type: q2_K
+        type_dst: q2_K
+        type_src: q2_K
       cases:
         - be1: 1
           be2: 1
@@ -22390,7 +22463,8 @@ ops:
           r: 4
           v: 1
     - dtype:
-        type: q3_K
+        type_dst: q3_K
+        type_src: q3_K
       cases:
         - be1: 1
           be2: 1
@@ -22417,7 +22491,8 @@ ops:
           r: 4
           v: 1
     - dtype:
-        type: q4_0
+        type_dst: q4_0
+        type_src: q4_0
       cases:
         - be1: 1
           be2: 1
@@ -22462,7 +22537,8 @@ ops:
           r: 4
           v: 0
     - dtype:
-        type: q4_1
+        type_dst: q4_1
+        type_src: q4_1
       cases:
         - be1: 1
           be2: 1
@@ -22489,7 +22565,8 @@ ops:
           r: 4
           v: 1
     - dtype:
-        type: q4_K
+        type_dst: q4_K
+        type_src: q4_K
       cases:
         - be1: 1
           be2: 1
@@ -22516,7 +22593,8 @@ ops:
           r: 4
           v: 1
     - dtype:
-        type: q5_0
+        type_dst: q5_0
+        type_src: q5_0
       cases:
         - be1: 1
           be2: 1
@@ -22543,7 +22621,8 @@ ops:
           r: 4
           v: 1
     - dtype:
-        type: q5_1
+        type_dst: q5_1
+        type_src: q5_1
       cases:
         - be1: 1
           be2: 1
@@ -22570,7 +22649,8 @@ ops:
           r: 4
           v: 1
     - dtype:
-        type: q5_K
+        type_dst: q5_K
+        type_src: q5_K
       cases:
         - be1: 1
           be2: 1
@@ -22597,7 +22677,8 @@ ops:
           r: 4
           v: 1
     - dtype:
-        type: q6_K
+        type_dst: q6_K
+        type_src: q6_K
       cases:
         - be1: 1
           be2: 1
@@ -22624,7 +22705,8 @@ ops:
           r: 4
           v: 1
     - dtype:
-        type: q8_0
+        type_dst: q8_0
+        type_src: q8_0
       cases:
         - be1: 1
           be2: 1
@@ -22652,7 +22734,8 @@ ops:
           v: 1
   GET_ROWS_BACK:
     - dtype:
-        type: bf16
+        type_dst: bf16
+        type_src: bf16
       cases:
         - b: 1
           m: 5
@@ -22665,7 +22748,8 @@ ops:
           r: 4
           v: 1
     - dtype:
-        type: f16
+        type_dst: f16
+        type_src: f16
       cases:
         - b: 1
           m: 5
@@ -22678,7 +22762,8 @@ ops:
           r: 4
           v: 1
     - dtype:
-        type: f32
+        type_dst: f32
+        type_src: f32
       cases:
         - b: 1
           m: 5
@@ -22696,7 +22781,8 @@ ops:
           r: 2
           v: 0
     - dtype:
-        type: i32
+        type_dst: i32
+        type_src: i32
       cases:
         - b: 1
           m: 5
@@ -22709,7 +22795,8 @@ ops:
           r: 4
           v: 1
     - dtype:
-        type: iq1_m
+        type_dst: iq1_m
+        type_src: iq1_m
       cases:
         - b: 1
           m: 5
@@ -22722,7 +22809,8 @@ ops:
           r: 4
           v: 1
     - dtype:
-        type: iq1_s
+        type_dst: iq1_s
+        type_src: iq1_s
       cases:
         - b: 1
           m: 5
@@ -22735,7 +22823,8 @@ ops:
           r: 4
           v: 1
     - dtype:
-        type: iq2_s
+        type_dst: iq2_s
+        type_src: iq2_s
       cases:
         - b: 1
           m: 5
@@ -22748,7 +22837,8 @@ ops:
           r: 4
           v: 1
     - dtype:
-        type: iq2_xs
+        type_dst: iq2_xs
+        type_src: iq2_xs
       cases:
         - b: 1
           m: 5
@@ -22761,7 +22851,8 @@ ops:
           r: 4
           v: 1
     - dtype:
-        type: iq2_xxs
+        type_dst: iq2_xxs
+        type_src: iq2_xxs
       cases:
         - b: 1
           m: 5
@@ -22774,7 +22865,8 @@ ops:
           r: 4
           v: 1
     - dtype:
-        type: iq3_s
+        type_dst: iq3_s
+        type_src: iq3_s
       cases:
         - b: 1
           m: 5
@@ -22787,7 +22879,8 @@ ops:
           r: 4
           v: 1
     - dtype:
-        type: iq3_xxs
+        type_dst: iq3_xxs
+        type_src: iq3_xxs
       cases:
         - b: 1
           m: 5
@@ -22800,7 +22893,8 @@ ops:
           r: 4
           v: 1
     - dtype:
-        type: iq4_nl
+        type_dst: iq4_nl
+        type_src: iq4_nl
       cases:
         - b: 1
           m: 5
@@ -22813,7 +22907,8 @@ ops:
           r: 4
           v: 1
     - dtype:
-        type: iq4_xs
+        type_dst: iq4_xs
+        type_src: iq4_xs
       cases:
         - b: 1
           m: 5
@@ -22826,7 +22921,8 @@ ops:
           r: 4
           v: 1
     - dtype:
-        type: mxfp4
+        type_dst: mxfp4
+        type_src: mxfp4
       cases:
         - b: 1
           m: 5
@@ -22839,7 +22935,8 @@ ops:
           r: 4
           v: 1
     - dtype:
-        type: nvfp4
+        type_dst: nvfp4
+        type_src: nvfp4
       cases:
         - b: 1
           m: 5
@@ -22852,7 +22949,8 @@ ops:
           r: 4
           v: 1
     - dtype:
-        type: q2_K
+        type_dst: q2_K
+        type_src: q2_K
       cases:
         - b: 1
           m: 5
@@ -22865,7 +22963,8 @@ ops:
           r: 4
           v: 1
     - dtype:
-        type: q3_K
+        type_dst: q3_K
+        type_src: q3_K
       cases:
         - b: 1
           m: 5
@@ -22878,7 +22977,8 @@ ops:
           r: 4
           v: 1
     - dtype:
-        type: q4_0
+        type_dst: q4_0
+        type_src: q4_0
       cases:
         - b: 1
           m: 5
@@ -22891,7 +22991,8 @@ ops:
           r: 4
           v: 1
     - dtype:
-        type: q4_1
+        type_dst: q4_1
+        type_src: q4_1
       cases:
         - b: 1
           m: 5
@@ -22904,7 +23005,8 @@ ops:
           r: 4
           v: 1
     - dtype:
-        type: q4_K
+        type_dst: q4_K
+        type_src: q4_K
       cases:
         - b: 1
           m: 5
@@ -22917,7 +23019,8 @@ ops:
           r: 4
           v: 1
     - dtype:
-        type: q5_0
+        type_dst: q5_0
+        type_src: q5_0
       cases:
         - b: 1
           m: 5
@@ -22930,7 +23033,8 @@ ops:
           r: 4
           v: 1
     - dtype:
-        type: q5_1
+        type_dst: q5_1
+        type_src: q5_1
       cases:
         - b: 1
           m: 5
@@ -22943,7 +23047,8 @@ ops:
           r: 4
           v: 1
     - dtype:
-        type: q5_K
+        type_dst: q5_K
+        type_src: q5_K
       cases:
         - b: 1
           m: 5
@@ -22956,7 +23061,8 @@ ops:
           r: 4
           v: 1
     - dtype:
-        type: q6_K
+        type_dst: q6_K
+        type_src: q6_K
       cases:
         - b: 1
           m: 5
@@ -22969,7 +23075,8 @@ ops:
           r: 4
           v: 1
     - dtype:
-        type: q8_0
+        type_dst: q8_0
+        type_src: q8_0
       cases:
         - b: 1
           m: 5
@@ -22983,7 +23090,8 @@ ops:
           v: 1
   GROUP_NORM:
     - dtype:
-        type: f32
+        type_dst: f32
+        type_src: f32
       cases:
         - eps: 1e-06
           ne: [64, 64, 320, 1]
@@ -22993,7 +23101,8 @@ ops:
           num_groups: 32
   GROUP_NORM_MUL_ADD:
     - dtype:
-        type: f32
+        type_dst: f32
+        type_src: f32
       cases:
         - eps: 1e-05
           ne: [64, 64, 320, 1]
@@ -23003,7 +23112,8 @@ ops:
           num_groups: 4
   HARDSIGMOID:
     - dtype:
-        type: f16
+        type_dst: f16
+        type_src: f16
       cases:
         - ne_a: [128, 2, 2, 2]
           v: 0
@@ -23014,7 +23124,8 @@ ops:
         - ne_a: [5, 7, 11, 13]
           v: 1
     - dtype:
-        type: f32
+        type_dst: f32
+        type_src: f32
       cases:
         - ne_a: [128, 2, 2, 2]
           v: 0
@@ -23026,7 +23137,8 @@ ops:
           v: 1
   HARDSWISH:
     - dtype:
-        type: f16
+        type_dst: f16
+        type_src: f16
       cases:
         - ne_a: [128, 2, 2, 2]
           v: 0
@@ -23037,7 +23149,8 @@ ops:
         - ne_a: [5, 7, 11, 13]
           v: 1
     - dtype:
-        type: f32
+        type_dst: f32
+        type_src: f32
       cases:
         - ne_a: [128, 2, 2, 2]
           v: 0
@@ -50536,7 +50649,8 @@ ops:
           v: 1
   L2_NORM:
     - dtype:
-        type: f32
+        type_dst: f32
+        type_src: f32
       cases:
         - eps: 0.0
           ne: [1025, 5, 4, 3]
@@ -50600,7 +50714,8 @@ ops:
           v: 1
   LEAKY_RELU:
     - dtype:
-        type: f16
+        type_dst: f16
+        type_src: f16
       cases:
         - ne_a: [10, 5, 4, 3]
           negative_slope: 0.1
@@ -50609,7 +50724,8 @@ ops:
         - ne_a: [7, 1, 5, 3]
           negative_slope: 0.1
     - dtype:
-        type: f32
+        type_dst: f32
+        type_src: f32
       cases:
         - ne_a: [10, 5, 4, 3]
           negative_slope: 0.1
@@ -50619,20 +50735,23 @@ ops:
           negative_slope: 0.1
   LOG:
     - dtype:
-        type: f16
+        type_dst: f16
+        type_src: f16
       cases:
         - ne: [10, 5, 4, 3]
         - ne: [1024, 1024, 1, 1]
         - ne: [7, 1, 5, 3]
     - dtype:
-        type: f32
+        type_dst: f32
+        type_src: f32
       cases:
         - ne: [10, 5, 4, 3]
         - ne: [1024, 1024, 1, 1]
         - ne: [7, 1, 5, 3]
   MEAN:
     - dtype:
-        type: f32
+        type_dst: f32
+        type_src: f32
       cases:
         - ne: [10, 5, 4, 3]
         - ne: [32, 1, 1, 1]
@@ -50643,7 +50762,8 @@ ops:
         - ne: [33, 256, 1, 1]
   MUL:
     - dtype:
-        type: f16
+        type_dst: f16
+        type_src: f16
       cases:
         - ne: [1, 1, 1, 1]
           nf: 1
@@ -50826,7 +50946,8 @@ ops:
           nr: [1, 1, 1, 1]
           perm1: [0, 1, 2, 3]
     - dtype:
-        type: f32
+        type_dst: f32
+        type_src: f32
       cases:
         - ne: [1, 1, 1, 1]
           nf: 1
@@ -65881,7 +66002,8 @@ ops:
           o: 1
   MUL_MAT_VEC_FUSION:
     - dtype:
-        type: f16
+        type_dst: f16
+        type_src: f16
       cases:
         - b: 0
           batch_dims: [1, 1]
@@ -66214,7 +66336,8 @@ ops:
           with_bias: 1
           with_gate: 1
     - dtype:
-        type: f32
+        type_dst: f32
+        type_src: f32
       cases:
         - b: 0
           batch_dims: [1, 1]
@@ -66547,7 +66670,8 @@ ops:
           with_bias: 1
           with_gate: 1
     - dtype:
-        type: iq2_xxs
+        type_dst: iq2_xxs
+        type_src: iq2_xxs
       cases:
         - b: 0
           batch_dims: [1, 1]
@@ -66880,7 +67004,8 @@ ops:
           with_bias: 1
           with_gate: 1
     - dtype:
-        type: mxfp4
+        type_dst: mxfp4
+        type_src: mxfp4
       cases:
         - b: 0
           batch_dims: [1, 1]
@@ -67213,7 +67338,8 @@ ops:
           with_bias: 1
           with_gate: 1
     - dtype:
-        type: nvfp4
+        type_dst: nvfp4
+        type_src: nvfp4
       cases:
         - b: 0
           batch_dims: [1, 1]
@@ -67546,7 +67672,8 @@ ops:
           with_bias: 1
           with_gate: 1
     - dtype:
-        type: q4_0
+        type_dst: q4_0
+        type_src: q4_0
       cases:
         - b: 0
           batch_dims: [1, 1]
@@ -67879,7 +68006,8 @@ ops:
           with_bias: 1
           with_gate: 1
     - dtype:
-        type: q4_1
+        type_dst: q4_1
+        type_src: q4_1
       cases:
         - b: 0
           batch_dims: [1, 1]
@@ -68212,7 +68340,8 @@ ops:
           with_bias: 1
           with_gate: 1
     - dtype:
-        type: q4_K
+        type_dst: q4_K
+        type_src: q4_K
       cases:
         - b: 0
           batch_dims: [1, 1]
@@ -68545,7 +68674,8 @@ ops:
           with_bias: 1
           with_gate: 1
     - dtype:
-        type: q8_0
+        type_dst: q8_0
+        type_src: q8_0
       cases:
         - b: 0
           batch_dims: [1, 1]
@@ -68879,7 +69009,8 @@ ops:
           with_gate: 1
   NEG:
     - dtype:
-        type: f16
+        type_dst: f16
+        type_src: f16
       cases:
         - ne_a: [128, 2, 2, 2]
           v: 0
@@ -68890,7 +69021,8 @@ ops:
         - ne_a: [5, 7, 11, 13]
           v: 1
     - dtype:
-        type: f32
+        type_dst: f32
+        type_src: f32
       cases:
         - ne_a: [128, 2, 2, 2]
           v: 0
@@ -68902,7 +69034,8 @@ ops:
           v: 1
   NORM:
     - dtype:
-        type: f32
+        type_dst: f32
+        type_src: f32
       cases:
         - eps: 0.0
           ne: [1025, 5, 4, 3]
@@ -68966,7 +69099,8 @@ ops:
           v: 1
   NORM_MUL_ADD:
     - dtype:
-        type: f32
+        type_dst: f32
+        type_src: f32
       cases:
         - broadcast: 0
           eps: 0.0
@@ -69030,12 +69164,14 @@ ops:
           ne: [64, 5, 4, 3]
   OPT_STEP_ADAMW:
     - dtype:
-        type: f32
+        type_dst: f32
+        type_src: f32
       cases:
         - ne: [10, 5, 4, 3]
   OPT_STEP_SGD:
     - dtype:
-        type: f32
+        type_dst: f32
+        type_src: f32
       cases:
         - ne: [10, 5, 4, 3]
   OUT_PROD:
@@ -76025,7 +76161,8 @@ ops:
           trans_b: 0
   PAD:
     - dtype:
-        type: f32
+        type_dst: f32
+        type_src: f32
       cases:
         - circular: 0
           lp0: 0
@@ -76180,7 +76317,8 @@ ops:
           pad_1: 3
   PAD_REFLECT_1D:
     - dtype:
-        type: f32
+        type_dst: f32
+        type_src: f32
       cases:
         - ne_a: [3000, 384, 4, 1]
           pad_0: 10
@@ -77296,7 +77434,8 @@ ops:
           s1: 2
   REGLU:
     - dtype:
-        type: f16
+        type_dst: f16
+        type_src: f16
       cases:
         - ne_a: [128, 2, 2, 2]
           split: true
@@ -77335,7 +77474,8 @@ ops:
           swapped: 1
           v: 1
     - dtype:
-        type: f32
+        type_dst: f32
+        type_src: f32
       cases:
         - ne_a: [128, 2, 2, 2]
           split: true
@@ -77375,7 +77515,8 @@ ops:
           v: 1
   RELU:
     - dtype:
-        type: f16
+        type_dst: f16
+        type_src: f16
       cases:
         - ne_a: [128, 2, 2, 2]
           v: 0
@@ -77386,7 +77527,8 @@ ops:
         - ne_a: [5, 7, 11, 13]
           v: 1
     - dtype:
-        type: f32
+        type_dst: f32
+        type_src: f32
       cases:
         - ne_a: [128, 2, 2, 2]
           v: 0
@@ -77398,7 +77540,8 @@ ops:
           v: 1
   REPEAT:
     - dtype:
-        type: f32
+        type_dst: f32
+        type_src: f32
       cases:
         - ne: [10, 5, 4, 1]
           nr: [1, 1, 1, 1]
@@ -77421,14 +77564,16 @@ ops:
         - ne: [10, 5, 4, 3]
           nr: [2, 1, 1, 1]
     - dtype:
-        type: i16
+        type_dst: i16
+        type_src: i16
       cases:
         - ne: [10, 5, 4, 1]
           nr: [1, 1, 1, 2]
         - ne: [10, 5, 4, 3]
           nr: [1, 1, 1, 2]
     - dtype:
-        type: i32
+        type_dst: i32
+        type_src: i32
       cases:
         - ne: [10, 5, 4, 1]
           nr: [2, 1, 1, 1]
@@ -77436,7 +77581,8 @@ ops:
           nr: [2, 1, 1, 1]
   REPEAT_BACK:
     - dtype:
-        type: f32
+        type_dst: f32
+        type_src: f32
       cases:
         - ne: [8, 6, 4, 2]
           nr: [1, 1, 1, 1]
@@ -77470,7 +77616,8 @@ ops:
           v: 1
   RMS_NORM:
     - dtype:
-        type: f32
+        type_dst: f32
+        type_src: f32
       cases:
         - eps: 0.0
           inplace: 0
@@ -77558,7 +77705,8 @@ ops:
           v: 0
   RMS_NORM_BACK:
     - dtype:
-        type: f32
+        type_dst: f32
+        type_src: f32
       cases:
         - eps: 0.0
           ne: [1025, 5, 4, 3]
@@ -77582,7 +77730,8 @@ ops:
           ne: [64, 5, 4, 3]
   RMS_NORM_MUL_ADD:
     - dtype:
-        type: f32
+        type_dst: f32
+        type_src: f32
       cases:
         - broadcast: 0
           eps: 0.0
@@ -78038,7 +78187,8 @@ ops:
           shift4: -1
   ROPE:
     - dtype:
-        type: f16
+        type_dst: f16
+        type_src: f16
       cases:
         - af: 1.0
           ef: 0.0
@@ -78981,7 +79131,8 @@ ops:
           ne_a: [128, 32, 2, 3]
           v: 1
     - dtype:
-        type: f32
+        type_dst: f32
+        type_src: f32
       cases:
         - af: 1.0
           ef: 0.0
@@ -80925,7 +81076,8 @@ ops:
           v: 1
   ROPE_BACK:
     - dtype:
-        type: f16
+        type_dst: f16
+        type_src: f16
       cases:
         - af: 1.0
           ef: 0.0
@@ -81568,7 +81720,8 @@ ops:
           ne_a: [64, 128, 2, 1]
           v: 1
     - dtype:
-        type: f32
+        type_dst: f32
+        type_src: f32
       cases:
         - af: 1.0
           ef: 0.0
@@ -83212,8 +83365,9 @@ ops:
           v: 1
   ROPE_SET_ROWS:
     - dtype:
-        type: f16
+        type_dst: f16
         type_idx: i64
+        type_src: f16
       cases:
         - mode: 0
           ne_a: [128, 32, 1, 1]
@@ -83264,8 +83418,9 @@ ops:
         - mode: 8
           ne_a: [128, 32, 8, 3]
     - dtype:
-        type: f32
+        type_dst: f32
         type_idx: i64
+        type_src: f32
       cases:
         - mode: 0
           ne_a: [128, 32, 1, 1]
@@ -83317,7 +83472,8 @@ ops:
           ne_a: [128, 32, 8, 3]
   ROUND:
     - dtype:
-        type: f16
+        type_dst: f16
+        type_src: f16
       cases:
         - ne: [10, 2, 2, 2]
         - ne: [1024, 1024, 1, 1]
@@ -83331,7 +83487,8 @@ ops:
         - ne_a: [5, 7, 11, 13]
           v: 1
     - dtype:
-        type: f32
+        type_dst: f32
+        type_src: f32
       cases:
         - ne: [10, 2, 2, 2]
         - ne: [1024, 1024, 1, 1]
@@ -83346,7 +83503,8 @@ ops:
           v: 1
   RWKV_WKV6:
     - dtype:
-        type: f32
+        type_dst: f32
+        type_src: f32
       cases:
         - head_count: 32
           head_size: 64
@@ -83366,7 +83524,8 @@ ops:
           n_seqs: 4
   RWKV_WKV7:
     - dtype:
-        type: f32
+        type_dst: f32
+        type_src: f32
       cases:
         - head_count: 32
           head_size: 64
@@ -83386,7 +83545,8 @@ ops:
           n_seqs: 4
   SCALE:
     - dtype:
-        type: f32
+        type_dst: f32
+        type_src: f32
       cases:
         - bias: 0.0
           inplace: 0
@@ -83451,8 +83611,9 @@ ops:
           ne: [6, 5, 4, 3]
   SET_ROWS:
     - dtype:
-        type: bf16
+        type_dst: bf16
         type_idx: i64
+        type_src: bf16
       cases:
         - ne: [256, 11, 1, 1]
           nr23: [2, 3]
@@ -83535,8 +83696,9 @@ ops:
           r: 1
           v: 1
     - dtype:
-        type: f16
+        type_dst: f16
         type_idx: i64
+        type_src: f16
       cases:
         - ne: [256, 11, 1, 1]
           nr23: [2, 3]
@@ -83619,16 +83781,18 @@ ops:
           r: 1
           v: 1
     - dtype:
-        type: f32
+        type_dst: f32
         type_idx: i32
+        type_src: f32
       cases:
         - ne: [1, 8, 1, 3]
           nr23: [1, 1]
           r: 2
           v: 0
     - dtype:
-        type: f32
+        type_dst: f32
         type_idx: i64
+        type_src: f32
       cases:
         - ne: [1, 8, 1, 3]
           nr23: [1, 1]
@@ -83715,8 +83879,9 @@ ops:
           r: 1
           v: 1
     - dtype:
-        type: iq1_m
+        type_dst: iq1_m
         type_idx: i64
+        type_src: iq1_m
       cases:
         - ne: [256, 11, 1, 1]
           nr23: [2, 3]
@@ -83767,8 +83932,9 @@ ops:
           r: 2
           v: 1
     - dtype:
-        type: iq1_s
+        type_dst: iq1_s
         type_idx: i64
+        type_src: iq1_s
       cases:
         - ne: [256, 11, 1, 1]
           nr23: [2, 3]
@@ -83819,8 +83985,9 @@ ops:
           r: 2
           v: 1
     - dtype:
-        type: iq2_s
+        type_dst: iq2_s
         type_idx: i64
+        type_src: iq2_s
       cases:
         - ne: [256, 11, 1, 1]
           nr23: [2, 3]
@@ -83871,8 +84038,9 @@ ops:
           r: 2
           v: 1
     - dtype:
-        type: iq2_xs
+        type_dst: iq2_xs
         type_idx: i64
+        type_src: iq2_xs
       cases:
         - ne: [256, 11, 1, 1]
           nr23: [2, 3]
@@ -83923,8 +84091,9 @@ ops:
           r: 2
           v: 1
     - dtype:
-        type: iq2_xxs
+        type_dst: iq2_xxs
         type_idx: i64
+        type_src: iq2_xxs
       cases:
         - ne: [256, 11, 1, 1]
           nr23: [2, 3]
@@ -83975,8 +84144,9 @@ ops:
           r: 2
           v: 1
     - dtype:
-        type: iq3_s
+        type_dst: iq3_s
         type_idx: i64
+        type_src: iq3_s
       cases:
         - ne: [256, 11, 1, 1]
           nr23: [2, 3]
@@ -84027,8 +84197,9 @@ ops:
           r: 2
           v: 1
     - dtype:
-        type: iq3_xxs
+        type_dst: iq3_xxs
         type_idx: i64
+        type_src: iq3_xxs
       cases:
         - ne: [256, 11, 1, 1]
           nr23: [2, 3]
@@ -84079,112 +84250,9 @@ ops:
           r: 2
           v: 1
     - dtype:
-        type: iq4_nl
+        type_dst: iq4_nl
         type_idx: i64
-      cases:
-        - ne: [256, 11, 1, 1]
-          nr23: [2, 3]
-          r: 7
-          v: 0
-        - ne: [256, 11, 1, 1]
-          nr23: [2, 3]
-          r: 7
-          v: 1
-        - ne: [256, 11, 1, 7]
-          nr23: [2, 3]
-          r: 7
-          v: 0
-        - ne: [256, 11, 1, 7]
-          nr23: [2, 3]
-          r: 7
-          v: 1
-        - ne: [256, 5, 1, 3]
-          nr23: [1, 1]
-          r: 1
-          v: 0
-        - ne: [256, 5, 1, 3]
-          nr23: [1, 1]
-          r: 1
-          v: 1
-        - ne: [256, 5, 7, 3]
-          nr23: [1, 1]
-          r: 1
-          v: 0
-        - ne: [256, 5, 7, 3]
-          nr23: [1, 1]
-          r: 1
-          v: 1
-        - ne: [96, 3, 1, 1]
-          nr23: [2, 3]
-          r: 2
-          v: 0
-        - ne: [96, 3, 1, 1]
-          nr23: [2, 3]
-          r: 2
-          v: 1
-        - ne: [96, 3, 7, 1]
-          nr23: [2, 3]
-          r: 2
-          v: 0
-        - ne: [96, 3, 7, 1]
-          nr23: [2, 3]
-          r: 2
-          v: 1
-    - dtype:
-        type: iq4_xs
-        type_idx: i64
-      cases:
-        - ne: [256, 11, 1, 1]
-          nr23: [2, 3]
-          r: 7
-          v: 0
-        - ne: [256, 11, 1, 1]
-          nr23: [2, 3]
-          r: 7
-          v: 1
-        - ne: [256, 11, 1, 7]
-          nr23: [2, 3]
-          r: 7
-          v: 0
-        - ne: [256, 11, 1, 7]
-          nr23: [2, 3]
-          r: 7
-          v: 1
-        - ne: [256, 5, 1, 3]
-          nr23: [1, 1]
-          r: 1
-          v: 0
-        - ne: [256, 5, 1, 3]
-          nr23: [1, 1]
-          r: 1
-          v: 1
-        - ne: [256, 5, 7, 3]
-          nr23: [1, 1]
-          r: 1
-          v: 0
-        - ne: [256, 5, 7, 3]
-          nr23: [1, 1]
-          r: 1
-          v: 1
-        - ne: [768, 3, 1, 1]
-          nr23: [2, 3]
-          r: 2
-          v: 0
-        - ne: [768, 3, 1, 1]
-          nr23: [2, 3]
-          r: 2
-          v: 1
-        - ne: [768, 3, 7, 1]
-          nr23: [2, 3]
-          r: 2
-          v: 0
-        - ne: [768, 3, 7, 1]
-          nr23: [2, 3]
-          r: 2
-          v: 1
-    - dtype:
-        type: mxfp4
-        type_idx: i64
+        type_src: iq4_nl
       cases:
         - ne: [256, 11, 1, 1]
           nr23: [2, 3]
@@ -84235,8 +84303,115 @@ ops:
           r: 2
           v: 1
     - dtype:
-        type: nvfp4
+        type_dst: iq4_xs
         type_idx: i64
+        type_src: iq4_xs
+      cases:
+        - ne: [256, 11, 1, 1]
+          nr23: [2, 3]
+          r: 7
+          v: 0
+        - ne: [256, 11, 1, 1]
+          nr23: [2, 3]
+          r: 7
+          v: 1
+        - ne: [256, 11, 1, 7]
+          nr23: [2, 3]
+          r: 7
+          v: 0
+        - ne: [256, 11, 1, 7]
+          nr23: [2, 3]
+          r: 7
+          v: 1
+        - ne: [256, 5, 1, 3]
+          nr23: [1, 1]
+          r: 1
+          v: 0
+        - ne: [256, 5, 1, 3]
+          nr23: [1, 1]
+          r: 1
+          v: 1
+        - ne: [256, 5, 7, 3]
+          nr23: [1, 1]
+          r: 1
+          v: 0
+        - ne: [256, 5, 7, 3]
+          nr23: [1, 1]
+          r: 1
+          v: 1
+        - ne: [768, 3, 1, 1]
+          nr23: [2, 3]
+          r: 2
+          v: 0
+        - ne: [768, 3, 1, 1]
+          nr23: [2, 3]
+          r: 2
+          v: 1
+        - ne: [768, 3, 7, 1]
+          nr23: [2, 3]
+          r: 2
+          v: 0
+        - ne: [768, 3, 7, 1]
+          nr23: [2, 3]
+          r: 2
+          v: 1
+    - dtype:
+        type_dst: mxfp4
+        type_idx: i64
+        type_src: mxfp4
+      cases:
+        - ne: [256, 11, 1, 1]
+          nr23: [2, 3]
+          r: 7
+          v: 0
+        - ne: [256, 11, 1, 1]
+          nr23: [2, 3]
+          r: 7
+          v: 1
+        - ne: [256, 11, 1, 7]
+          nr23: [2, 3]
+          r: 7
+          v: 0
+        - ne: [256, 11, 1, 7]
+          nr23: [2, 3]
+          r: 7
+          v: 1
+        - ne: [256, 5, 1, 3]
+          nr23: [1, 1]
+          r: 1
+          v: 0
+        - ne: [256, 5, 1, 3]
+          nr23: [1, 1]
+          r: 1
+          v: 1
+        - ne: [256, 5, 7, 3]
+          nr23: [1, 1]
+          r: 1
+          v: 0
+        - ne: [256, 5, 7, 3]
+          nr23: [1, 1]
+          r: 1
+          v: 1
+        - ne: [96, 3, 1, 1]
+          nr23: [2, 3]
+          r: 2
+          v: 0
+        - ne: [96, 3, 1, 1]
+          nr23: [2, 3]
+          r: 2
+          v: 1
+        - ne: [96, 3, 7, 1]
+          nr23: [2, 3]
+          r: 2
+          v: 0
+        - ne: [96, 3, 7, 1]
+          nr23: [2, 3]
+          r: 2
+          v: 1
+    - dtype:
+        type_dst: nvfp4
+        type_idx: i64
+        type_src: nvfp4
       cases:
         - ne: [192, 3, 1, 1]
           nr23: [2, 3]
@@ -84287,8 +84462,9 @@ ops:
           r: 1
           v: 1
     - dtype:
-        type: q2_K
+        type_dst: q2_K
         type_idx: i64
+        type_src: q2_K
       cases:
         - ne: [256, 11, 1, 1]
           nr23: [2, 3]
@@ -84339,8 +84515,9 @@ ops:
           r: 2
           v: 1
     - dtype:
-        type: q3_K
+        type_dst: q3_K
         type_idx: i64
+        type_src: q3_K
       cases:
         - ne: [256, 11, 1, 1]
           nr23: [2, 3]
@@ -84391,60 +84568,9 @@ ops:
           r: 2
           v: 1
     - dtype:
-        type: q4_0
+        type_dst: q4_0
         type_idx: i64
-      cases:
-        - ne: [256, 11, 1, 1]
-          nr23: [2, 3]
-          r: 7
-          v: 0
-        - ne: [256, 11, 1, 1]
-          nr23: [2, 3]
-          r: 7
-          v: 1
-        - ne: [256, 11, 1, 7]
-          nr23: [2, 3]
-          r: 7
-          v: 0
-        - ne: [256, 11, 1, 7]
-          nr23: [2, 3]
-          r: 7
-          v: 1
-        - ne: [256, 5, 1, 3]
-          nr23: [1, 1]
-          r: 1
-          v: 0
-        - ne: [256, 5, 1, 3]
-          nr23: [1, 1]
-          r: 1
-          v: 1
-        - ne: [256, 5, 7, 3]
-          nr23: [1, 1]
-          r: 1
-          v: 0
-        - ne: [256, 5, 7, 3]
-          nr23: [1, 1]
-          r: 1
-          v: 1
-        - ne: [96, 3, 1, 1]
-          nr23: [2, 3]
-          r: 2
-          v: 0
-        - ne: [96, 3, 1, 1]
-          nr23: [2, 3]
-          r: 2
-          v: 1
-        - ne: [96, 3, 7, 1]
-          nr23: [2, 3]
-          r: 2
-          v: 0
-        - ne: [96, 3, 7, 1]
-          nr23: [2, 3]
-          r: 2
-          v: 1
-    - dtype:
-        type: q4_1
-        type_idx: i64
+        type_src: q4_0
       cases:
         - ne: [256, 11, 1, 1]
           nr23: [2, 3]
@@ -84495,60 +84621,9 @@ ops:
           r: 2
           v: 1
     - dtype:
-        type: q4_K
+        type_dst: q4_1
         type_idx: i64
-      cases:
-        - ne: [256, 11, 1, 1]
-          nr23: [2, 3]
-          r: 7
-          v: 0
-        - ne: [256, 11, 1, 1]
-          nr23: [2, 3]
-          r: 7
-          v: 1
-        - ne: [256, 11, 1, 7]
-          nr23: [2, 3]
-          r: 7
-          v: 0
-        - ne: [256, 11, 1, 7]
-          nr23: [2, 3]
-          r: 7
-          v: 1
-        - ne: [256, 5, 1, 3]
-          nr23: [1, 1]
-          r: 1
-          v: 0
-        - ne: [256, 5, 1, 3]
-          nr23: [1, 1]
-          r: 1
-          v: 1
-        - ne: [256, 5, 7, 3]
-          nr23: [1, 1]
-          r: 1
-          v: 0
-        - ne: [256, 5, 7, 3]
-          nr23: [1, 1]
-          r: 1
-          v: 1
-        - ne: [768, 3, 1, 1]
-          nr23: [2, 3]
-          r: 2
-          v: 0
-        - ne: [768, 3, 1, 1]
-          nr23: [2, 3]
-          r: 2
-          v: 1
-        - ne: [768, 3, 7, 1]
-          nr23: [2, 3]
-          r: 2
-          v: 0
-        - ne: [768, 3, 7, 1]
-          nr23: [2, 3]
-          r: 2
-          v: 1
-    - dtype:
-        type: q5_0
-        type_idx: i64
+        type_src: q4_1
       cases:
         - ne: [256, 11, 1, 1]
           nr23: [2, 3]
@@ -84599,8 +84674,62 @@ ops:
           r: 2
           v: 1
     - dtype:
-        type: q5_1
+        type_dst: q4_K
         type_idx: i64
+        type_src: q4_K
+      cases:
+        - ne: [256, 11, 1, 1]
+          nr23: [2, 3]
+          r: 7
+          v: 0
+        - ne: [256, 11, 1, 1]
+          nr23: [2, 3]
+          r: 7
+          v: 1
+        - ne: [256, 11, 1, 7]
+          nr23: [2, 3]
+          r: 7
+          v: 0
+        - ne: [256, 11, 1, 7]
+          nr23: [2, 3]
+          r: 7
+          v: 1
+        - ne: [256, 5, 1, 3]
+          nr23: [1, 1]
+          r: 1
+          v: 0
+        - ne: [256, 5, 1, 3]
+          nr23: [1, 1]
+          r: 1
+          v: 1
+        - ne: [256, 5, 7, 3]
+          nr23: [1, 1]
+          r: 1
+          v: 0
+        - ne: [256, 5, 7, 3]
+          nr23: [1, 1]
+          r: 1
+          v: 1
+        - ne: [768, 3, 1, 1]
+          nr23: [2, 3]
+          r: 2
+          v: 0
+        - ne: [768, 3, 1, 1]
+          nr23: [2, 3]
+          r: 2
+          v: 1
+        - ne: [768, 3, 7, 1]
+          nr23: [2, 3]
+          r: 2
+          v: 0
+        - ne: [768, 3, 7, 1]
+          nr23: [2, 3]
+          r: 2
+          v: 1
+    - dtype:
+        type_dst: q5_0
+        type_idx: i64
+        type_src: q5_0
       cases:
         - ne: [256, 11, 1, 1]
           nr23: [2, 3]
@@ -84651,8 +84780,62 @@ ops:
           r: 2
           v: 1
     - dtype:
-        type: q5_K
+        type_dst: q5_1
         type_idx: i64
+        type_src: q5_1
+      cases:
+        - ne: [256, 11, 1, 1]
+          nr23: [2, 3]
+          r: 7
+          v: 0
+        - ne: [256, 11, 1, 1]
+          nr23: [2, 3]
+          r: 7
+          v: 1
+        - ne: [256, 11, 1, 7]
+          nr23: [2, 3]
+          r: 7
+          v: 0
+        - ne: [256, 11, 1, 7]
+          nr23: [2, 3]
+          r: 7
+          v: 1
+        - ne: [256, 5, 1, 3]
+          nr23: [1, 1]
+          r: 1
+          v: 0
+        - ne: [256, 5, 1, 3]
+          nr23: [1, 1]
+          r: 1
+          v: 1
+        - ne: [256, 5, 7, 3]
+          nr23: [1, 1]
+          r: 1
+          v: 0
+        - ne: [256, 5, 7, 3]
+          nr23: [1, 1]
+          r: 1
+          v: 1
+        - ne: [96, 3, 1, 1]
+          nr23: [2, 3]
+          r: 2
+          v: 0
+        - ne: [96, 3, 1, 1]
+          nr23: [2, 3]
+          r: 2
+          v: 1
+        - ne: [96, 3, 7, 1]
+          nr23: [2, 3]
+          r: 2
+          v: 0
+        - ne: [96, 3, 7, 1]
+          nr23: [2, 3]
+          r: 2
+          v: 1
+    - dtype:
+        type_dst: q5_K
+        type_idx: i64
+        type_src: q5_K
       cases:
         - ne: [256, 11, 1, 1]
           nr23: [2, 3]
@@ -84703,8 +84886,9 @@ ops:
           r: 2
           v: 1
     - dtype:
-        type: q6_K
+        type_dst: q6_K
         type_idx: i64
+        type_src: q6_K
       cases:
         - ne: [256, 11, 1, 1]
           nr23: [2, 3]
@@ -84755,16 +84939,18 @@ ops:
           r: 2
           v: 1
     - dtype:
-        type: q8_0
+        type_dst: q8_0
         type_idx: i32
+        type_src: q8_0
       cases:
         - ne: [256, 5, 1, 3]
           nr23: [1, 1]
           r: 1
           v: 0
     - dtype:
-        type: q8_0
+        type_dst: q8_0
         type_idx: i64
+        type_src: q8_0
       cases:
         - ne: [256, 11, 1, 1]
           nr23: [2, 3]
@@ -84816,7 +85002,8 @@ ops:
           v: 1
   SGN:
     - dtype:
-        type: f16
+        type_dst: f16
+        type_src: f16
       cases:
         - ne_a: [128, 2, 2, 2]
           v: 0
@@ -84827,7 +85014,8 @@ ops:
         - ne_a: [5, 7, 11, 13]
           v: 1
     - dtype:
-        type: f32
+        type_dst: f32
+        type_src: f32
       cases:
         - ne_a: [128, 2, 2, 2]
           v: 0
@@ -84839,7 +85027,8 @@ ops:
           v: 1
   SIGMOID:
     - dtype:
-        type: f16
+        type_dst: f16
+        type_src: f16
       cases:
         - ne_a: [128, 2, 2, 2]
           v: 0
@@ -84850,7 +85039,8 @@ ops:
         - ne_a: [5, 7, 11, 13]
           v: 1
     - dtype:
-        type: f32
+        type_dst: f32
+        type_src: f32
       cases:
         - ne_a: [128, 2, 2, 2]
           v: 0
@@ -84862,7 +85052,8 @@ ops:
           v: 1
   SILU:
     - dtype:
-        type: f16
+        type_dst: f16
+        type_src: f16
       cases:
         - ne_a: [128, 2, 2, 2]
           v: 0
@@ -84873,7 +85064,8 @@ ops:
         - ne_a: [5, 7, 11, 13]
           v: 1
     - dtype:
-        type: f32
+        type_dst: f32
+        type_src: f32
       cases:
         - ne_a: [128, 2, 2, 2]
           v: 0
@@ -84885,32 +85077,37 @@ ops:
           v: 1
   SILU_BACK:
     - dtype:
-        type: f32
+        type_dst: f32
+        type_src: f32
       cases:
         - eps: 1e-06
           ne: [64, 5, 4, 3]
   SIN:
     - dtype:
-        type: f16
+        type_dst: f16
+        type_src: f16
       cases:
         - ne: [10, 2, 2, 2]
         - ne: [1024, 1024, 1, 1]
         - ne: [7, 1, 5, 3]
     - dtype:
-        type: f32
+        type_dst: f32
+        type_src: f32
       cases:
         - ne: [10, 2, 2, 2]
         - ne: [1024, 1024, 1, 1]
         - ne: [7, 1, 5, 3]
   SOFTCAP:
     - dtype:
-        type: f32
+        type_dst: f32
+        type_src: f32
       cases:
         - ne: [10, 10, 10, 10]
           softcap: 50.0
   SOFTPLUS:
     - dtype:
-        type: f16
+        type_dst: f16
+        type_src: f16
       cases:
         - ne_a: [128, 2, 2, 2]
           v: 0
@@ -84921,7 +85118,8 @@ ops:
         - ne_a: [5, 7, 11, 13]
           v: 1
     - dtype:
-        type: f32
+        type_dst: f32
+        type_src: f32
       cases:
         - ne_a: [128, 2, 2, 2]
           v: 0
@@ -84933,7 +85131,8 @@ ops:
           v: 1
   SOFT_MAX:
     - dtype:
-        type: f32
+        type_dst: f32
+        type_src: f32
       cases:
         - inplace: 0
           m_prec: f16
@@ -86633,7 +86832,8 @@ ops:
           sinks: 1
   SOFT_MAX_BACK:
     - dtype:
-        type: f32
+        type_dst: f32
+        type_src: f32
       cases:
         - max_bias: 0.0
           ne: [1023, 1023, 1, 1]
@@ -86781,7 +86981,8 @@ ops:
           scale: 1.0
   SOLVE_TRI:
     - dtype:
-        type: f32
+        type_dst: f32
+        type_src: f32
       cases:
         - ne_lhs: [10, 10, 4, 3]
           ne_rhs: [3, 10, 4, 3]
@@ -86833,33 +87034,38 @@ ops:
           ne_rhs: [40, 95, 8, 8]
   SQR:
     - dtype:
-        type: f16
+        type_dst: f16
+        type_src: f16
       cases:
         - ne: [10, 5, 4, 3]
         - ne: [1024, 1024, 1, 1]
         - ne: [7, 1, 5, 3]
     - dtype:
-        type: f32
+        type_dst: f32
+        type_src: f32
       cases:
         - ne: [10, 5, 4, 3]
         - ne: [1024, 1024, 1, 1]
         - ne: [7, 1, 5, 3]
   SQRT:
     - dtype:
-        type: f16
+        type_dst: f16
+        type_src: f16
       cases:
         - ne: [10, 3, 3, 2]
         - ne: [1024, 1024, 1, 1]
         - ne: [7, 1, 5, 3]
     - dtype:
-        type: f32
+        type_dst: f32
+        type_src: f32
       cases:
         - ne: [10, 3, 3, 2]
         - ne: [1024, 1024, 1, 1]
         - ne: [7, 1, 5, 3]
   SSM_CONV:
     - dtype:
-        type: f32
+        type_dst: f32
+        type_src: f32
       cases:
         - ne_a: [18, 1024, 1, 1]
           ne_b: [9, 1024, 1, 1]
@@ -86953,7 +87159,8 @@ ops:
           ne_b: [9, 2048, 1, 1]
   SSM_SCAN:
     - dtype:
-        type: f32
+        type_dst: f32
+        type_src: f32
       cases:
         - d_state: 128
           head_dim: 64
@@ -86975,7 +87182,8 @@ ops:
           n_seqs: 4
   STEP:
     - dtype:
-        type: f16
+        type_dst: f16
+        type_src: f16
       cases:
         - ne_a: [128, 2, 2, 2]
           v: 0
@@ -86986,7 +87194,8 @@ ops:
         - ne_a: [5, 7, 11, 13]
           v: 1
     - dtype:
-        type: f32
+        type_dst: f32
+        type_src: f32
       cases:
         - ne_a: [128, 2, 2, 2]
           v: 0
@@ -86998,7 +87207,8 @@ ops:
           v: 1
   SUB:
     - dtype:
-        type: f16
+        type_dst: f16
+        type_src: f16
       cases:
         - ne: [1, 1, 1, 1]
           nf: 1
@@ -87181,7 +87391,8 @@ ops:
           nr: [1, 1, 1, 1]
           perm1: [0, 1, 2, 3]
     - dtype:
-        type: f32
+        type_dst: f32
+        type_src: f32
       cases:
         - ne: [1, 1, 1, 1]
           nf: 1
@@ -87369,7 +87580,8 @@ ops:
           perm1: [0, 1, 2, 3]
   SUM:
     - dtype:
-        type: f32
+        type_dst: f32
+        type_src: f32
       cases:
         - ne: [10, 5, 4, 3]
         - ne: [11, 5, 6, 3]
@@ -87385,7 +87597,8 @@ ops:
         - ne: [33, 256, 1, 1]
   SUM_ROWS:
     - dtype:
-        type: f32
+        type_dst: f32
+        type_src: f32
       cases:
         - ne: [10, 5, 4, 3]
           permute: 0
@@ -87419,7 +87632,8 @@ ops:
           slice: 0
   SWIGLU:
     - dtype:
-        type: f16
+        type_dst: f16
+        type_src: f16
       cases:
         - ne_a: [128, 2, 2, 2]
           split: true
@@ -87458,7 +87672,8 @@ ops:
           swapped: 1
           v: 1
     - dtype:
-        type: f32
+        type_dst: f32
+        type_src: f32
       cases:
         - ne_a: [128, 2, 2, 2]
           split: true
@@ -87498,7 +87713,8 @@ ops:
           v: 1
   SWIGLU_OAI:
     - dtype:
-        type: f32
+        type_dst: f32
+        type_src: f32
       cases:
         - alpha: 0.5
           limit: 2.0
@@ -87534,7 +87750,8 @@ ops:
           v: 1
   TANH:
     - dtype:
-        type: f16
+        type_dst: f16
+        type_src: f16
       cases:
         - ne_a: [128, 2, 2, 2]
           v: 0
@@ -87545,7 +87762,8 @@ ops:
         - ne_a: [5, 7, 11, 13]
           v: 1
     - dtype:
-        type: f32
+        type_dst: f32
+        type_src: f32
       cases:
         - ne_a: [128, 2, 2, 2]
           v: 0
@@ -87557,7 +87775,8 @@ ops:
           v: 1
   TIMESTEP_EMBEDDING:
     - dtype:
-        type: f32
+        type_dst: f32
+        type_src: f32
       cases:
         - dim: 320
           max_period: 10000
@@ -88720,7 +88939,8 @@ ops:
           with_norm: 1
   TOP_K:
     - dtype:
-        type: f32
+        type_dst: f32
+        type_src: f32
       cases:
         - k: 1
           ne: [1, 1, 1, 1]
@@ -90045,27 +90265,32 @@ ops:
   TRI:
     - dtype:
         tri_type: 0
-        type: f32
+        type_dst: f32
+        type_src: f32
       cases:
         - ne: [10, 10, 4, 3]
     - dtype:
         tri_type: 1
-        type: f32
+        type_dst: f32
+        type_src: f32
       cases:
         - ne: [10, 10, 4, 3]
     - dtype:
         tri_type: 2
-        type: f32
+        type_dst: f32
+        type_src: f32
       cases:
         - ne: [10, 10, 4, 3]
     - dtype:
         tri_type: 3
-        type: f32
+        type_dst: f32
+        type_src: f32
       cases:
         - ne: [10, 10, 4, 3]
   TRUNC:
     - dtype:
-        type: f16
+        type_dst: f16
+        type_src: f16
       cases:
         - ne: [10, 2, 2, 2]
         - ne: [1024, 1024, 1, 1]
@@ -90079,7 +90304,8 @@ ops:
         - ne_a: [5, 7, 11, 13]
           v: 1
     - dtype:
-        type: f32
+        type_dst: f32
+        type_src: f32
       cases:
         - ne: [10, 2, 2, 2]
         - ne: [1024, 1024, 1, 1]
@@ -90094,7 +90320,8 @@ ops:
           v: 1
   UPSCALE:
     - dtype:
-        type: f32
+        type_dst: f32
+        type_src: f32
       cases:
         - mode: bicubic
           ne: [2, 5, 7, 11]
@@ -90172,6 +90399,7 @@ ops:
           transpose: 1
   XIELU:
     - dtype:
-        type: f32
+        type_dst: f32
+        type_src: f32
       cases:
         - ne: [10, 5, 4, 3]

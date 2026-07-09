@@ -176,17 +176,17 @@ def route_supports_case_dtype(route: Mapping[str, Any], case: ImportedCase) -> b
     if not isinstance(supports, dict) or not supports:
         return True
     dtype = case.dtype
-    if "type" in dtype:
-        return all(
-            _supports_type(supports, support_key, dtype["type"])
-            for support_key in ("src0_type", "src1_type", "src2_type", "dst_type")
-        )
+
+    def provided(*keys: str) -> Any:
+        return next((dtype[key] for key in keys if key in dtype), None)
+
     return all(
-        dtype_key not in dtype
-        or _supports_type(supports, support_key, dtype[dtype_key])
-        for dtype_key, support_key in (
-            ("type_src", "src0_type"),
-            ("type_dst", "dst_type"),
+        actual is None or _supports_type(supports, support_key, actual)
+        for support_key, actual in (
+            ("src0_type", provided("type_src0", "type_a", "type_src", "type")),
+            ("src1_type", provided("type_src1", "type_b", "type_idx", "type_src", "type")),
+            ("src2_type", provided("type_src2", "type")),
+            ("dst_type", provided("type_dst", "type")),
         )
     )
 
