@@ -948,6 +948,40 @@ def test_v2_set_rows_i32_indices_remain_unmapped_without_dtype_route() -> None:
     assert detail == "matching v2 op mapping exists, but not for this dtype combination"
 
 
+def test_v2_resolve_cont_set_rows_route_for_f32_i64_f16_case() -> None:
+    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
+    case = ImportedCase(
+        op="SET_ROWS",
+        dtype={"type_src": "f32", "type_idx": "i64", "type_dst": "f16"},
+        raw_case={},
+        normalized_params={
+            "ne": [128, 4, 1, 1],
+            "nr23": [1, 1],
+            "r": 2,
+            "v": 0,
+        },
+        source_path="tests/kernels/data/additional_test.yaml",
+        source_group_index=0,
+        source_case_index=0,
+    )
+
+    route, shape, reason, detail = resolve_route_for_case(case, list(routes_for_op(catalog, "SET_ROWS")))
+
+    assert reason is None
+    assert detail is None
+    assert route is not None
+    assert route.id == "cont_set_rows_f32_f16_n128_r2_dst4_contiguous_4d"
+    assert shape == {
+        "d0": 128,
+        "d1": 4,
+        "d2": 1,
+        "d3": 1,
+        "src0_d1": 2,
+        "src1_d0": 2,
+        "src1_d1": 1,
+    }
+
+
 def test_v2_resolve_set_rows_route_preserves_non_contiguous_idx_stride() -> None:
     catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
     case = ImportedCase(

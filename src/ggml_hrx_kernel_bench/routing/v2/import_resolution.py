@@ -1258,6 +1258,7 @@ def lower_sum_rows_tensors(
 
 def lower_set_rows_tensors(
     case: ImportedCase,
+    route: V2Route,
 ) -> tuple[dict[str, ConcreteTensor], dict[str, int]]:
     ne = case.normalized_params.get("ne")
     nr23 = case.normalized_params.get("nr23")
@@ -1281,20 +1282,43 @@ def lower_set_rows_tensors(
     src0_extents = [int(ne[0]), int(row_count), int(ne[2]), int(ne[3])]
     src1_extents = [int(row_count), int(nr23[0]), int(nr23[1]), 1]
     src1_strides = [1, int(row_count), int(row_count), int(row_count)]
-    tensors = {
-        "src0": ConcreteTensor(
-            dtype=str(case.dtype.get("type", "")).upper(),
-            dimensions=_dimensions_from_extents(src0_extents),
-        ),
-        "src1": ConcreteTensor(
-            dtype=str(case.dtype.get("type_idx", "")).upper(),
-            dimensions=_dimensions_from_extents_and_strides(src1_extents, src1_strides),
-        ),
-        "dst": ConcreteTensor(
-            dtype=str(case.dtype.get("type", "")).upper(),
-            dimensions=_dimensions_from_extents(dst_extents),
-        ),
-    }
+    if route.family == "cont_set_rows_f32":
+        if int(ne[0]) != 128:
+            raise ValueError("cont_set_rows_f32 routing currently requires ne[0]=128")
+        if str(case.dtype.get("type_src", case.dtype.get("type", ""))).upper() != "F32":
+            raise ValueError("cont_set_rows_f32 routing requires type_src=f32")
+        if str(case.dtype.get("type_dst", "")).upper() != "F16":
+            raise ValueError("cont_set_rows_f32 routing requires type_dst=f16")
+        tensors = {
+            "src0": ConcreteTensor(
+                dtype="F32",
+                dimensions=_dimensions_from_extents(src0_extents),
+            ),
+            "src1": ConcreteTensor(
+                dtype=str(case.dtype.get("type_idx", "")).upper(),
+                dimensions=_dimensions_from_extents_and_strides(src1_extents, src1_strides),
+            ),
+            "dst": ConcreteTensor(
+                dtype="F16",
+                dimensions=_dimensions_from_extents(dst_extents),
+            ),
+        }
+    else:
+        dtype = str(case.dtype.get("type", "")).upper()
+        tensors = {
+            "src0": ConcreteTensor(
+                dtype=dtype,
+                dimensions=_dimensions_from_extents(src0_extents),
+            ),
+            "src1": ConcreteTensor(
+                dtype=str(case.dtype.get("type_idx", "")).upper(),
+                dimensions=_dimensions_from_extents_and_strides(src1_extents, src1_strides),
+            ),
+            "dst": ConcreteTensor(
+                dtype=dtype,
+                dimensions=_dimensions_from_extents(dst_extents),
+            ),
+        }
     return tensors, _shape_from_extents(dst_extents)
 
 
@@ -1545,7 +1569,7 @@ def lower_tensors_for_route(
     if route.op == "SUM_ROWS":
         return lower_sum_rows_tensors(case)
     if route.op == "SET_ROWS":
-        return lower_set_rows_tensors(case)
+        return lower_set_rows_tensors(case, route)
     if route.op == "ROPE_SET_ROWS":
         return lower_rope_set_rows_tensors(case, route)
     if route.lowering_kind == LOWERING_KIND_COPY_CONTIGUOUS:

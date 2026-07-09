@@ -28,6 +28,17 @@ ops:
           ne_a: [128, 24, 1, 1]
           v: 0
 
+  SET_ROWS:
+    - dtype:
+        type_dst: f16
+        type_idx: i64
+        type_src: f32
+      cases:
+        - ne: [128, 4, 1, 1]
+          nr23: [1, 1]
+          r: 2
+          v: 0
+
   FLASH_ATTN_EXT:
     - dtype:
         type_KV: f16
