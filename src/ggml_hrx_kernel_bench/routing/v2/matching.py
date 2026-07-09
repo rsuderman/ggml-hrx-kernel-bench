@@ -32,6 +32,14 @@ def _normalize_dtype(value: Any) -> str | None:
 
 
 def route_accepts_dtype(route: V2Route, dtype: Mapping[str, Any]) -> bool:
+    if route.op == "GET_ROWS" and "type" in dtype and "type_dst" not in dtype:
+        src_descriptor = route.tensors.get("src0")
+        src_expected = None if src_descriptor is None else src_descriptor.dtype
+        if src_expected is not None and _normalize_dtype(dtype["type"]) != src_expected:
+            return False
+        idx_descriptor = route.tensors.get("src1")
+        idx_expected = None if idx_descriptor is None else idx_descriptor.dtype
+        return "type_idx" not in dtype or idx_expected is None or _normalize_dtype(dtype["type_idx"]) == idx_expected
     for tensor_name, keys in (
         ("src0", ("type_src0", "type_src", "type")),
         ("src1", ("type_src1", "type_idx", "type_src")),

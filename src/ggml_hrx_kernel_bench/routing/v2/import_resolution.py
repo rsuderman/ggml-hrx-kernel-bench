@@ -525,9 +525,11 @@ def lower_get_rows_tensors(
         raise ValueError("GET_ROWS v2 routing currently requires be2=1")
     dst_extents = [int(ncols), int(nrows)]
     src0_row_count = max(int(src0_nrows), int(nrows), 1)
+    src0_dtype = str(case.dtype.get("type", "")).upper()
+    dst_dtype = "F32" if src0_dtype == "Q8_0" else src0_dtype
     tensors = {
         "src0": ConcreteTensor(
-            dtype=str(case.dtype.get("type", "")).upper(),
+            dtype=src0_dtype,
             dimensions=_dimensions_from_extents([int(ncols), src0_row_count]),
         ),
         "src1": ConcreteTensor(
@@ -535,7 +537,7 @@ def lower_get_rows_tensors(
             dimensions=_dimensions_from_extents([1, int(nrows)]),
         ),
         "dst": ConcreteTensor(
-            dtype=str(case.dtype.get("type", "")).upper(),
+            dtype=dst_dtype,
             dimensions=_dimensions_from_extents(dst_extents),
         ),
     }

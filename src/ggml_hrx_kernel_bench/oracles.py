@@ -1262,17 +1262,24 @@ def _argsort_arrays(np: Any, candidate: Candidate, seed: int) -> dict[str, Any]:
 def _get_rows_arrays(np: Any, candidate: Candidate, seed: int) -> dict[str, Any]:
     ncols, nrows, elems = _dims(candidate)
     src0_nrows = int(candidate.values.get("shape.get_rows.src0_nrows") or candidate.values.get("get_rows.src0_nrows") or nrows)
-    src = f32_pattern(np, (src0_nrows, ncols), seed=seed)
+    src_f32 = f32_pattern(np, (src0_nrows, ncols), seed=seed)
     indices = ((np.arange(nrows, dtype=np.int64) * 3 + seed) % src0_nrows).astype(np.int32)
-    expected = src[indices].astype(np.float32)
+    src = src_f32.reshape(src0_nrows * ncols)
+    metadata: dict[str, Any] = {"src0_nrows": src0_nrows}
+    if candidate.family == "get_rows_q8_0_f32":
+        src = quantize_q8_0(np, src_f32)
+        src_f32 = dequant_q8_0(np, src, ncols, src0_nrows)
+        metadata["q8_0_block_bytes"] = Q8_0_BLOCK_BYTES
+        metadata["bytes"] = {"src0": q8_0_bytes(ncols, src0_nrows), "dst": elems * F32_BYTES}
+    expected = src_f32[indices].astype(np.float32)
     return {
         "arrays": {
-            "src0": src.reshape(src0_nrows * ncols),
+            "src0": src,
             "indices": indices,
             "dst_init": f32_pattern(np, (elems,), seed=seed + 1, scale=0.25),
             "expected": expected.reshape(elems),
         },
-        "metadata": {"src0_nrows": src0_nrows},
+        "metadata": metadata,
     }
 
 
@@ -2197,19 +2204,27 @@ def _write_argsort_workbench(candidate: Candidate, linked_source: Path, workbenc
     return _emit_case(linked_source, workbench_path, case_name, bench_name, body)
 
 
-def _write_get_rows_f32_workbench(candidate: Candidate, linked_source: Path, workbench_path: Path, fixture_dir: Path) -> tuple[str, dict[str, Any]]:
-    if candidate.family != "get_rows_f32":
+def _write_get_rows_workbench(candidate: Candidate, linked_source: Path, workbench_path: Path, fixture_dir: Path) -> tuple[str, dict[str, Any]]:
+    if candidate.family not in {"get_rows_f32", "get_rows_q8_0_f32"}:
         return _logical_workbench(candidate, linked_source, workbench_path, fixture_dir)
     ncols, nrows, elems = _dims(candidate)
     src0_nrows = int(candidate.values.get("shape.get_rows.src0_nrows") or candidate.values.get("get_rows.src0_nrows") or nrows)
+    if candidate.family == "get_rows_q8_0_f32":
+        src0_elems = q8_0_bytes(ncols, src0_nrows)
+        src0_read = f"  %src0 = check.file.read.npy path(\"{_rel_fixture(workbench_path, fixture_dir, 'src0.npy')}\") : tensor<{src0_elems}xi8>"
+        src0_type = f"tensor<{src0_elems}xi8>"
+    else:
+        src0_elems = src0_nrows * ncols
+        src0_read = _read_f32(workbench_path, fixture_dir, "src0", src0_elems)
+        src0_type = f"tensor<{src0_elems}xf32>"
     case_name, bench_name = _case_names(candidate)
     body = "\n".join(
         [
-            _read_f32(workbench_path, fixture_dir, "src0", src0_nrows * ncols),
+            src0_read,
             _read_i32(workbench_path, fixture_dir, "indices", nrows).replace("%indices", "%idx"),
             _read_f32(workbench_path, fixture_dir, "dst_init", elems).replace("%dst_init", "%dst"),
             _read_f32(workbench_path, fixture_dir, "expected", elems),
-            f"  func.call {candidate.root_symbol}(%src0, %idx, %dst) : (tensor<{src0_nrows * ncols}xf32>, tensor<{nrows}xi32>, tensor<{elems}xf32>)",
+            f"  func.call {candidate.root_symbol}(%src0, %idx, %dst) : ({src0_type}, tensor<{nrows}xi32>, tensor<{elems}xf32>)",
             f"  check.expect.close actual(%dst) expected(%expected) atol(0.00001) rtol(0.00001) nan(same) : tensor<{elems}xf32>",
         ]
     )
@@ -2609,9 +2624,9 @@ ORACLE_SPECS: tuple[OracleSpec, ...] = (
         write_workbench=_write_argsort_workbench,
     ),
     OracleSpec(
-        family_ids=("get_rows_f32",),
-        generate=_logical_generate(LogicalOracleSpec(("get_rows_f32",), "get_rows_f32_numpy", {"atol": 1e-5, "rtol": 1e-5}, _get_rows_arrays, exact_kernel_abi=True)),
-        write_workbench=_write_get_rows_f32_workbench,
+        family_ids=("get_rows_f32", "get_rows_q8_0_f32"),
+        generate=_logical_generate(LogicalOracleSpec(("get_rows_f32", "get_rows_q8_0_f32"), "get_rows_numpy", {"atol": 1e-5, "rtol": 1e-5}, _get_rows_arrays, exact_kernel_abi=True)),
+        write_workbench=_write_get_rows_workbench,
     ),
     OracleSpec(
         family_ids=("soft_max_f32",),
