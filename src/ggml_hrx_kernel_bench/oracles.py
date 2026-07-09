@@ -1266,7 +1266,12 @@ def _get_rows_arrays(np: Any, candidate: Candidate, seed: int) -> dict[str, Any]
     indices = ((np.arange(nrows, dtype=np.int64) * 3 + seed) % src0_nrows).astype(np.int32)
     src = src_f32.reshape(src0_nrows * ncols)
     metadata: dict[str, Any] = {"src0_nrows": src0_nrows}
-    if candidate.family == "get_rows_q8_0_f32":
+    if candidate.family == "get_rows_q4_k_f32":
+        src = q4_k_pattern(np, ncols, src0_nrows, seed=seed).view(np.int8)
+        src_f32 = dequant_q4_k(np, src.view(np.uint8), ncols, src0_nrows)
+        metadata["q4_k_block_bytes"] = Q4_K_BLOCK_BYTES
+        metadata["bytes"] = {"src0": q4_k_bytes(ncols, src0_nrows), "dst": elems * F32_BYTES}
+    elif candidate.family == "get_rows_q8_0_f32":
         src = quantize_q8_0(np, src_f32)
         src_f32 = dequant_q8_0(np, src, ncols, src0_nrows)
         metadata["q8_0_block_bytes"] = Q8_0_BLOCK_BYTES
@@ -2205,11 +2210,15 @@ def _write_argsort_workbench(candidate: Candidate, linked_source: Path, workbenc
 
 
 def _write_get_rows_workbench(candidate: Candidate, linked_source: Path, workbench_path: Path, fixture_dir: Path) -> tuple[str, dict[str, Any]]:
-    if candidate.family not in {"get_rows_f32", "get_rows_q8_0_f32"}:
+    if candidate.family not in {"get_rows_f32", "get_rows_q4_k_f32", "get_rows_q8_0_f32"}:
         return _logical_workbench(candidate, linked_source, workbench_path, fixture_dir)
     ncols, nrows, elems = _dims(candidate)
     src0_nrows = int(candidate.values.get("shape.get_rows.src0_nrows") or candidate.values.get("get_rows.src0_nrows") or nrows)
-    if candidate.family == "get_rows_q8_0_f32":
+    if candidate.family == "get_rows_q4_k_f32":
+        src0_elems = q4_k_bytes(ncols, src0_nrows)
+        src0_read = f"  %src0 = check.file.read.npy path(\"{_rel_fixture(workbench_path, fixture_dir, 'src0.npy')}\") : tensor<{src0_elems}xi8>"
+        src0_type = f"tensor<{src0_elems}xi8>"
+    elif candidate.family == "get_rows_q8_0_f32":
         src0_elems = q8_0_bytes(ncols, src0_nrows)
         src0_read = f"  %src0 = check.file.read.npy path(\"{_rel_fixture(workbench_path, fixture_dir, 'src0.npy')}\") : tensor<{src0_elems}xi8>"
         src0_type = f"tensor<{src0_elems}xi8>"
@@ -2624,8 +2633,8 @@ ORACLE_SPECS: tuple[OracleSpec, ...] = (
         write_workbench=_write_argsort_workbench,
     ),
     OracleSpec(
-        family_ids=("get_rows_f32", "get_rows_q8_0_f32"),
-        generate=_logical_generate(LogicalOracleSpec(("get_rows_f32", "get_rows_q8_0_f32"), "get_rows_numpy", {"atol": 1e-5, "rtol": 1e-5}, _get_rows_arrays, exact_kernel_abi=True)),
+        family_ids=("get_rows_f32", "get_rows_q4_k_f32", "get_rows_q8_0_f32"),
+        generate=_logical_generate(LogicalOracleSpec(("get_rows_f32", "get_rows_q4_k_f32", "get_rows_q8_0_f32"), "get_rows_numpy", {"atol": 1e-5, "rtol": 1e-5}, _get_rows_arrays, exact_kernel_abi=True)),
         write_workbench=_write_get_rows_workbench,
     ),
     OracleSpec(

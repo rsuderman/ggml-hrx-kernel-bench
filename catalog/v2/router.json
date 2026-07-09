@@ -52,6 +52,7 @@
     ],
     "GET_ROWS": [
       "get_rows/get_rows_f32_embedding_rows_2d.json",
+      "get_rows/get_rows_q4_k_f32_embedding_rows_2d.json",
       "get_rows/get_rows_q8_0_f32_embedding_rows_2d.json"
     ],
     "MUL_MAT": [
