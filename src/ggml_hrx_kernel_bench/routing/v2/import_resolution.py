@@ -294,6 +294,60 @@ def lower_contiguous_unary_tensors(
     return tensors, shape
 
 
+# ggml test_unary v=1 builds a non-contiguous view. The inflation parameter
+# [3, 2, 5, 4] is copied directly from ggml tests, I assume it's an arbitrary
+# choice.
+_UNARY_VIEW_INFLATION = (3, 2, 5, 4)
+
+
+def _lower_view_unary_tensors(
+    case: ImportedCase,
+    ne: list[int],
+) -> tuple[dict[str, ConcreteTensor], dict[str, int]]:
+    if len(ne) != 4:
+        raise ValueError("non-contiguous unary routing requires 4-D ne_a")
+    strides = [1, 0, 0, 0]
+    stride = 1
+    for index in range(1, 4):
+        stride *= _UNARY_VIEW_INFLATION[index - 1] * int(ne[index - 1])
+        strides[index] = stride
+    dtype = str(case.dtype.get("type", "")).upper()
+    tensors = {
+        "src0": ConcreteTensor(
+            dtype=dtype,
+            dimensions=_dimensions_from_extents_and_strides(ne, strides),
+        ),
+        "dst": ConcreteTensor(dtype=dtype, dimensions=_dimensions_from_extents(ne)),
+    }
+    return tensors, {
+        **_shape_from_extents(ne),
+        **_contiguous_shape_metadata(ne, prefix="pointwise"),
+    }
+
+
+def lower_unary_tensors(
+    case: ImportedCase,
+) -> tuple[dict[str, ConcreteTensor], dict[str, int]]:
+    # Route-independent: the case's own `v` flag decides contiguous vs strided-view geometry.
+    # The router's accept/first-match then selects the contiguous or non-contiguous route.
+    ne, v = _parse_unary_parameters(case)
+    if v == 1:
+        return _lower_view_unary_tensors(case, ne)
+    return _lower_contiguous_extent_tensors(
+        ImportedCase(
+            op=case.op,
+            dtype=case.dtype,
+            raw_case=case.raw_case,
+            normalized_params={"ne_a": ne},
+            source_path=case.source_path,
+            source_group_index=case.source_group_index,
+            source_case_index=case.source_case_index,
+        ),
+        extent_key="ne_a",
+        shape_prefix="pointwise",
+    )
+
+
 def _parse_cont_parameters(case: ImportedCase) -> list[int]:
     ne = case.normalized_params.get("ne")
     use_view_slice = case.normalized_params.get("use_view_slice", 0)
@@ -1157,7 +1211,9 @@ def lower_tensors_for_route(
     case: ImportedCase,
     route: V2Route,
 ) -> tuple[dict[str, ConcreteTensor], dict[str, int]]:
-    if route.op in {"ABS", "EXP", "NEG", "RELU"}:
+    if route.op == "ABS":
+        return lower_unary_tensors(case)
+    if route.op in {"EXP", "NEG", "RELU"}:
         return lower_contiguous_unary_tensors(case)
     if route.op == "ARGSORT":
         return lower_argsort_tensors(case)

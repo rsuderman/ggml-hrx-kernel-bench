@@ -3,7 +3,9 @@
   "routes": {
     "ABS": [
       "abs/abs_f16.json",
-      "abs/abs_f32.json"
+      "abs/abs_f32.json",
+      "abs/abs_f16_non_contiguous_4d.json",
+      "abs/abs_f32_non_contiguous_4d.json"
     ],
     "CLAMP": [
       "clamp/clamp_f32.json"
