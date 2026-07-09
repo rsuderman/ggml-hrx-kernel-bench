@@ -1763,6 +1763,43 @@ def test_v2_get_rows_route_resolves_for_q5_k_case() -> None:
     }
 
 
+def test_v2_get_rows_route_resolves_for_q6_k_case() -> None:
+    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
+    case = ImportedCase(
+        op="GET_ROWS",
+        dtype={"type": "q6_K"},
+        raw_case={},
+        normalized_params={
+            "be1": 1,
+            "be2": 1,
+            "m": 5,
+            "n": 256,
+            "r": 4,
+            "v": 0,
+        },
+        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_group_index=0,
+        source_case_index=0,
+    )
+
+    get_rows_routes = list(routes_for_op(catalog, "GET_ROWS"))
+
+    resolved_route, shape, reason, detail = resolve_route_for_case(case, get_rows_routes)
+
+    assert reason is None
+    assert detail is None
+    assert resolved_route is not None
+    assert resolved_route.id == "get_rows_q6_k_f32_embedding_rows_2d"
+    assert shape == {
+        "d0": 256,
+        "d1": 4,
+        "src0_d1": 5,
+        "src1_d0": 1,
+        "get_rows.src0_nrows": 5,
+        "get_rows.idx_row_stride": 1,
+    }
+
+
 def test_v2_get_rows_view_case_stays_unmapped() -> None:
     catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
     case = ImportedCase(

@@ -526,7 +526,7 @@ def lower_get_rows_tensors(
     dst_extents = [int(ncols), int(nrows)]
     src0_row_count = max(int(src0_nrows), int(nrows), 1)
     src0_dtype = str(case.dtype.get("type", "")).upper()
-    dst_dtype = "F32" if src0_dtype in {"Q4_K", "Q5_K", "Q8_0"} else src0_dtype
+    dst_dtype = "F32" if src0_dtype in {"Q4_K", "Q5_K", "Q6_K", "Q8_0"} else src0_dtype
     tensors = {
         "src0": ConcreteTensor(
             dtype=src0_dtype,

@@ -611,6 +611,45 @@ def test_get_rows_q5_k_oracle_and_workbench_use_packed_src0(tmp_path: Path) -> N
     assert "tensor<880xi8>, tensor<4xi32>, tensor<1024xf32>" in workbench
 
 
+def test_get_rows_q6_k_oracle_and_workbench_use_packed_src0(tmp_path: Path) -> None:
+    candidate = Candidate(
+        id="get_rows_q6_k_f32_ranked_2d",
+        family="get_rows_q6_k_f32",
+        op="GET_ROWS",
+        source_id="get_rows_q6_k_f32",
+        source_path=Path("kernels/v2/get_rows/q6_k_f32_embedding_rows_2d.loom"),
+        root_symbol="@get_rows_q6_k_f32",
+        export_name="get_rows_q6_k_f32",
+        route_id="get_rows_q6_k_f32_test",
+        route=None,
+        shape={"d0": 256, "d1": 4, "src0_d1": 5, "src1_d0": 1},
+        values={
+            "shape.get_rows.src0_nrows": 5,
+            "shape.get_rows.idx_row_stride": 1,
+        },
+        config={},
+        dispatch={},
+        supports={},
+        coverage="route_backed",
+    )
+
+    result = generate_oracle(candidate, tmp_path / "fixtures", force=True)
+
+    assert result.status == "fixtures_ready"
+    assert np.load(tmp_path / "fixtures" / "src0.npy").shape == (1050,)
+    assert np.load(tmp_path / "fixtures" / "src0.npy").dtype == np.int8
+    assert np.load(tmp_path / "fixtures" / "indices.npy").shape == (4,)
+    assert np.load(tmp_path / "fixtures" / "expected.npy").shape == (1024,)
+
+    linked_source = tmp_path / "linked.loom"
+    linked_source.write_text('kernel.def export("get_rows_q6_k_f32") @get_rows_q6_k_f32() {}\n', encoding="utf-8")
+    _, metadata = write_workbench(candidate, linked_source, tmp_path / "workbench.loom", tmp_path / "fixtures")
+
+    assert metadata["status"] == "ok"
+    workbench = (tmp_path / "workbench.loom").read_text(encoding="utf-8")
+    assert "tensor<1050xi8>, tensor<4xi32>, tensor<1024xf32>" in workbench
+
+
 def test_argsort_oracle_and_workbench_use_flattened_rows(tmp_path: Path) -> None:
     candidate = _candidate(
         candidate_id="argsort_f32_i32_n128_r1_desc_wg128",
