@@ -2309,6 +2309,55 @@ def test_v2_mul_mat_id_route_resolves_for_q4_k_case() -> None:
     }
 
 
+def test_v2_mul_mat_id_route_resolves_for_q5_k_case() -> None:
+    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
+    case = ImportedCase(
+        op="MUL_MAT_ID",
+        dtype={"type_a": "q5_K", "type_b": "f32"},
+        raw_case={},
+        normalized_params={
+            "b": 0,
+            "k": 256,
+            "m": 512,
+            "n": 1,
+            "n_mats": 4,
+            "n_used": 2,
+        },
+        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_group_index=0,
+        source_case_index=0,
+    )
+
+    routes = list(routes_for_op(catalog, "MUL_MAT_ID"))
+
+    resolved_route, shape, reason, detail = resolve_route_for_case(case, routes)
+
+    assert reason is None
+    assert detail is None
+    assert resolved_route is not None
+    assert resolved_route.id == "mul_mat_id_q5_k_f32_expert_planes_3d"
+    assert shape == {
+        "d0": 512,
+        "d1": 2,
+        "d2": 1,
+        "src0_d0": 256,
+        "src0_d1": 512,
+        "src0_d2": 4,
+        "src1_d0": 256,
+        "src2_d0": 2,
+        "src2_d1": 1,
+        "k": 256,
+        "rows": 512,
+        "nexperts": 4,
+        "nselected": 2,
+        "ntokens": 1,
+        "src1_selected_stride": 256,
+        "src1_token_stride": 512,
+        "idx_token_stride": 2,
+        "dst_token_stride": 1024,
+    }
+
+
 def test_v2_mul_mat_route_resolves_for_q5_dot16_case() -> None:
     catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
     case = ImportedCase(
