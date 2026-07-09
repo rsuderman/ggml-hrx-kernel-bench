@@ -677,6 +677,62 @@ def _add_rms_norm_mul_f32(np: Any, candidate: Candidate, fixture_dir: Path, seed
     return OracleResult("fixtures_ready", meta["oracle"], fixture_dir, meta_path, fixture_dir / "expected.npy", meta["tolerance"])
 
 
+def _pack_q8_1_x4_rows(np: Any, values: Any) -> Any:
+    nrows, ncols = values.shape
+    block_count = (ncols + 31) // 32
+    outer_count = (block_count + 3) // 4
+    expected = np.zeros((nrows, outer_count, 144), dtype=np.uint8)
+    for row in range(nrows):
+        for block in range(block_count):
+            outer = block // 4
+            inner = block % 4
+            start = block * 32
+            block_values = np.zeros((32,), dtype=np.float32)
+            chunk = values[row, start : min(start + 32, ncols)]
+            block_values[: chunk.size] = chunk
+            absmax = np.max(np.abs(block_values))
+            d = np.float32(absmax / 127.0) if absmax != 0 else np.float32(0.0)
+            if d != 0:
+                qs = np.rint(block_values / d).astype(np.int32)
+            else:
+                qs = np.zeros((32,), dtype=np.int32)
+            qs = np.clip(qs, -128, 127).astype(np.int8)
+            s = np.float32(np.sum(qs.astype(np.float32)) * d)
+            expected[row, outer, inner * 4 : inner * 4 + 2] = np.array([d], dtype=np.float16).view(np.uint8)
+            expected[row, outer, inner * 4 + 2 : inner * 4 + 4] = np.array([s], dtype=np.float16).view(np.uint8)
+            expected[row, outer, 16 + inner * 32 : 16 + inner * 32 + 32] = qs.view(np.uint8)
+    return expected.reshape(nrows * outer_count * 144).view(np.int8)
+
+
+def _rms_norm_mul_quantize_q8_1_f32(np: Any, candidate: Candidate, fixture_dir: Path, seed: int) -> OracleResult:
+    ncols, nrows, elems = _dims(candidate)
+    if ncols != 3072 or nrows != 1:
+        raise ValueError("rms_norm_mul_quantize_q8_1_f32 oracle currently requires ncols=3072 and nrows=1")
+    eps = np.float32(0.0)
+    signs = np.where((np.arange(elems, dtype=np.int32) % 2) == 0, np.float32(1.0), np.float32(-1.0))
+    src = signs.reshape(nrows, ncols).astype(np.float32)
+    weight = np.ones((ncols,), dtype=np.float32)
+    scale = np.reciprocal(np.sqrt(np.mean(src * src, axis=1, keepdims=True) + eps)).astype(np.float32)
+    quantized_values = (src * scale * weight.reshape(1, ncols)).astype(np.float32)
+    expected = _pack_q8_1_x4_rows(np, quantized_values)
+    dst_init = np.zeros(expected.shape, dtype=np.int8)
+    np.save(fixture_dir / "src.npy", src.reshape(elems), allow_pickle=False)
+    np.save(fixture_dir / "weight.npy", weight, allow_pickle=False)
+    np.save(fixture_dir / "dst_init.npy", dst_init, allow_pickle=False)
+    np.save(fixture_dir / "expected.npy", expected, allow_pickle=False)
+    meta = _metadata(candidate, seed, "rms_norm_mul_quantize_q8_1_f32_numpy", {"atol": 0.0, "rtol": 0.0})
+    meta["eps"] = float(eps)
+    meta["fixture_policy"] = {
+        "src": "alternating_unit_values_for_exact_rms",
+        "weight": "unit_broadcast_f32_row",
+        "dst": "q8_1_x4_packed_i8_bytes",
+    }
+    meta["bytes"] = {"expected": int(expected.size)}
+    meta_path = fixture_dir / "oracle.json"
+    write_json(meta_path, meta)
+    return OracleResult("fixtures_ready", meta["oracle"], fixture_dir, meta_path, fixture_dir / "expected.npy", meta["tolerance"])
+
+
 def _copy_f32_f16(np: Any, candidate: Candidate, fixture_dir: Path, seed: int) -> OracleResult:
     src_dtype, dst_dtype = _copy_family_dtypes(candidate.family)
     common_dims = _ranked_shape(candidate)
@@ -2163,7 +2219,6 @@ LOGICAL_ORACLE_SPECS: tuple[LogicalOracleSpec, ...] = (
     LogicalOracleSpec(("mul_mat_f16_f32_batched", "mul_mat_f16_f32_batched_cont"), "mul_mat_numpy_logical", {"atol": 0.08, "rtol": 0.02}, _matmul_f32_arrays),
     LogicalOracleSpec(("mul_mat_q5_k_f32", "mul_mat_q6_k_f32", "mul_mat_q8_0_f32", "mul_mat_q4_k_swiglu_f32"), "quantized_mul_mat_numpy_logical", {"atol": 0.12, "rtol": 0.04}, _quantized_matmul_arrays),
     LogicalOracleSpec(("quantize_q8_1_f32",), "quantize_q8_1_numpy", {"atol": 0.0, "rtol": 0.0}, _quantize_q8_1_arrays),
-    LogicalOracleSpec(("rms_norm_mul_quantize_q8_1_f32",), "rms_norm_mul_quantize_q8_1_numpy", {"atol": 0.0, "rtol": 0.0}, _rms_norm_mul_quantize_arrays),
     LogicalOracleSpec(("rope_f32", "rope_neox_f32", "rope_scale_f32", "rope_set_rows_f32"), "rope_numpy_structural_placeholder", {"atol": 1e-5, "rtol": 1e-5}, _rope_arrays),
     LogicalOracleSpec(("set_rows_f32", "cont_set_rows_f32"), "set_rows_f32_numpy", {"atol": 1e-6, "rtol": 1e-6}, _set_rows_arrays),
     LogicalOracleSpec(("soft_max_f32",), "soft_max_f32_numpy", {"atol": 1e-5, "rtol": 1e-5}, _softmax_arrays),
@@ -2816,6 +2871,23 @@ def _write_mul_mat_q8_0_workbench(candidate: Candidate, linked_source: Path, wor
     return _emit_case(linked_source, workbench_path, case_name, bench_name, "\n".join(lines))
 
 
+def _write_rms_norm_mul_quantize_q8_1_workbench(candidate: Candidate, linked_source: Path, workbench_path: Path, fixture_dir: Path) -> tuple[str, dict[str, Any]]:
+    ncols, nrows, elems = _dims(candidate)
+    blocks = (ncols + 31) // 32
+    expected_elems = nrows * ((blocks + 3) // 4) * 144
+    case_name, bench_name = _case_names(candidate)
+    lines = [
+        "  %eps = check.literal value(0.0) : f32",
+        _read_f32(workbench_path, fixture_dir, "src", elems),
+        _read_f32(workbench_path, fixture_dir, "weight", ncols),
+        f"  %dst = check.file.read.npy path(\"{_rel_fixture(workbench_path, fixture_dir, 'dst_init.npy')}\") : tensor<{expected_elems}xi8>",
+        f"  %expected = check.file.read.npy path(\"{_rel_fixture(workbench_path, fixture_dir, 'expected.npy')}\") : tensor<{expected_elems}xi8>",
+        f"  func.call {candidate.root_symbol}(%eps, %src, %weight, %dst) : (f32, tensor<{elems}xf32>, tensor<{ncols}xf32>, tensor<{expected_elems}xi8>)",
+        f"  check.expect.equal actual(%dst) expected(%expected) : tensor<{expected_elems}xi8>",
+    ]
+    return _emit_case(linked_source, workbench_path, case_name, bench_name, "\n".join(lines))
+
+
 def _write_quantized_mul_mat_static_workbench(
     candidate: Candidate,
     linked_source: Path,
@@ -3129,6 +3201,11 @@ ORACLE_SPECS: tuple[OracleSpec, ...] = (
         family_ids=("quantize_q8_1_f32",),
         generate=_logical_generate(LogicalOracleSpec(("quantize_q8_1_f32",), "quantize_q8_1_numpy", {"atol": 0.0, "rtol": 0.0}, _quantize_q8_1_arrays, exact_kernel_abi=True)),
         write_workbench=_write_quantize_q8_1_workbench,
+    ),
+    OracleSpec(
+        family_ids=("rms_norm_mul_quantize_q8_1_f32",),
+        generate=_rms_norm_mul_quantize_q8_1_f32,
+        write_workbench=_write_rms_norm_mul_quantize_q8_1_workbench,
     ),
     OracleSpec(
         family_ids=("mul_mat_q8_0_f32",),

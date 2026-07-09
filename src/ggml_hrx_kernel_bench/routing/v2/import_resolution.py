@@ -252,27 +252,60 @@ def lower_rms_norm_mul_tensors(
     return tensors, {"ncols": ncols, "nrows": nrows}
 
 
+def _parse_numeric_eps(case: ImportedCase, *, op_name: str) -> float:
+    eps = case.normalized_params.get("eps", 0.0)
+    if isinstance(eps, bool):
+        raise ValueError(f"{op_name} lowering requires numeric eps")
+    if isinstance(eps, str):
+        try:
+            return float(eps)
+        except ValueError as exc:
+            raise ValueError(f"{op_name} lowering requires numeric eps") from exc
+    if isinstance(eps, (int, float)):
+        return float(eps)
+    raise ValueError(f"{op_name} lowering requires numeric eps")
+
+
+def lower_rms_norm_mul_quantize_tensors(
+    case: ImportedCase,
+) -> tuple[dict[str, ConcreteTensor], dict[str, int]]:
+    ne = case.normalized_params.get("ne")
+    if not isinstance(ne, list) or len(ne) != 4:
+        raise ValueError("rms_norm_mul_quantize_q8_1_f32 lowering requires a 4-D ne extent list")
+    if any(not isinstance(value, int) for value in ne):
+        raise ValueError("rms_norm_mul_quantize_q8_1_f32 lowering requires integer ne extents")
+    if str(case.dtype.get("type_src", case.dtype.get("type", ""))).upper() != "F32":
+        raise ValueError("rms_norm_mul_quantize_q8_1_f32 routing requires type_src=f32")
+    if str(case.dtype.get("type_weight", "f32")).upper() != "F32":
+        raise ValueError("rms_norm_mul_quantize_q8_1_f32 routing requires type_weight=f32")
+    if str(case.dtype.get("type_dst", "")).upper() != "Q8_1_X4":
+        raise ValueError("rms_norm_mul_quantize_q8_1_f32 routing requires type_dst=q8_1_x4")
+    if _parse_numeric_eps(case, op_name="rms_norm_mul_quantize_q8_1_f32") != 0.0:
+        raise ValueError("rms_norm_mul_quantize_q8_1_f32 routing currently requires eps=0.0")
+    ncols = int(ne[0])
+    nrows = int(ne[1]) * int(ne[2]) * int(ne[3])
+    row_dimensions = _dimensions_from_extents([ncols, nrows])
+    tensors = {
+        "src0": ConcreteTensor(dtype="F32", dimensions=row_dimensions),
+        "weight": ConcreteTensor(
+            dtype="F32",
+            dimensions=_dimensions_from_extents_and_strides([ncols, 1], [1, 0]),
+        ),
+        "dst": ConcreteTensor(dtype="Q8_1_X4", dimensions=row_dimensions),
+    }
+    return tensors, {"ncols": ncols, "nrows": nrows}
+
+
 def lower_add_rms_norm_mul_tensors(
     case: ImportedCase,
 ) -> tuple[dict[str, ConcreteTensor], dict[str, int]]:
     ne = case.normalized_params.get("ne")
-    eps = case.normalized_params.get("eps", 0.0)
     broadcast = case.normalized_params.get("broadcast", 0)
     if not isinstance(ne, list) or len(ne) != 4:
         raise ValueError("ADD_RMS_NORM lowering requires a 4-D ne extent list")
     if any(not isinstance(value, int) for value in ne):
         raise ValueError("ADD_RMS_NORM lowering requires integer ne extents")
-    if isinstance(eps, bool):
-        raise ValueError("ADD_RMS_NORM lowering requires numeric eps")
-    if isinstance(eps, str):
-        try:
-            eps_value = float(eps)
-        except ValueError as exc:
-            raise ValueError("ADD_RMS_NORM lowering requires numeric eps") from exc
-    elif isinstance(eps, (int, float)):
-        eps_value = float(eps)
-    else:
-        raise ValueError("ADD_RMS_NORM lowering requires numeric eps")
+    eps_value = _parse_numeric_eps(case, op_name="ADD_RMS_NORM")
     if not isinstance(broadcast, int):
         raise ValueError("ADD_RMS_NORM lowering requires integer broadcast")
     if str(case.dtype.get("type", "")).upper() != "F32":
@@ -1456,6 +1489,8 @@ def lower_tensors_for_route(
         return lower_rms_norm_mul_tensors(case)
     if route.family == "add_rms_norm_mul_f32":
         return lower_add_rms_norm_mul_tensors(case)
+    if route.family == "rms_norm_mul_quantize_q8_1_f32":
+        return lower_rms_norm_mul_quantize_tensors(case)
     if route.op == "ROPE":
         return lower_rope_tensors(case, route)
     if route.op == "RMS_NORM":

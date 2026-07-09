@@ -1314,6 +1314,64 @@ def test_v2_add_rms_norm_nonzero_eps_case_stays_unmapped() -> None:
     assert detail == "add_rms_norm_mul_f32 routing currently requires eps=0.0"
 
 
+def test_v2_quantize_route_resolves_rms_norm_mul_quantize_q8_1_x4_case() -> None:
+    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
+    case = ImportedCase(
+        op="QUANTIZE",
+        dtype={"type_src": "f32", "type_weight": "f32", "type_dst": "q8_1_x4"},
+        raw_case={},
+        normalized_params={
+            "eps": 0.0,
+            "ne": [3072, 1, 1, 1],
+        },
+        source_path="tests/kernels/data/additional_test.yaml",
+        source_group_index=0,
+        source_case_index=0,
+    )
+
+    routes = list(routes_for_op(catalog, "QUANTIZE"))
+
+    resolved_route, shape, reason, detail = resolve_route_for_case(case, routes)
+
+    assert reason is None
+    assert detail is None
+    assert resolved_route is not None
+    assert resolved_route.id == "rms_norm_mul_quantize_q8_1_f32_n3072_r1_x4_recompute"
+    assert shape == {
+        "d0": 3072,
+        "d1": 1,
+        "weight_d1_stride": 0,
+        "ncols": 3072,
+        "nrows": 1,
+    }
+
+
+def test_v2_quantize_route_rejects_non_x4_destination() -> None:
+    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
+    case = ImportedCase(
+        op="QUANTIZE",
+        dtype={"type_src": "f32", "type_weight": "f32", "type_dst": "q8_1"},
+        raw_case={},
+        normalized_params={
+            "eps": 0.0,
+            "ne": [3072, 1, 1, 1],
+        },
+        source_path="tests/kernels/data/additional_test.yaml",
+        source_group_index=0,
+        source_case_index=0,
+    )
+
+    routes = list(routes_for_op(catalog, "QUANTIZE"))
+
+    resolved_route, shape, reason, detail = resolve_route_for_case(case, routes)
+
+    assert resolved_route is None
+    assert shape is None
+    assert reason is not None
+    assert reason.value == "no_dtype_mapping"
+    assert detail == "matching v2 op mapping exists, but not for this dtype combination"
+
+
 def test_v2_helpers_require_catalog_or_routing_dir(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="routing_dir or catalog is required"):
         build_manifest(kernel_dir=tmp_path / "kernels")

@@ -1,7 +1,7 @@
 {
   "schema": "ggml_hrx_kernel_bench.import_test_coverage.v1",
-  "operation_count": 2,
-  "total_pass_case_count": 4,
+  "operation_count": 3,
+  "total_pass_case_count": 5,
   "total_fail_case_count": 0,
   "operations": [
     {
@@ -11,6 +11,11 @@
     },
     {
       "op": "GET_ROWS",
+      "pass_case_count": 1,
+      "fail_case_count": 0
+    },
+    {
+      "op": "QUANTIZE",
       "pass_case_count": 1,
       "fail_case_count": 0
     }

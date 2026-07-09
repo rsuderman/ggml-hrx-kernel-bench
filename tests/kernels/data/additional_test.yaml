@@ -1,4 +1,13 @@
 ops:
+  QUANTIZE:
+    - dtype:
+        type_dst: q8_1_x4
+        type_src: f32
+        type_weight: f32
+      cases:
+        - eps: 0.0
+          ne: [3072, 1, 1, 1]
+
   FLASH_ATTN_EXT:
     - dtype:
         type_KV: f16

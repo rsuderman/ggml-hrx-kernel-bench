@@ -1,0 +1,108 @@
+{
+  "id": "rms_norm_mul_quantize_q8_1_f32_n3072_r1_x4_recompute",
+  "family": "rms_norm_mul_quantize_q8_1_f32",
+  "kernel": {
+    "source_id": "rms_norm_mul_quantize_q8_1_f32",
+    "path": "quantize/rms_norm_mul_quantize_q8_1_f32_x4_recompute.loom",
+    "root_symbol": "@rms_norm_mul_quantize_q8_1_x4_f32_recompute",
+    "export_name": "rms_norm_mul_quantize_q8_1_x4_f32_recompute"
+  },
+  "tensors": {
+    "src0": {
+      "dtype": "F32",
+      "dimensions": "src0_dimensions",
+      "strides": "src0_strides"
+    },
+    "weight": {
+      "dtype": "F32",
+      "dimensions": "weight_dimensions",
+      "strides": "weight_strides"
+    },
+    "dst": {
+      "dtype": "Q8_1_X4",
+      "dimensions": "dst_dimensions",
+      "strides": "dst_strides"
+    }
+  },
+  "values": [
+    {
+      "name": "contiguous_strides",
+      "contiguous_strides": "dst_dimensions"
+    },
+    {
+      "name": "total_size",
+      "product": "dst_dimensions"
+    }
+  ],
+  "constraints": [
+    {
+      "name": "dst_dimensions",
+      "length": 2
+    },
+    {
+      "name": "dst_dimensions",
+      "index": 0,
+      "min": 3072,
+      "max": 3072
+    },
+    {
+      "name": "dst_dimensions",
+      "index": 1,
+      "min": 1,
+      "max": 1
+    },
+    {
+      "equals": [
+        "src0_dimensions",
+        "dst_dimensions"
+      ]
+    },
+    {
+      "equals": [
+        "contiguous_strides",
+        "src0_strides",
+        "dst_strides"
+      ]
+    },
+    {
+      "name": "weight_dimensions",
+      "length": 2
+    },
+    {
+      "name": "weight_dimensions",
+      "index": 0,
+      "min": 3072,
+      "max": 3072
+    },
+    {
+      "name": "weight_dimensions",
+      "index": 1,
+      "min": 1,
+      "max": 1
+    },
+    {
+      "name": "weight_strides",
+      "index": 0,
+      "min": 1,
+      "max": 1
+    },
+    {
+      "name": "weight_strides",
+      "index": 1,
+      "min": 0,
+      "max": 0
+    }
+  ],
+  "launch": {
+    "workgroup_size": [
+      32,
+      1,
+      1
+    ],
+    "rows_per_workgroup": 1,
+    "cols_per_workgroup": 1
+  },
+  "config": {
+    "bindings": []
+  }
+}
