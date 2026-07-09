@@ -1,0 +1,125 @@
+{
+  "id": "rms_norm_mul_f32_n16_r60_vector_tail",
+  "family": "rms_norm_mul_f32",
+  "kernel": {
+    "source_id": "rms_norm_mul_f32",
+    "path": "mul/rms_norm_mul_f32_vector_tail.loom",
+    "root_symbol": "@rms_norm_mul_f32_static_vector_tail",
+    "export_name": "rms_norm_mul_f32_static_vector_tail"
+  },
+  "tensors": {
+    "src0": {
+      "dtype": "F32",
+      "dimensions": "src0_dimensions",
+      "strides": "src0_strides"
+    },
+    "src1": {
+      "dtype": "F32",
+      "dimensions": "src1_dimensions",
+      "strides": "src1_strides"
+    },
+    "dst": {
+      "dtype": "F32",
+      "dimensions": "dst_dimensions",
+      "strides": "dst_strides"
+    }
+  },
+  "values": [
+    {
+      "name": "contiguous_strides",
+      "contiguous_strides": "dst_dimensions"
+    },
+    {
+      "name": "total_size",
+      "product": "dst_dimensions"
+    }
+  ],
+  "constraints": [
+    {
+      "name": "dst_dimensions",
+      "length": 2
+    },
+    {
+      "name": "dst_dimensions",
+      "index": 0,
+      "min": 16,
+      "max": 16
+    },
+    {
+      "name": "dst_dimensions",
+      "index": 1,
+      "min": 60,
+      "max": 60
+    },
+    {
+      "equals": [
+        "src0_dimensions",
+        "dst_dimensions"
+      ]
+    },
+    {
+      "equals": [
+        "contiguous_strides",
+        "src0_strides",
+        "dst_strides"
+      ]
+    },
+    {
+      "name": "src1_dimensions",
+      "length": 2
+    },
+    {
+      "name": "src1_dimensions",
+      "index": 0,
+      "min": 16,
+      "max": 16
+    },
+    {
+      "name": "src1_dimensions",
+      "index": 1,
+      "min": 1,
+      "max": 1
+    },
+    {
+      "name": "src1_strides",
+      "index": 0,
+      "min": 1,
+      "max": 1
+    },
+    {
+      "name": "src1_strides",
+      "index": 1,
+      "min": 0,
+      "max": 0
+    }
+  ],
+  "launch": {
+    "workgroup_size": [
+      32,
+      1,
+      1
+    ],
+    "rows_per_workgroup": 1,
+    "cols_per_workgroup": 1
+  },
+  "config": {
+    "bindings": [
+      {
+        "key": "@hrx2.shape.rms_norm_mul.ncols",
+        "source": "tensor.dst.dimensions.d0.size"
+      },
+      {
+        "key": "@hrx2.shape.rms_norm_mul.nrows",
+        "source": "tensor.dst.dimensions.d1.size"
+      },
+      {
+        "key": "@hrx2.tuning.rms_norm_mul.workgroup_size",
+        "value": "32"
+      },
+      {
+        "key": "@hrx2.tuning.rms_norm_mul.vector_width",
+        "value": "16"
+      }
+    ]
+  }
+}

@@ -1218,6 +1218,41 @@ def test_v2_import_resolution_lowers_permuted_rhs_for_non_add_generic_route() ->
     assert detail is None
 
 
+def test_v2_mul_route_resolves_rms_norm_mul_f32_fused_case() -> None:
+    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
+    case = ImportedCase(
+        op="MUL",
+        dtype={"type": "f32"},
+        raw_case={},
+        normalized_params={
+            "ne": [16, 5, 4, 3],
+            "nf": 16,
+            "nr": [1, 1, 1, 1],
+            "perm1": [0, 1, 2, 3],
+        },
+        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_group_index=1,
+        source_case_index=42,
+    )
+
+    routes = list(routes_for_op(catalog, "MUL"))
+
+    resolved_route, shape, reason, detail = resolve_route_for_case(case, routes)
+
+    assert reason is None
+    assert detail is None
+    assert resolved_route is not None
+    assert resolved_route.id == "rms_norm_mul_f32_n16_r60_vector_tail"
+    assert shape == {
+        "d0": 16,
+        "d1": 60,
+        "src1_d1": 1,
+        "src1_d1_stride": 0,
+        "ncols": 16,
+        "nrows": 60,
+    }
+
+
 def test_v2_helpers_require_catalog_or_routing_dir(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="routing_dir or catalog is required"):
         build_manifest(kernel_dir=tmp_path / "kernels")

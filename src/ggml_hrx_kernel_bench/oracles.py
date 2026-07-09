@@ -623,6 +623,29 @@ def _rms_norm_f32(np: Any, candidate: Candidate, fixture_dir: Path, seed: int) -
     return OracleResult("fixtures_ready", meta["oracle"], fixture_dir, meta_path, fixture_dir / "expected.npy", meta["tolerance"])
 
 
+def _rms_norm_mul_f32(np: Any, candidate: Candidate, fixture_dir: Path, seed: int) -> OracleResult:
+    ncols, nrows, elems = _dims(candidate)
+    eps = np.float32(0.0)
+    src = f32_pattern(np, (nrows, ncols), seed=seed)
+    weight = f32_pattern(np, (ncols,), seed=seed + 1, scale=0.5) + np.float32(1.0)
+    scale = np.reciprocal(np.sqrt(np.mean(src * src, axis=1, keepdims=True) + eps)).astype(np.float32)
+    expected = (src * scale * weight.reshape(1, ncols)).astype(np.float32)
+    dst_init = f32_pattern(np, (elems,), seed=seed + 2, scale=0.25)
+    np.save(fixture_dir / "src.npy", src.reshape(elems), allow_pickle=False)
+    np.save(fixture_dir / "weight.npy", weight, allow_pickle=False)
+    np.save(fixture_dir / "dst_init.npy", dst_init, allow_pickle=False)
+    np.save(fixture_dir / "expected.npy", expected.reshape(elems), allow_pickle=False)
+    meta = _metadata(candidate, seed, "rms_norm_mul_f32_numpy", {"atol": 1e-4, "rtol": 1e-4})
+    meta["eps"] = float(eps)
+    meta["fixture_policy"] = {
+        "src": "contiguous_f32_rows",
+        "weight": "broadcast_f32_row",
+    }
+    meta_path = fixture_dir / "oracle.json"
+    write_json(meta_path, meta)
+    return OracleResult("fixtures_ready", meta["oracle"], fixture_dir, meta_path, fixture_dir / "expected.npy", meta["tolerance"])
+
+
 def _copy_f32_f16(np: Any, candidate: Candidate, fixture_dir: Path, seed: int) -> OracleResult:
     src_dtype, dst_dtype = _copy_family_dtypes(candidate.family)
     common_dims = _ranked_shape(candidate)
@@ -2109,7 +2132,6 @@ LOGICAL_ORACLE_SPECS: tuple[LogicalOracleSpec, ...] = (
     LogicalOracleSpec(("mul_mat_f16_f32_batched", "mul_mat_f16_f32_batched_cont"), "mul_mat_numpy_logical", {"atol": 0.08, "rtol": 0.02}, _matmul_f32_arrays),
     LogicalOracleSpec(("mul_mat_q5_k_f32", "mul_mat_q6_k_f32", "mul_mat_q8_0_f32", "mul_mat_q4_k_swiglu_f32"), "quantized_mul_mat_numpy_logical", {"atol": 0.12, "rtol": 0.04}, _quantized_matmul_arrays),
     LogicalOracleSpec(("quantize_q8_1_f32",), "quantize_q8_1_numpy", {"atol": 0.0, "rtol": 0.0}, _quantize_q8_1_arrays),
-    LogicalOracleSpec(("rms_norm_mul_f32",), "rms_norm_mul_f32_numpy", {"atol": 1e-4, "rtol": 1e-4}, _rms_norm_mul_arrays),
     LogicalOracleSpec(("add_rms_norm_mul_f32",), "add_rms_norm_mul_f32_numpy", {"atol": 1e-4, "rtol": 1e-4}, _add_rms_norm_mul_arrays),
     LogicalOracleSpec(("rms_norm_mul_quantize_q8_1_f32",), "rms_norm_mul_quantize_q8_1_numpy", {"atol": 0.0, "rtol": 0.0}, _rms_norm_mul_quantize_arrays),
     LogicalOracleSpec(("rope_f32", "rope_neox_f32", "rope_scale_f32", "rope_set_rows_f32"), "rope_numpy_structural_placeholder", {"atol": 1e-5, "rtol": 1e-5}, _rope_arrays),
@@ -2292,6 +2314,28 @@ check.case public {case_name} {{
   %dst = check.file.read.npy path("{_rel_fixture(workbench_path, fixture_dir, "dst_init.npy")}") : tensor<{elems}xf32>
   %expected = check.file.read.npy path("{_rel_fixture(workbench_path, fixture_dir, "expected.npy")}") : tensor<{elems}xf32>
   func.call {candidate.root_symbol}(%eps, %src, %dst) : (f32, tensor<{elems}xf32>, tensor<{elems}xf32>)
+  check.expect.close actual(%dst) expected(%expected) atol(0.0001) rtol(0.0001) nan(same) : tensor<{elems}xf32>
+  check.return
+}}
+
+check.benchmark<{case_name}> {bench_name}
+"""
+    _source_plus_case(linked_source, workbench_path, suffix)
+    return bench_name, {"status": "ok", "workbench_path": str(workbench_path)}
+
+
+def _write_rms_norm_mul_workbench(candidate: Candidate, linked_source: Path, workbench_path: Path, fixture_dir: Path) -> tuple[str, dict[str, Any]]:
+    ncols, _, elems = _dims(candidate)
+    case_name = f"@case_{candidate.id}"
+    bench_name = f"@bench_{candidate.id}"
+    suffix = f"""
+check.case public {case_name} {{
+  %eps = check.literal value(0.0) : f32
+  %src = check.file.read.npy path("{_rel_fixture(workbench_path, fixture_dir, "src.npy")}") : tensor<{elems}xf32>
+  %weight = check.file.read.npy path("{_rel_fixture(workbench_path, fixture_dir, "weight.npy")}") : tensor<{ncols}xf32>
+  %dst = check.file.read.npy path("{_rel_fixture(workbench_path, fixture_dir, "dst_init.npy")}") : tensor<{elems}xf32>
+  %expected = check.file.read.npy path("{_rel_fixture(workbench_path, fixture_dir, "expected.npy")}") : tensor<{elems}xf32>
+  func.call {candidate.root_symbol}(%eps, %src, %weight, %dst) : (f32, tensor<{elems}xf32>, tensor<{ncols}xf32>, tensor<{elems}xf32>)
   check.expect.close actual(%dst) expected(%expected) atol(0.0001) rtol(0.0001) nan(same) : tensor<{elems}xf32>
   check.return
 }}
@@ -2924,6 +2968,11 @@ ORACLE_SPECS: tuple[OracleSpec, ...] = (
         family_ids=("rms_norm_f32",),
         generate=_rms_norm_f32,
         write_workbench=_write_rms_norm_workbench,
+    ),
+    OracleSpec(
+        family_ids=("rms_norm_mul_f32",),
+        generate=_rms_norm_mul_f32,
+        write_workbench=_write_rms_norm_mul_workbench,
     ),
     OracleSpec(
         family_ids=(

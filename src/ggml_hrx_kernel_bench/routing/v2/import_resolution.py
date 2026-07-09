@@ -220,6 +220,38 @@ def lower_generic_pointwise_tensors(
     return tensors, _shape_from_extents(dst_extents)
 
 
+def lower_rms_norm_mul_tensors(
+    case: ImportedCase,
+) -> tuple[dict[str, ConcreteTensor], dict[str, int]]:
+    ne, nr, nf, perm1 = _parse_pointwise_parameters(case)
+    dtype = str(case.dtype.get("type", "")).upper()
+    if dtype != "F32":
+        raise ValueError("rms_norm_mul_f32 routing requires type=f32")
+    if perm1 != POINTWISE_BASE_PERMUTATION:
+        raise ValueError("rms_norm_mul_f32 routing requires perm1=[0, 1, 2, 3]")
+    if any(int(value) != 1 for value in nr):
+        raise ValueError("rms_norm_mul_f32 routing requires nr=[1, 1, 1, 1]")
+    ncols = int(ne[0])
+    nrows = int(ne[1]) * int(ne[2]) * int(ne[3])
+    if int(nf) != ncols:
+        raise ValueError("rms_norm_mul_f32 routing requires nf to match ne[0]")
+    tensors = {
+        "src0": ConcreteTensor(
+            dtype=dtype,
+            dimensions=_dimensions_from_extents([ncols, nrows]),
+        ),
+        "src1": ConcreteTensor(
+            dtype=dtype,
+            dimensions=_dimensions_from_extents_and_strides([ncols, 1], [1, 0]),
+        ),
+        "dst": ConcreteTensor(
+            dtype=dtype,
+            dimensions=_dimensions_from_extents([ncols, nrows]),
+        ),
+    }
+    return tensors, {"ncols": ncols, "nrows": nrows}
+
+
 def _parse_unary_parameters(case: ImportedCase) -> tuple[list[int], int]:
     # ggml unary-op params: ne_a = input tensor's 4-D shape [ne0..ne3];
     # v = view flag (0 = contiguous input, 1 = non-contiguous strided view).
@@ -1375,6 +1407,8 @@ def lower_tensors_for_route(
         return lower_mul_mat_tensors(case)
     if route.op == "MUL_MAT_ID":
         return lower_mul_mat_id_tensors(case)
+    if route.family == "rms_norm_mul_f32":
+        return lower_rms_norm_mul_tensors(case)
     if route.op == "ROPE":
         return lower_rope_tensors(case, route)
     if route.op == "RMS_NORM":

@@ -84,7 +84,8 @@
       "mul/mul_f32_rhs_row_broadcast_2d.json",
       "mul/mul_f32_contiguous_1d.json",
       "mul/mul_f32_generic_2d.json",
-      "mul/mul_f32_generic_4d.json"
+      "mul/mul_f32_generic_4d.json",
+      "mul/rms_norm_mul_f32_n16_r60_vector_tail.json"
     ],
     "NEG": [
       "neg/neg_f16.json",

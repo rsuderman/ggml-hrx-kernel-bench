@@ -230,6 +230,21 @@ def _pointwise_rhs_intra_row_repeat_shape(
     }
 
 
+def _pointwise_rms_norm_mul_shape(facts: PointwiseCaseFacts) -> dict[str, int]:
+    if facts.nf != facts.ne[0]:
+        raise ValueError("rms_norm_mul pointwise layout requires nf to match ne[0]")
+    if not _is_base_pointwise_permutation(facts.perm1):
+        raise ValueError("rms_norm_mul pointwise layout requires perm1=[0, 1, 2, 3]")
+    if not _all_equal(facts.nr, 1):
+        raise ValueError("rms_norm_mul pointwise layout requires nr=[1, 1, 1, 1]")
+    return {
+        "ncols": facts.ne[0],
+        "nrows": facts.src1_nrows,
+        "src1_row_stride": 0,
+        "src1_ncols": facts.ne[0],
+    }
+
+
 POINTWISE_LAYOUT_LOWERERS: dict[
     str, tuple[Callable[[PointwiseCaseFacts], dict[str, int]], ...]
 ] = {
@@ -255,6 +270,7 @@ POINTWISE_LAYOUT_LOWERERS: dict[
         _pointwise_rhs_column_broadcast_shape,
     ),
     "contiguous_src0_rhs_column_broadcast": (_pointwise_rhs_column_broadcast_shape,),
+    "contiguous_src_row_broadcast_weight": (_pointwise_rms_norm_mul_shape,),
 }
 
 
