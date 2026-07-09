@@ -712,8 +712,8 @@ def lower_mul_mat_id_tensors(
 ) -> tuple[dict[str, ConcreteTensor], dict[str, int]]:
     type_a = str(case.dtype.get("type_a", "")).upper()
     type_b = str(case.dtype.get("type_b", "")).upper()
-    if type_a not in {"Q4_K", "Q5_K"} or type_b != "F32":
-        raise ValueError("MUL_MAT_ID q4_k/q5_k routing requires type_a=q4_K or q5_K and type_b=f32")
+    if type_a not in {"Q4_K", "Q5_K", "Q6_K"} or type_b != "F32":
+        raise ValueError("MUL_MAT_ID q4_k/q5_k/q6_k routing requires type_a=q4_K, q5_K, or q6_K and type_b=f32")
     batch = case.normalized_params.get("b", 0)
     k = case.normalized_params.get("k")
     rows = case.normalized_params.get("m")
@@ -729,18 +729,18 @@ def lower_mul_mat_id_tensors(
         ("n_used", nselected),
     ):
         if not isinstance(value, int):
-            raise ValueError(f"MUL_MAT_ID q4_k/q5_k lowering requires integer {name}")
+            raise ValueError(f"MUL_MAT_ID q4_k/q5_k/q6_k lowering requires integer {name}")
     if int(batch) != 0:
-        raise ValueError("MUL_MAT_ID q4_k/q5_k v2 routing currently requires b=0")
+        raise ValueError("MUL_MAT_ID q4_k/q5_k/q6_k v2 routing currently requires b=0")
     k_extent = int(k)
     row_extent = int(rows)
     token_extent = int(ntokens)
     expert_extent = int(nexperts)
     selected_extent = int(nselected)
     if token_extent != 1:
-        raise ValueError("MUL_MAT_ID q4_k/q5_k v2 routing currently requires n=1")
+        raise ValueError("MUL_MAT_ID q4_k/q5_k/q6_k v2 routing currently requires n=1")
     if selected_extent > 2:
-        raise ValueError("MUL_MAT_ID q4_k/q5_k v2 routing currently requires n_used<=2")
+        raise ValueError("MUL_MAT_ID q4_k/q5_k/q6_k v2 routing currently requires n_used<=2")
     src1_selected_stride = k_extent
     src1_token_stride = k_extent * selected_extent
     idx_token_stride = selected_extent
