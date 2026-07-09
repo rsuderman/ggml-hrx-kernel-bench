@@ -1066,7 +1066,71 @@ def _unary_apply(np: Any, family: str, values: Any) -> Any:
     raise ValueError(f"unsupported unary family {family}")
 
 
+def _unary_source_buffer(np: Any, candidate: Candidate, length: int, seed: int) -> Any:
+    shape = (length,)
+    if candidate.family in {"exp_f32", "exp_f16"}:
+        return f32_pattern(np, shape, seed=seed, scale=0.25)
+    if candidate.family in {"sqrt_f32", "sqrt_f16"}:
+        return positive_f32_pattern(np, shape, seed=seed, scale=0.25)
+    return f32_pattern(np, shape, seed=seed)
+
+
+def _strided_unary_arrays(
+    np: Any,
+    candidate: Candidate,
+    seed: int,
+    common_dims: tuple[int, ...],
+    src0_dims: tuple[int, ...],
+    src0_strides: tuple[int, ...],
+) -> dict[str, Any]:
+    # src0 is a non-contiguous view of a padded buffer (ggml v=1). Build the minimal enclosing
+    # buffer, gather the logical view through it, and lay `expected` out as a contiguous dst.
+    dst_elems = _product(common_dims)
+    src0_buffer_len = _buffer_length(src0_dims, src0_strides)
+    src0_indices = _pointwise_logical_indices(np, common_dims, src0_dims, src0_strides)
+    dst_indices = _pointwise_logical_indices(
+        np, common_dims, common_dims, _contiguous_strides(common_dims)
+    )
+    src_buffer = _unary_source_buffer(np, candidate, src0_buffer_len, seed)
+    if candidate.family.endswith("_f16"):
+        src0_buffer = src_buffer.astype(np.float16)
+        applied = _unary_apply(
+            np, candidate.family, src0_buffer[src0_indices].astype(np.float32)
+        ).astype(np.float16)
+        expected = np.zeros((dst_elems,), dtype=np.float16)
+        expected[dst_indices] = applied
+        return {
+            "arrays": {
+                "src0": _f16_bits(np, src0_buffer),
+                "dst_init": np.zeros((dst_elems,), dtype=np.int16),
+                "expected": _f16_bits(np, expected),
+            },
+            "metadata": {"dst_type": "i16"},
+        }
+    src0_buffer = src_buffer.astype(np.float32)
+    applied = _unary_apply(np, candidate.family, src0_buffer[src0_indices]).astype(np.float32)
+    dst_init = f32_pattern(np, (dst_elems,), seed=seed + 2, scale=0.25)
+    expected = dst_init.copy()
+    expected[dst_indices] = applied
+    return {
+        "arrays": {
+            "src0": src0_buffer,
+            "dst_init": dst_init,
+            "expected": expected,
+        },
+    }
+
+
 def _unary_arrays(np: Any, candidate: Candidate, seed: int) -> dict[str, Any]:
+    common_dims = _pointwise_common_dims(candidate)
+    # V2 encodes shape as ranked dims "d0","d1",... (plus per-tensor deltas like
+    # "src0_d1_stride" when a view is non-contiguous). Legacy V1 families instead use
+    # "ncols"/"nrows"/"k", for which _ranked_shape returns None.
+    if common_dims is not None:
+        src0_dims = _copy_tensor_dims(candidate, "src0", common_dims)
+        src0_strides = _copy_tensor_strides(candidate, "src0", src0_dims)
+        if tuple(src0_strides) != _contiguous_strides(src0_dims):
+            return _strided_unary_arrays(np, candidate, seed, common_dims, src0_dims, src0_strides)
     _, _, elems = _dims(candidate)
     src = _unary_source_values(np, candidate, seed)
     if candidate.family.endswith("_f16"):
@@ -1970,25 +2034,34 @@ check.benchmark<{case_name}> {bench_name}
 
 def _write_abs_workbench(candidate: Candidate, linked_source: Path, workbench_path: Path, fixture_dir: Path) -> tuple[str, dict[str, Any]]:
     _, _, elems = _dims(candidate)
+    src0_elems, dst_elems = elems, elems
+    common_dims = _pointwise_common_dims(candidate)
+    if common_dims is not None:
+        src0_dims = _copy_tensor_dims(candidate, "src0", common_dims)
+        src0_strides = _copy_tensor_strides(candidate, "src0", src0_dims)
+        if tuple(src0_strides) != _contiguous_strides(src0_dims):
+            # Non-contiguous src0 (ggml v=1): read the padded src0 buffer, write a contiguous dst.
+            src0_elems = _buffer_length(src0_dims, src0_strides)
+            dst_elems = _product(common_dims)
     case_name, bench_name = _case_names(candidate)
     if candidate.family == "abs_f16":
         body = "\n".join(
             [
-                _read_i16(workbench_path, fixture_dir, "src0", elems),
-                _read_i16(workbench_path, fixture_dir, "dst_init", elems).replace("%dst_init", "%dst"),
-                _read_i16(workbench_path, fixture_dir, "expected", elems),
-                f"  func.call {candidate.root_symbol}(%src0, %dst) : (tensor<{elems}xi16>, tensor<{elems}xi16>)",
-                f"  check.expect.equal actual(%dst) expected(%expected) : tensor<{elems}xi16>",
+                _read_i16(workbench_path, fixture_dir, "src0", src0_elems),
+                _read_i16(workbench_path, fixture_dir, "dst_init", dst_elems).replace("%dst_init", "%dst"),
+                _read_i16(workbench_path, fixture_dir, "expected", dst_elems),
+                f"  func.call {candidate.root_symbol}(%src0, %dst) : (tensor<{src0_elems}xi16>, tensor<{dst_elems}xi16>)",
+                f"  check.expect.equal actual(%dst) expected(%expected) : tensor<{dst_elems}xi16>",
             ]
         )
     else:
         body = "\n".join(
             [
-                _read_f32(workbench_path, fixture_dir, "src0", elems),
-                _read_f32(workbench_path, fixture_dir, "dst_init", elems).replace("%dst_init", "%dst"),
-                _read_f32(workbench_path, fixture_dir, "expected", elems),
-                f"  func.call {candidate.root_symbol}(%src0, %dst) : (tensor<{elems}xf32>, tensor<{elems}xf32>)",
-                f"  check.expect.close actual(%dst) expected(%expected) atol(0.0) rtol(0.0) nan(same) : tensor<{elems}xf32>",
+                _read_f32(workbench_path, fixture_dir, "src0", src0_elems),
+                _read_f32(workbench_path, fixture_dir, "dst_init", dst_elems).replace("%dst_init", "%dst"),
+                _read_f32(workbench_path, fixture_dir, "expected", dst_elems),
+                f"  func.call {candidate.root_symbol}(%src0, %dst) : (tensor<{src0_elems}xf32>, tensor<{dst_elems}xf32>)",
+                f"  check.expect.close actual(%dst) expected(%expected) atol(0.0) rtol(0.0) nan(same) : tensor<{dst_elems}xf32>",
             ]
         )
     return _emit_case(linked_source, workbench_path, case_name, bench_name, body)

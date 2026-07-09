@@ -212,6 +212,125 @@ def test_copy_oracle_and_workbench_support_transposed_f32_source(tmp_path: Path)
     assert "check.expect.close" in workbench
 
 
+# ggml unary v=1 view of ne_a=[2,3,2,2]: parent inflated per dim by [3,2,5,4] -> src0 element
+# strides [1, 3*ne0, 6*ne0*ne1, 30*ne0*ne1*ne2] = [1, 6, 36, 360]; padded buffer len 410, dst 24.
+_ABS_STRIDED_SHAPE = {"d0": 2, "d1": 3, "d2": 2, "d3": 2, "src0_d1_stride": 6, "src0_d2_stride": 36, "src0_d3_stride": 360}
+_ABS_STRIDED_DIMS = (2, 3, 2, 2)
+_ABS_STRIDED_STRIDES = (1, 6, 36, 360)
+_ABS_STRIDED_BUFFER_LEN = 410
+_ABS_STRIDED_DST_ELEMS = 24
+
+
+def _abs_gathered_view(src0: np.ndarray) -> np.ndarray:
+    out = np.empty(_ABS_STRIDED_DST_ELEMS, dtype=src0.dtype)
+    d0, d1, d2, d3 = _ABS_STRIDED_DIMS
+    s0, s1, s2, s3 = _ABS_STRIDED_STRIDES
+    for i3 in range(d3):
+        for i2 in range(d2):
+            for i1 in range(d1):
+                for i0 in range(d0):
+                    off = i0 * s0 + i1 * s1 + i2 * s2 + i3 * s3
+                    lin = i0 + i1 * d0 + i2 * d0 * d1 + i3 * d0 * d1 * d2
+                    out[lin] = src0[off]
+    return out
+
+
+def test_abs_oracle_and_workbench_model_strided_src0_view_f32(tmp_path: Path) -> None:
+    candidate = _candidate(
+        candidate_id="abs_f32_non_contiguous_4d",
+        shape=dict(_ABS_STRIDED_SHAPE),
+        family="abs_f32",
+        source_id="abs_f32",
+        root_symbol="@hrx2_abs_f32_non_contiguous_4d",
+        export_name="hrx2_abs_f32_non_contiguous_4d",
+        op="ABS",
+        source_path="kernels/v2/abs/non_contiguous_4d.loom",
+    )
+
+    result = generate_oracle(candidate, tmp_path / "fixtures", force=True)
+
+    assert result.status == "fixtures_ready"
+    src0 = np.load(tmp_path / "fixtures" / "src0.npy")
+    expected = np.load(tmp_path / "fixtures" / "expected.npy")
+    assert src0.shape == (_ABS_STRIDED_BUFFER_LEN,)
+    assert expected.shape == (_ABS_STRIDED_DST_ELEMS,)
+    assert np.array_equal(expected, np.abs(_abs_gathered_view(src0)))
+    # A naive contiguous read of the first dst_elems values is NOT the view -> strides matter.
+    assert not np.array_equal(expected, np.abs(src0[:_ABS_STRIDED_DST_ELEMS]))
+
+    linked_source = tmp_path / "linked.loom"
+    linked_source.write_text(
+        'kernel.def export("hrx2_abs_f32_non_contiguous_4d") @hrx2_abs_f32_non_contiguous_4d() {}\n',
+        encoding="utf-8",
+    )
+    _, metadata = write_workbench(candidate, linked_source, tmp_path / "workbench.loom", tmp_path / "fixtures")
+
+    assert metadata["status"] == "ok"
+    workbench = (tmp_path / "workbench.loom").read_text(encoding="utf-8")
+    assert "tensor<410xf32>, tensor<24xf32>" in workbench
+    assert "check.expect.close" in workbench
+
+
+def test_abs_oracle_and_workbench_model_strided_src0_view_f16(tmp_path: Path) -> None:
+    candidate = _candidate(
+        candidate_id="abs_f16_non_contiguous_4d",
+        shape=dict(_ABS_STRIDED_SHAPE),
+        family="abs_f16",
+        source_id="abs_f16",
+        root_symbol="@hrx2_abs_f16_non_contiguous_4d",
+        export_name="hrx2_abs_f16_non_contiguous_4d",
+        op="ABS",
+        source_path="kernels/v2/abs/non_contiguous_4d.loom",
+    )
+
+    result = generate_oracle(candidate, tmp_path / "fixtures", force=True)
+
+    assert result.status == "fixtures_ready"
+    src0_bits = np.load(tmp_path / "fixtures" / "src0.npy")
+    expected = np.load(tmp_path / "fixtures" / "expected.npy")
+    assert src0_bits.dtype == np.int16
+    assert src0_bits.shape == (_ABS_STRIDED_BUFFER_LEN,)
+    assert expected.shape == (_ABS_STRIDED_DST_ELEMS,)
+    view = _abs_gathered_view(src0_bits.view(np.float16))
+    want = np.abs(view.astype(np.float32)).astype(np.float16).view(np.int16)
+    assert np.array_equal(expected, want)
+
+    linked_source = tmp_path / "linked.loom"
+    linked_source.write_text(
+        'kernel.def export("hrx2_abs_f16_non_contiguous_4d") @hrx2_abs_f16_non_contiguous_4d() {}\n',
+        encoding="utf-8",
+    )
+    _, metadata = write_workbench(candidate, linked_source, tmp_path / "workbench.loom", tmp_path / "fixtures")
+
+    assert metadata["status"] == "ok"
+    workbench = (tmp_path / "workbench.loom").read_text(encoding="utf-8")
+    assert "tensor<410xi16>, tensor<24xi16>" in workbench
+    assert "check.expect.equal" in workbench
+
+
+def test_abs_oracle_contiguous_view_is_unchanged(tmp_path: Path) -> None:
+    # v=0 (contiguous) shape: the strided gate is inert and the oracle stays the flat total-size path.
+    candidate = _candidate(
+        candidate_id="abs_f32_contiguous_1d",
+        shape={"d0": 2, "d1": 3, "d2": 2, "d3": 2, "pointwise.d1": 12},
+        family="abs_f32",
+        source_id="abs_f32",
+        root_symbol="@hrx2_abs_f32_contiguous_1d",
+        export_name="hrx2_abs_f32_contiguous_1d",
+        op="ABS",
+        source_path="kernels/v2/abs/contiguous_1d.loom",
+    )
+
+    result = generate_oracle(candidate, tmp_path / "fixtures", force=True)
+
+    assert result.status == "fixtures_ready"
+    src0 = np.load(tmp_path / "fixtures" / "src0.npy")
+    expected = np.load(tmp_path / "fixtures" / "expected.npy")
+    assert src0.shape == (24,)
+    assert expected.shape == (24,)
+    assert np.array_equal(expected, np.abs(src0))
+
+
 def test_set_rows_oracle_and_workbench_support_ranked_v2_shape(tmp_path: Path) -> None:
     candidate = _candidate(
         candidate_id="set_rows_f32_ranked_4d",
