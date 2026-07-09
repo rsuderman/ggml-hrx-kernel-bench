@@ -500,7 +500,10 @@ def lower_argsort_tensors(
 
 def lower_get_rows_tensors(
     case: ImportedCase,
+    route: V2Route,
 ) -> tuple[dict[str, ConcreteTensor], dict[str, int]]:
+    if route.family == "get_rows_moe_weights_f32":
+        return lower_get_rows_moe_weights_tensors(case)
     embedding_extent_1 = case.normalized_params.get("be1")
     embedding_extent_2 = case.normalized_params.get("be2")
     src0_nrows = case.normalized_params.get("m")
@@ -545,6 +548,69 @@ def lower_get_rows_tensors(
         **_shape_from_extents(dst_extents),
         "get_rows.src0_nrows": src0_row_count,
         "get_rows.idx_row_stride": 1,
+    }
+
+
+def lower_get_rows_moe_weights_tensors(
+    case: ImportedCase,
+) -> tuple[dict[str, ConcreteTensor], dict[str, int]]:
+    if case.normalized_params.get("moe_weights") != 1:
+        raise ValueError("GET_ROWS MoE routing requires moe_weights=1")
+    nexperts = case.normalized_params.get("nexperts")
+    nselected = case.normalized_params.get("nselected")
+    ntokens = case.normalized_params.get("ntokens")
+    src0_token_stride = case.normalized_params.get("src0_token_stride", nexperts)
+    idx_token_stride = case.normalized_params.get("idx_token_stride", nselected)
+    dst_token_stride = case.normalized_params.get("dst_token_stride", nselected)
+    for name, value in (
+        ("nexperts", nexperts),
+        ("nselected", nselected),
+        ("ntokens", ntokens),
+        ("src0_token_stride", src0_token_stride),
+        ("idx_token_stride", idx_token_stride),
+        ("dst_token_stride", dst_token_stride),
+    ):
+        if not isinstance(value, int):
+            raise ValueError(f"GET_ROWS MoE lowering requires integer {name}")
+    if str(case.dtype.get("type", "")).upper() != "F32":
+        raise ValueError("GET_ROWS MoE lowering requires f32 weights")
+    if src0_token_stride < nexperts:
+        raise ValueError("GET_ROWS MoE lowering requires src0_token_stride >= nexperts")
+    if idx_token_stride < nselected:
+        raise ValueError("GET_ROWS MoE lowering requires idx_token_stride >= nselected")
+    if dst_token_stride < nselected:
+        raise ValueError("GET_ROWS MoE lowering requires dst_token_stride >= nselected")
+    tensors = {
+        "src0": ConcreteTensor(
+            dtype="F32",
+            dimensions=_dimensions_from_extents_and_strides(
+                [int(nexperts), int(ntokens)],
+                [1, int(src0_token_stride)],
+            ),
+        ),
+        "src1": ConcreteTensor(
+            dtype="I32",
+            dimensions=_dimensions_from_extents_and_strides(
+                [int(nselected), int(ntokens)],
+                [1, int(idx_token_stride)],
+            ),
+        ),
+        "dst": ConcreteTensor(
+            dtype="F32",
+            dimensions=_dimensions_from_extents_and_strides(
+                [int(nselected), int(ntokens)],
+                [1, int(dst_token_stride)],
+            ),
+        ),
+    }
+    return tensors, {
+        **_shape_from_extents([int(nselected), int(ntokens)]),
+        "get_rows_moe.nexperts": int(nexperts),
+        "get_rows_moe.nselected": int(nselected),
+        "get_rows_moe.ntokens": int(ntokens),
+        "get_rows_moe.src0_token_stride": int(src0_token_stride),
+        "get_rows_moe.idx_token_stride": int(idx_token_stride),
+        "get_rows_moe.dst_token_stride": int(dst_token_stride),
     }
 
 
@@ -1226,7 +1292,7 @@ def lower_tensors_for_route(
     if route.op == "FLASH_ATTN_EXT":
         return lower_flash_attn_ext_tensors(case, route)
     if route.op == "GET_ROWS":
-        return lower_get_rows_tensors(case)
+        return lower_get_rows_tensors(case, route)
     if route.op == "MUL_MAT":
         return lower_mul_mat_tensors(case)
     if route.op == "ROPE":

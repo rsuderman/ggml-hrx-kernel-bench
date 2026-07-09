@@ -47,3 +47,15 @@ ops:
           permute: [0, 1, 2, 3]
           prec: f32
           sinks: 0
+
+  GET_ROWS:
+    - dtype:
+        type: f32
+      cases:
+        - moe_weights: 1
+          nexperts: 128
+          nselected: 8
+          ntokens: 16
+          src0_token_stride: 128
+          idx_token_stride: 8
+          dst_token_stride: 8

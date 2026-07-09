@@ -1800,6 +1800,47 @@ def test_v2_get_rows_route_resolves_for_q6_k_case() -> None:
     }
 
 
+def test_v2_get_rows_route_resolves_for_moe_weights_case() -> None:
+    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
+    case = ImportedCase(
+        op="GET_ROWS",
+        dtype={"type": "f32"},
+        raw_case={},
+        normalized_params={
+            "moe_weights": 1,
+            "nexperts": 128,
+            "nselected": 8,
+            "ntokens": 16,
+            "src0_token_stride": 128,
+            "idx_token_stride": 8,
+            "dst_token_stride": 8,
+        },
+        source_path="tests/kernels/data/additional_test.yaml",
+        source_group_index=0,
+        source_case_index=0,
+    )
+
+    get_rows_routes = list(routes_for_op(catalog, "GET_ROWS"))
+
+    resolved_route, shape, reason, detail = resolve_route_for_case(case, get_rows_routes)
+
+    assert reason is None
+    assert detail is None
+    assert resolved_route is not None
+    assert resolved_route.id == "get_rows_moe_weights_f32_topk_view_2d"
+    assert shape == {
+        "d0": 8,
+        "d1": 16,
+        "src0_d0": 128,
+        "get_rows_moe.nexperts": 128,
+        "get_rows_moe.nselected": 8,
+        "get_rows_moe.ntokens": 16,
+        "get_rows_moe.src0_token_stride": 128,
+        "get_rows_moe.idx_token_stride": 8,
+        "get_rows_moe.dst_token_stride": 8,
+    }
+
+
 def test_v2_get_rows_view_case_stays_unmapped() -> None:
     catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
     case = ImportedCase(

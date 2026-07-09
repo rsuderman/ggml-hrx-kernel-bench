@@ -52,6 +52,7 @@
     ],
     "GET_ROWS": [
       "get_rows/get_rows_f32_embedding_rows_2d.json",
+      "get_rows/get_rows_moe_weights_f32_topk_view_2d.json",
       "get_rows/get_rows_q4_k_f32_embedding_rows_2d.json",
       "get_rows/get_rows_q5_k_f32_embedding_rows_2d.json",
       "get_rows/get_rows_q6_k_f32_embedding_rows_2d.json",

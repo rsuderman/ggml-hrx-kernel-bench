@@ -1260,6 +1260,8 @@ def _argsort_arrays(np: Any, candidate: Candidate, seed: int) -> dict[str, Any]:
 
 
 def _get_rows_arrays(np: Any, candidate: Candidate, seed: int) -> dict[str, Any]:
+    if candidate.family == "get_rows_moe_weights_f32":
+        return _get_rows_moe_weights_arrays(np, candidate, seed)
     ncols, nrows, elems = _dims(candidate)
     src0_nrows = int(candidate.values.get("shape.get_rows.src0_nrows") or candidate.values.get("get_rows.src0_nrows") or nrows)
     src_f32 = f32_pattern(np, (src0_nrows, ncols), seed=seed)
@@ -1295,6 +1297,57 @@ def _get_rows_arrays(np: Any, candidate: Candidate, seed: int) -> dict[str, Any]
             "expected": expected.reshape(elems),
         },
         "metadata": metadata,
+    }
+
+
+def _get_rows_moe_weights_arrays(np: Any, candidate: Candidate, seed: int) -> dict[str, Any]:
+    nselected = int(candidate.shape.get("d0", candidate.values.get("shape.get_rows_moe.nselected", 8)))
+    ntokens = int(candidate.shape.get("d1", candidate.values.get("shape.get_rows_moe.ntokens", 1)))
+    nexperts = int(candidate.shape.get("src0_d0", candidate.values.get("shape.get_rows_moe.nexperts", 128)))
+    src0_token_stride = int(
+        candidate.shape.get("src0_d1_stride", candidate.values.get("shape.get_rows_moe.src0_token_stride", nexperts))
+    )
+    idx_token_stride = int(
+        candidate.shape.get("src1_d1_stride", candidate.values.get("shape.get_rows_moe.idx_token_stride", nselected))
+    )
+    dst_token_stride = int(
+        candidate.shape.get("dst_d1_stride", candidate.values.get("shape.get_rows_moe.dst_token_stride", nselected))
+    )
+    src0_elems = src0_token_stride * ntokens
+    idx_elems = idx_token_stride * ntokens
+    dst_elems = dst_token_stride * ntokens
+    src0 = f32_pattern(np, (src0_elems,), seed=seed)
+    indices = np.full((idx_elems,), -1, dtype=np.int32)
+    for token in range(ntokens):
+        for slot in range(nselected):
+            indices[token * idx_token_stride + slot] = np.int32((token * 17 + slot * 7 + seed) % nexperts)
+    dst_init = f32_pattern(np, (dst_elems,), seed=seed + 1, scale=0.25)
+    expected = dst_init.copy()
+    for token in range(ntokens):
+        for slot in range(nselected):
+            expert = int(indices[token * idx_token_stride + slot])
+            if 0 <= expert < nexperts:
+                expected[token * dst_token_stride + slot] = src0[token * src0_token_stride + expert]
+    return {
+        "arrays": {
+            "src0": src0,
+            "indices": indices,
+            "dst_init": dst_init,
+            "expected": expected,
+        },
+        "metadata": {
+            "nexperts": nexperts,
+            "nselected": nselected,
+            "ntokens": ntokens,
+            "src0_token_stride": src0_token_stride,
+            "idx_token_stride": idx_token_stride,
+            "dst_token_stride": dst_token_stride,
+            "bytes": {
+                "src0": src0_elems * F32_BYTES,
+                "src1": idx_elems * 4,
+                "dst": dst_elems * F32_BYTES,
+            },
+        },
     }
 
 
@@ -2220,6 +2273,8 @@ def _write_argsort_workbench(candidate: Candidate, linked_source: Path, workbenc
 
 
 def _write_get_rows_workbench(candidate: Candidate, linked_source: Path, workbench_path: Path, fixture_dir: Path) -> tuple[str, dict[str, Any]]:
+    if candidate.family == "get_rows_moe_weights_f32":
+        return _write_get_rows_moe_weights_workbench(candidate, linked_source, workbench_path, fixture_dir)
     if candidate.family not in {"get_rows_f32", "get_rows_q4_k_f32", "get_rows_q5_k_f32", "get_rows_q6_k_f32", "get_rows_q8_0_f32"}:
         return _logical_workbench(candidate, linked_source, workbench_path, fixture_dir)
     ncols, nrows, elems = _dims(candidate)
@@ -2253,6 +2308,30 @@ def _write_get_rows_workbench(candidate: Candidate, linked_source: Path, workben
             _read_f32(workbench_path, fixture_dir, "expected", elems),
             f"  func.call {candidate.root_symbol}(%src0, %idx, %dst) : ({src0_type}, tensor<{nrows}xi32>, tensor<{elems}xf32>)",
             f"  check.expect.close actual(%dst) expected(%expected) atol(0.00001) rtol(0.00001) nan(same) : tensor<{elems}xf32>",
+        ]
+    )
+    return _emit_case(linked_source, workbench_path, case_name, bench_name, body)
+
+
+def _write_get_rows_moe_weights_workbench(candidate: Candidate, linked_source: Path, workbench_path: Path, fixture_dir: Path) -> tuple[str, dict[str, Any]]:
+    nselected = int(candidate.shape.get("d0", 8))
+    ntokens = int(candidate.shape.get("d1", 1))
+    nexperts = int(candidate.shape.get("src0_d0", 128))
+    src0_token_stride = int(candidate.shape.get("src0_d1_stride", nexperts))
+    idx_token_stride = int(candidate.shape.get("src1_d1_stride", nselected))
+    dst_token_stride = int(candidate.shape.get("dst_d1_stride", nselected))
+    src0_elems = src0_token_stride * ntokens
+    idx_elems = idx_token_stride * ntokens
+    dst_elems = dst_token_stride * ntokens
+    case_name, bench_name = _case_names(candidate)
+    body = "\n".join(
+        [
+            _read_f32(workbench_path, fixture_dir, "src0", src0_elems),
+            _read_i32(workbench_path, fixture_dir, "indices", idx_elems).replace("%indices", "%idx"),
+            _read_f32(workbench_path, fixture_dir, "dst_init", dst_elems).replace("%dst_init", "%dst"),
+            _read_f32(workbench_path, fixture_dir, "expected", dst_elems),
+            f"  func.call {candidate.root_symbol}(%src0, %idx, %dst) : (tensor<{src0_elems}xf32>, tensor<{idx_elems}xi32>, tensor<{dst_elems}xf32>)",
+            f"  check.expect.close actual(%dst) expected(%expected) atol(0.00001) rtol(0.00001) nan(same) : tensor<{dst_elems}xf32>",
         ]
     )
     return _emit_case(linked_source, workbench_path, case_name, bench_name, body)
@@ -2651,8 +2730,8 @@ ORACLE_SPECS: tuple[OracleSpec, ...] = (
         write_workbench=_write_argsort_workbench,
     ),
     OracleSpec(
-        family_ids=("get_rows_f32", "get_rows_q4_k_f32", "get_rows_q5_k_f32", "get_rows_q6_k_f32", "get_rows_q8_0_f32"),
-        generate=_logical_generate(LogicalOracleSpec(("get_rows_f32", "get_rows_q4_k_f32", "get_rows_q5_k_f32", "get_rows_q6_k_f32", "get_rows_q8_0_f32"), "get_rows_numpy", {"atol": 1e-5, "rtol": 1e-5}, _get_rows_arrays, exact_kernel_abi=True)),
+        family_ids=("get_rows_f32", "get_rows_moe_weights_f32", "get_rows_q4_k_f32", "get_rows_q5_k_f32", "get_rows_q6_k_f32", "get_rows_q8_0_f32"),
+        generate=_logical_generate(LogicalOracleSpec(("get_rows_f32", "get_rows_moe_weights_f32", "get_rows_q4_k_f32", "get_rows_q5_k_f32", "get_rows_q6_k_f32", "get_rows_q8_0_f32"), "get_rows_numpy", {"atol": 1e-5, "rtol": 1e-5}, _get_rows_arrays, exact_kernel_abi=True)),
         write_workbench=_write_get_rows_workbench,
     ),
     OracleSpec(

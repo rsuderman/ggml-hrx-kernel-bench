@@ -650,6 +650,49 @@ def test_get_rows_q6_k_oracle_and_workbench_use_packed_src0(tmp_path: Path) -> N
     assert "tensor<1050xi8>, tensor<4xi32>, tensor<1024xf32>" in workbench
 
 
+def test_get_rows_moe_weights_oracle_and_workbench_use_token_strides(tmp_path: Path) -> None:
+    candidate = Candidate(
+        id="get_rows_moe_weights_f32_ranked_2d",
+        family="get_rows_moe_weights_f32",
+        op="GET_ROWS",
+        source_id="get_rows_moe_weights_f32",
+        source_path=Path("kernels/v2/get_rows/moe_weights_f32_topk_view_2d.loom"),
+        root_symbol="@get_rows_moe_weights_f32",
+        export_name="get_rows_moe_weights_f32",
+        route_id="get_rows_moe_weights_f32_test",
+        route=None,
+        shape={"d0": 8, "d1": 16, "src0_d0": 128},
+        values={
+            "shape.get_rows_moe.nexperts": 128,
+            "shape.get_rows_moe.nselected": 8,
+            "shape.get_rows_moe.ntokens": 16,
+            "shape.get_rows_moe.src0_token_stride": 128,
+            "shape.get_rows_moe.idx_token_stride": 8,
+            "shape.get_rows_moe.dst_token_stride": 8,
+        },
+        config={},
+        dispatch={},
+        supports={},
+        coverage="route_backed",
+    )
+
+    result = generate_oracle(candidate, tmp_path / "fixtures", force=True)
+
+    assert result.status == "fixtures_ready"
+    assert np.load(tmp_path / "fixtures" / "src0.npy").shape == (2048,)
+    assert np.load(tmp_path / "fixtures" / "indices.npy").shape == (128,)
+    assert np.load(tmp_path / "fixtures" / "dst_init.npy").shape == (128,)
+    assert np.load(tmp_path / "fixtures" / "expected.npy").shape == (128,)
+
+    linked_source = tmp_path / "linked.loom"
+    linked_source.write_text('kernel.def export("get_rows_moe_weights_f32") @get_rows_moe_weights_f32() {}\n', encoding="utf-8")
+    _, metadata = write_workbench(candidate, linked_source, tmp_path / "workbench.loom", tmp_path / "fixtures")
+
+    assert metadata["status"] == "ok"
+    workbench = (tmp_path / "workbench.loom").read_text(encoding="utf-8")
+    assert "tensor<2048xf32>, tensor<128xi32>, tensor<128xf32>" in workbench
+
+
 def test_argsort_oracle_and_workbench_use_flattened_rows(tmp_path: Path) -> None:
     candidate = _candidate(
         candidate_id="argsort_f32_i32_n128_r1_desc_wg128",
