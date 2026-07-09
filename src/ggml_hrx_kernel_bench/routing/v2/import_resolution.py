@@ -252,6 +252,51 @@ def lower_rms_norm_mul_tensors(
     return tensors, {"ncols": ncols, "nrows": nrows}
 
 
+def lower_add_rms_norm_mul_tensors(
+    case: ImportedCase,
+) -> tuple[dict[str, ConcreteTensor], dict[str, int]]:
+    ne = case.normalized_params.get("ne")
+    eps = case.normalized_params.get("eps", 0.0)
+    broadcast = case.normalized_params.get("broadcast", 0)
+    if not isinstance(ne, list) or len(ne) != 4:
+        raise ValueError("ADD_RMS_NORM lowering requires a 4-D ne extent list")
+    if any(not isinstance(value, int) for value in ne):
+        raise ValueError("ADD_RMS_NORM lowering requires integer ne extents")
+    if isinstance(eps, bool):
+        raise ValueError("ADD_RMS_NORM lowering requires numeric eps")
+    if isinstance(eps, str):
+        try:
+            eps_value = float(eps)
+        except ValueError as exc:
+            raise ValueError("ADD_RMS_NORM lowering requires numeric eps") from exc
+    elif isinstance(eps, (int, float)):
+        eps_value = float(eps)
+    else:
+        raise ValueError("ADD_RMS_NORM lowering requires numeric eps")
+    if not isinstance(broadcast, int):
+        raise ValueError("ADD_RMS_NORM lowering requires integer broadcast")
+    if str(case.dtype.get("type", "")).upper() != "F32":
+        raise ValueError("add_rms_norm_mul_f32 routing requires type=f32")
+    if int(broadcast) != 0:
+        raise ValueError("add_rms_norm_mul_f32 routing currently requires broadcast=0")
+    if eps_value != 0.0:
+        raise ValueError("add_rms_norm_mul_f32 routing currently requires eps=0.0")
+    ncols = int(ne[0])
+    nrows = int(ne[1]) * int(ne[2]) * int(ne[3])
+    row_dimensions = _dimensions_from_extents([ncols, nrows])
+    tensors = {
+        "src0": ConcreteTensor(dtype="F32", dimensions=row_dimensions),
+        "src1": ConcreteTensor(dtype="F32", dimensions=row_dimensions),
+        "add_dst": ConcreteTensor(dtype="F32", dimensions=row_dimensions),
+        "weight": ConcreteTensor(
+            dtype="F32",
+            dimensions=_dimensions_from_extents_and_strides([ncols, 1], [1, 0]),
+        ),
+        "dst": ConcreteTensor(dtype="F32", dimensions=row_dimensions),
+    }
+    return tensors, {"ncols": ncols, "nrows": nrows}
+
+
 def _parse_unary_parameters(case: ImportedCase) -> tuple[list[int], int]:
     # ggml unary-op params: ne_a = input tensor's 4-D shape [ne0..ne3];
     # v = view flag (0 = contiguous input, 1 = non-contiguous strided view).
@@ -1409,6 +1454,8 @@ def lower_tensors_for_route(
         return lower_mul_mat_id_tensors(case)
     if route.family == "rms_norm_mul_f32":
         return lower_rms_norm_mul_tensors(case)
+    if route.family == "add_rms_norm_mul_f32":
+        return lower_add_rms_norm_mul_tensors(case)
     if route.op == "ROPE":
         return lower_rope_tensors(case, route)
     if route.op == "RMS_NORM":

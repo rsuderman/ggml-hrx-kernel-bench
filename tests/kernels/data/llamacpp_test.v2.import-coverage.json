@@ -1,8 +1,8 @@
 {
   "schema": "ggml_hrx_kernel_bench.import_test_coverage.v1",
   "operation_count": 115,
-  "total_pass_case_count": 629,
-  "total_fail_case_count": 10703,
+  "total_pass_case_count": 630,
+  "total_fail_case_count": 10702,
   "operations": [
     {
       "op": "ABS",
@@ -31,8 +31,8 @@
     },
     {
       "op": "ADD_RMS_NORM",
-      "pass_case_count": 0,
-      "fail_case_count": 25
+      "pass_case_count": 1,
+      "fail_case_count": 24
     },
     {
       "op": "ARANGE",

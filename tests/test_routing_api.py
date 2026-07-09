@@ -1253,6 +1253,67 @@ def test_v2_mul_route_resolves_rms_norm_mul_f32_fused_case() -> None:
     }
 
 
+def test_v2_add_rms_norm_route_resolves_fused_mul_case() -> None:
+    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
+    case = ImportedCase(
+        op="ADD_RMS_NORM",
+        dtype={"type": "f32"},
+        raw_case={},
+        normalized_params={
+            "broadcast": 0,
+            "eps": 0.0,
+            "ne": [64, 5, 4, 3],
+        },
+        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_group_index=0,
+        source_case_index=1,
+    )
+
+    routes = list(routes_for_op(catalog, "ADD_RMS_NORM"))
+
+    resolved_route, shape, reason, detail = resolve_route_for_case(case, routes)
+
+    assert reason is None
+    assert detail is None
+    assert resolved_route is not None
+    assert resolved_route.id == "add_rms_norm_mul_f32_n64_r60_vector_tail"
+    assert shape == {
+        "d0": 64,
+        "d1": 60,
+        "weight_d1": 1,
+        "weight_d1_stride": 0,
+        "ncols": 64,
+        "nrows": 60,
+    }
+
+
+def test_v2_add_rms_norm_nonzero_eps_case_stays_unmapped() -> None:
+    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
+    case = ImportedCase(
+        op="ADD_RMS_NORM",
+        dtype={"type": "f32"},
+        raw_case={},
+        normalized_params={
+            "broadcast": 0,
+            "eps": 1.0e-4,
+            "ne": [64, 5, 4, 3],
+        },
+        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_group_index=0,
+        source_case_index=3,
+    )
+
+    routes = list(routes_for_op(catalog, "ADD_RMS_NORM"))
+
+    resolved_route, shape, reason, detail = resolve_route_for_case(case, routes)
+
+    assert resolved_route is None
+    assert shape is None
+    assert reason is not None
+    assert reason.value == "shape_lowering_not_implemented"
+    assert detail == "add_rms_norm_mul_f32 routing currently requires eps=0.0"
+
+
 def test_v2_helpers_require_catalog_or_routing_dir(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="routing_dir or catalog is required"):
         build_manifest(kernel_dir=tmp_path / "kernels")

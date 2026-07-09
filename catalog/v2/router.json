@@ -25,6 +25,9 @@
       "add/add_f32_generic_2d.json",
       "add/add_f32_generic_4d.json"
     ],
+    "ADD_RMS_NORM": [
+      "mul/add_rms_norm_mul_f32_n64_r60_vector_tail.json"
+    ],
     "ARGSORT": [
       "argsort/argsort_f32_i32_n128_r1_desc_wg128.json"
     ],

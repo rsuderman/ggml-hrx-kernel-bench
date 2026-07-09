@@ -462,6 +462,44 @@ def test_rms_norm_mul_oracle_and_workbench_use_fused_kernel_abi(tmp_path: Path) 
     assert "check.expect.close" in workbench
 
 
+def test_add_rms_norm_mul_oracle_and_workbench_use_fused_kernel_abi(tmp_path: Path) -> None:
+    candidate = _candidate(
+        candidate_id="add_rms_norm_mul_f32_n64_r60_vector_tail",
+        shape={"d0": 64, "d1": 60, "ncols": 64, "nrows": 60},
+        family="add_rms_norm_mul_f32",
+        source_id="add_rms_norm_mul_f32",
+        root_symbol="@add_rms_norm_mul_f32_static_vector_tail",
+        export_name="add_rms_norm_mul_f32_static_vector_tail",
+        op="ADD_RMS_NORM",
+        source_path="kernels/v2/mul/add_rms_norm_mul_f32_vector_tail.loom",
+    )
+
+    result = generate_oracle(candidate, tmp_path / "fixtures", force=True)
+
+    assert result.status == "fixtures_ready"
+    assert np.load(tmp_path / "fixtures" / "src0.npy").shape == (3840,)
+    assert np.load(tmp_path / "fixtures" / "src1.npy").shape == (3840,)
+    assert np.load(tmp_path / "fixtures" / "add_dst_init.npy").shape == (3840,)
+    assert np.load(tmp_path / "fixtures" / "weight.npy").shape == (64,)
+    assert np.load(tmp_path / "fixtures" / "dst_init.npy").shape == (3840,)
+    assert np.load(tmp_path / "fixtures" / "added.npy").shape == (3840,)
+    assert np.load(tmp_path / "fixtures" / "expected.npy").shape == (3840,)
+
+    linked_source = tmp_path / "linked.loom"
+    linked_source.write_text(
+        'kernel.def export("add_rms_norm_mul_f32_static_vector_tail") @add_rms_norm_mul_f32_static_vector_tail() {}\n',
+        encoding="utf-8",
+    )
+    _, metadata = write_workbench(candidate, linked_source, tmp_path / "workbench.loom", tmp_path / "fixtures")
+
+    assert metadata["status"] == "ok"
+    workbench = (tmp_path / "workbench.loom").read_text(encoding="utf-8")
+    assert "%eps = check.literal value(0.0) : f32" in workbench
+    assert "tensor<3840xf32>, tensor<3840xf32>, tensor<3840xf32>, tensor<64xf32>, tensor<3840xf32>" in workbench
+    assert "actual(%add_dst) expected(%added)" in workbench
+    assert "actual(%dst) expected(%expected)" in workbench
+
+
 def test_swiglu_oracle_and_workbench_use_packed_src_shape(tmp_path: Path) -> None:
     candidate = _candidate(
         candidate_id="swiglu_f32_ranked_4d",
