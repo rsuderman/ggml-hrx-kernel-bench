@@ -27,3 +27,4 @@ include(GgmlHrxTests)
 
 add_subdirectory(infra)
 add_subdirectory(kernels)
+add_subdirectory(models)
