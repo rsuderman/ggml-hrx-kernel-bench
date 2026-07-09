@@ -32,6 +32,7 @@ from ggml_hrx_kernel_bench.routing.v2.models import (
     ValueDefinition,
 )
 from ggml_hrx_kernel_bench.routing.v2.manifest import build_manifest
+from ggml_hrx_kernel_bench.routing.v2.matching import materialize_route_tensors, route_accepts_tensors
 from ggml_hrx_kernel_bench.routing.v2.query import load_route_catalog, routes_for_op
 
 
@@ -610,6 +611,94 @@ def test_v2_relu_view_case_remains_unmapped_without_non_contiguous_unary_route()
     assert reason is not None
     assert reason.value == "shape_lowering_not_implemented"
     assert detail == "contiguous unary routing requires contiguous input (v=0)"
+
+
+@pytest.mark.parametrize(
+    ("dtype", "route_id"),
+    (
+        ("f16", "abs_f16_contiguous_1d"),
+        ("f32", "abs_f32_contiguous_1d"),
+    ),
+)
+def test_v2_resolve_abs_contiguous_case(dtype: str, route_id: str) -> None:
+    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
+    case = ImportedCase(
+        op="ABS",
+        dtype={"type": dtype},
+        raw_case={},
+        normalized_params={"ne_a": [5, 7, 11, 13], "v": 0},
+        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_group_index=0,
+        source_case_index=0,
+    )
+
+    route, shape, reason, detail = resolve_route_for_case(case, list(routes_for_op(catalog, "ABS")))
+
+    assert reason is None
+    assert route is not None
+    assert route.id == route_id
+    assert shape == {"d0": 5, "d1": 7, "d2": 11, "d3": 13, "pointwise.d1": 1001}
+
+
+@pytest.mark.parametrize(
+    ("dtype", "route_id"),
+    (
+        ("f16", "abs_f16_non_contiguous_4d"),
+        ("f32", "abs_f32_non_contiguous_4d"),
+    ),
+)
+def test_v2_resolve_abs_view_case_encodes_strided_src0(dtype: str, route_id: str) -> None:
+    # ggml test_unary v=1 view: parent inflated [3, 2, 5, 4] per dim; the ne_a view
+    # keeps element strides [1, 3*ne0, 6*ne0*ne1, 30*ne0*ne1*ne2].
+    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
+    case = ImportedCase(
+        op="ABS",
+        dtype={"type": dtype},
+        raw_case={},
+        normalized_params={"ne_a": [5, 7, 11, 13], "v": 1},
+        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_group_index=0,
+        source_case_index=0,
+    )
+
+    route, shape, reason, detail = resolve_route_for_case(case, list(routes_for_op(catalog, "ABS")))
+
+    assert reason is None
+    assert detail is None
+    assert route is not None
+    assert route.id == route_id
+    assert shape is not None
+    assert shape["d0"] == 5 and shape["d1"] == 7 and shape["d2"] == 11 and shape["d3"] == 13
+    assert shape["src0_d1_stride"] == 15
+    assert shape["src0_d2_stride"] == 210
+    assert shape["src0_d3_stride"] == 11550
+    assert shape["pointwise.d1"] == 1001
+
+
+def test_v2_abs_view_shape_round_trips_through_materialize() -> None:
+    # The serialized shape must rehydrate into the same strided src0 and still be accepted
+    # by the route (the runtime hydration + validation path).
+    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
+    routes = list(routes_for_op(catalog, "ABS"))
+    case = ImportedCase(
+        op="ABS",
+        dtype={"type": "f16"},
+        raw_case={},
+        normalized_params={"ne_a": [5, 7, 11, 13], "v": 1},
+        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_group_index=0,
+        source_case_index=0,
+    )
+
+    route, shape, reason, _ = resolve_route_for_case(case, routes)
+    assert reason is None and route is not None and shape is not None
+
+    tensors = materialize_route_tensors(route, shape)
+    assert route_accepts_tensors(route, tensors) is True
+    src0_strides = tuple(dim.stride for dim in tensors["src0"].dimensions)
+    assert src0_strides == (1, 15, 210, 11550)
+    dst_strides = tuple(dim.stride for dim in tensors["dst"].dimensions)
+    assert dst_strides == (1, 5, 35, 385)
 
 
 def test_v2_resolve_scale_route_for_f32_case() -> None:
