@@ -707,6 +707,84 @@ def lower_mul_mat_tensors(
     }
 
 
+def lower_mul_mat_id_tensors(
+    case: ImportedCase,
+) -> tuple[dict[str, ConcreteTensor], dict[str, int]]:
+    type_a = str(case.dtype.get("type_a", "")).upper()
+    type_b = str(case.dtype.get("type_b", "")).upper()
+    if type_a != "Q4_K" or type_b != "F32":
+        raise ValueError("MUL_MAT_ID q4_k routing requires type_a=q4_K and type_b=f32")
+    batch = case.normalized_params.get("b", 0)
+    k = case.normalized_params.get("k")
+    rows = case.normalized_params.get("m")
+    ntokens = case.normalized_params.get("n")
+    nexperts = case.normalized_params.get("n_mats")
+    nselected = case.normalized_params.get("n_used")
+    for name, value in (
+        ("b", batch),
+        ("k", k),
+        ("m", rows),
+        ("n", ntokens),
+        ("n_mats", nexperts),
+        ("n_used", nselected),
+    ):
+        if not isinstance(value, int):
+            raise ValueError(f"MUL_MAT_ID q4_k lowering requires integer {name}")
+    if int(batch) != 0:
+        raise ValueError("MUL_MAT_ID q4_k v2 routing currently requires b=0")
+    k_extent = int(k)
+    row_extent = int(rows)
+    token_extent = int(ntokens)
+    expert_extent = int(nexperts)
+    selected_extent = int(nselected)
+    if token_extent != 1:
+        raise ValueError("MUL_MAT_ID q4_k v2 routing currently requires n=1")
+    if selected_extent > 2:
+        raise ValueError("MUL_MAT_ID q4_k v2 routing currently requires n_used<=2")
+    src1_selected_stride = k_extent
+    src1_token_stride = k_extent * selected_extent
+    idx_token_stride = selected_extent
+    dst_token_stride = row_extent * selected_extent
+    tensors = {
+        "src0": ConcreteTensor(
+            dtype="Q4_K",
+            dimensions=_dimensions_from_extents([k_extent, row_extent, expert_extent]),
+        ),
+        "src1": ConcreteTensor(
+            dtype="F32",
+            dimensions=_dimensions_from_extents_and_strides(
+                [k_extent, selected_extent, token_extent],
+                [1, src1_selected_stride, src1_token_stride],
+            ),
+        ),
+        "src2": ConcreteTensor(
+            dtype="I32",
+            dimensions=_dimensions_from_extents_and_strides(
+                [selected_extent, token_extent, 1],
+                [1, idx_token_stride, idx_token_stride * token_extent],
+            ),
+        ),
+        "dst": ConcreteTensor(
+            dtype="F32",
+            dimensions=_dimensions_from_extents_and_strides(
+                [row_extent, selected_extent, token_extent],
+                [1, row_extent, dst_token_stride],
+            ),
+        ),
+    }
+    return tensors, {
+        "k": k_extent,
+        "rows": row_extent,
+        "nexperts": expert_extent,
+        "nselected": selected_extent,
+        "ntokens": token_extent,
+        "src1_selected_stride": src1_selected_stride,
+        "src1_token_stride": src1_token_stride,
+        "idx_token_stride": idx_token_stride,
+        "dst_token_stride": dst_token_stride,
+    }
+
+
 def _rope_route_mode_and_freq(route: V2Route) -> tuple[int, int]:
     if route.root_symbol == "@hrx2_rope_normal_f32":
         return 0, 0
@@ -1295,6 +1373,8 @@ def lower_tensors_for_route(
         return lower_get_rows_tensors(case, route)
     if route.op == "MUL_MAT":
         return lower_mul_mat_tensors(case)
+    if route.op == "MUL_MAT_ID":
+        return lower_mul_mat_id_tensors(case)
     if route.op == "ROPE":
         return lower_rope_tensors(case, route)
     if route.op == "RMS_NORM":

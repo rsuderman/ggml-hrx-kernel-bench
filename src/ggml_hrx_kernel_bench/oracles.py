@@ -14,6 +14,7 @@ Q5_K_BLOCK_BYTES = 176
 Q6_K_BLOCK_BYTES = 210
 Q8_0_BLOCK_BYTES = 34
 F32_BYTES = 4
+I32_BYTES = 4
 Q8_1_BLOCK_BYTES = 36
 
 
@@ -443,6 +444,58 @@ def _mul_mat_q4_k_f32(np: Any, candidate: Candidate, fixture_dir: Path, seed: in
         "src0": q4_k_bytes(k, rows),
         "src1": k * cols * F32_BYTES,
         "dst": rows * cols * F32_BYTES,
+    }
+    meta_path = fixture_dir / "oracle.json"
+    write_json(meta_path, meta)
+    return OracleResult("fixtures_ready", meta["oracle"], fixture_dir, meta_path, fixture_dir / "expected.npy", meta["tolerance"])
+
+
+def _mul_mat_id_q4_k_f32(np: Any, candidate: Candidate, fixture_dir: Path, seed: int) -> OracleResult:
+    k = int(candidate.shape.get("k", candidate.shape.get("src0_d0", 256)))
+    rows = int(candidate.shape.get("rows", candidate.shape.get("d0", 1)))
+    nexperts = int(candidate.shape.get("nexperts", candidate.shape.get("src0_d2", 1)))
+    nselected = int(candidate.shape.get("nselected", candidate.shape.get("d1", 1)))
+    ntokens = int(candidate.shape.get("ntokens", candidate.shape.get("d2", 1)))
+    src1_selected_stride = int(candidate.shape.get("src1_selected_stride", candidate.shape.get("src1_d1_stride", k)))
+    src1_token_stride = int(candidate.shape.get("src1_token_stride", candidate.shape.get("src1_d2_stride", k * nselected)))
+    idx_token_stride = int(candidate.shape.get("idx_token_stride", candidate.shape.get("src2_d1_stride", nselected)))
+    dst_token_stride = int(candidate.shape.get("dst_token_stride", candidate.shape.get("dst_d2_stride", rows * nselected)))
+    src0 = q4_k_pattern(np, k, nexperts * rows, seed=seed)
+    weights = dequant_q4_k(np, src0, k, nexperts * rows).reshape(nexperts, rows, k)
+    src1_elems = ntokens * src1_token_stride
+    idx_elems = ntokens * idx_token_stride
+    dst_elems = ntokens * dst_token_stride
+    src1 = np.zeros((src1_elems,), dtype=np.float32)
+    rhs_rows = normalized_f32_rows(np, (ntokens * nselected, k), seed=seed + 1)
+    idx = np.zeros((idx_elems,), dtype=np.int32)
+    dst_init = f32_pattern(np, (dst_elems,), seed=seed + 2, scale=0.25)
+    expected = dst_init.copy()
+    for token in range(ntokens):
+        for selected in range(nselected):
+            expert = (token + selected) % nexperts
+            idx[token * idx_token_stride + selected] = expert
+            rhs = rhs_rows[token * nselected + selected]
+            src1_base = token * src1_token_stride + selected * src1_selected_stride
+            src1[src1_base : src1_base + k] = rhs
+            dot = np.matmul(weights[expert].astype(np.float32), rhs.astype(np.float32))
+            dst_base = token * dst_token_stride + selected * rows
+            expected[dst_base : dst_base + rows] = dot.astype(np.float32)
+    np.save(fixture_dir / "src0.npy", src0.view(np.int8), allow_pickle=False)
+    np.save(fixture_dir / "src1.npy", src1, allow_pickle=False)
+    np.save(fixture_dir / "idx.npy", idx, allow_pickle=False)
+    np.save(fixture_dir / "dst_init.npy", dst_init.astype(np.float32), allow_pickle=False)
+    np.save(fixture_dir / "expected.npy", expected.astype(np.float32), allow_pickle=False)
+    meta = _metadata(candidate, seed, "mul_mat_id_q4_k_f32_indexed_expert_numpy_dequant_matmul", {"atol": 0.08, "rtol": 0.02})
+    meta["fixture_policy"] = {
+        "src0": "valid_q4_k_balanced_nibbles_centered_groups_block_rms_0.5_expert_planes",
+        "src1": "mean_centered_selected_rows_l2_norm_1.0",
+        "idx": "round_robin_expert_indices",
+    }
+    meta["bytes"] = {
+        "src0": q4_k_bytes(k, nexperts * rows),
+        "src1": src1_elems * F32_BYTES,
+        "idx": idx_elems * I32_BYTES,
+        "dst": dst_elems * F32_BYTES,
     }
     meta_path = fixture_dir / "oracle.json"
     write_json(meta_path, meta)
@@ -1950,7 +2003,7 @@ LOGICAL_ORACLE_SPECS: tuple[LogicalOracleSpec, ...] = (
     LogicalOracleSpec(("get_rows_f32", "get_rows_q4_k_f32", "get_rows_q5_k_f32", "get_rows_q6_k_f32", "get_rows_q8_0_f32"), "get_rows_numpy_logical", {"atol": 1e-5, "rtol": 1e-5}, _get_rows_arrays),
     LogicalOracleSpec(("get_rows_moe_weights_f32",), "get_rows_moe_weights_numpy_logical", {"atol": 1e-5, "rtol": 1e-5}, _get_rows_arrays),
     LogicalOracleSpec(("mul_mat_f16_f32_batched", "mul_mat_f16_f32_batched_cont"), "mul_mat_numpy_logical", {"atol": 0.08, "rtol": 0.02}, _matmul_f32_arrays),
-    LogicalOracleSpec(("mul_mat_q5_k_f32", "mul_mat_q6_k_f32", "mul_mat_q8_0_f32", "mul_mat_q4_k_swiglu_f32", "mul_mat_id_q4_k_f32", "mul_mat_id_q5_k_f32", "mul_mat_id_q6_k_f32"), "quantized_mul_mat_numpy_logical", {"atol": 0.12, "rtol": 0.04}, _quantized_matmul_arrays),
+    LogicalOracleSpec(("mul_mat_q5_k_f32", "mul_mat_q6_k_f32", "mul_mat_q8_0_f32", "mul_mat_q4_k_swiglu_f32", "mul_mat_id_q5_k_f32", "mul_mat_id_q6_k_f32"), "quantized_mul_mat_numpy_logical", {"atol": 0.12, "rtol": 0.04}, _quantized_matmul_arrays),
     LogicalOracleSpec(("quantize_q8_1_f32",), "quantize_q8_1_numpy", {"atol": 0.0, "rtol": 0.0}, _quantize_q8_1_arrays),
     LogicalOracleSpec(("rms_norm_mul_f32",), "rms_norm_mul_f32_numpy", {"atol": 1e-4, "rtol": 1e-4}, _rms_norm_mul_arrays),
     LogicalOracleSpec(("add_rms_norm_mul_f32",), "add_rms_norm_mul_f32_numpy", {"atol": 1e-4, "rtol": 1e-4}, _add_rms_norm_mul_arrays),
@@ -2014,6 +2067,39 @@ check.case public {case_name} {{
   %dst = check.file.read.npy path("{_rel_fixture(workbench_path, fixture_dir, "dst_init.npy")}") : tensor<{dst_elems}xf32>
   %expected = check.file.read.npy path("{_rel_fixture(workbench_path, fixture_dir, "expected.npy")}") : tensor<{dst_elems}xf32>
   func.call {candidate.root_symbol}(%src0, %src1, %dst) : (tensor<{src0_elems}xi8>, tensor<{src1_elems}xf32>, tensor<{dst_elems}xf32>)
+  check.expect.close actual(%dst) expected(%expected) atol(0.08) rtol(0.02) nan(same) : tensor<{dst_elems}xf32>
+  check.return
+}}
+
+check.benchmark<{case_name}> {bench_name}
+"""
+    _source_plus_case(linked_source, workbench_path, suffix)
+    return bench_name, {"status": "ok", "workbench_path": str(workbench_path)}
+
+
+def _write_mul_mat_id_q4_workbench(candidate: Candidate, linked_source: Path, workbench_path: Path, fixture_dir: Path) -> tuple[str, dict[str, Any]]:
+    k = int(candidate.shape.get("k", candidate.shape.get("src0_d0", 256)))
+    rows = int(candidate.shape.get("rows", candidate.shape.get("d0", 1)))
+    nexperts = int(candidate.shape.get("nexperts", candidate.shape.get("src0_d2", 1)))
+    nselected = int(candidate.shape.get("nselected", candidate.shape.get("d1", 1)))
+    ntokens = int(candidate.shape.get("ntokens", candidate.shape.get("d2", 1)))
+    src1_token_stride = int(candidate.shape.get("src1_token_stride", candidate.shape.get("src1_d2_stride", k * nselected)))
+    idx_token_stride = int(candidate.shape.get("idx_token_stride", candidate.shape.get("src2_d1_stride", nselected)))
+    dst_token_stride = int(candidate.shape.get("dst_token_stride", candidate.shape.get("dst_d2_stride", rows * nselected)))
+    src0_elems = q4_k_bytes(k, nexperts * rows)
+    src1_elems = ntokens * src1_token_stride
+    idx_elems = ntokens * idx_token_stride
+    dst_elems = ntokens * dst_token_stride
+    case_name = f"@case_{candidate.id}"
+    bench_name = f"@bench_{candidate.id}"
+    suffix = f"""
+check.case public {case_name} {{
+  %src0 = check.file.read.npy path("{_rel_fixture(workbench_path, fixture_dir, "src0.npy")}") : tensor<{src0_elems}xi8>
+  %src1 = check.file.read.npy path("{_rel_fixture(workbench_path, fixture_dir, "src1.npy")}") : tensor<{src1_elems}xf32>
+  %idx = check.file.read.npy path("{_rel_fixture(workbench_path, fixture_dir, "idx.npy")}") : tensor<{idx_elems}xi32>
+  %dst = check.file.read.npy path("{_rel_fixture(workbench_path, fixture_dir, "dst_init.npy")}") : tensor<{dst_elems}xf32>
+  %expected = check.file.read.npy path("{_rel_fixture(workbench_path, fixture_dir, "expected.npy")}") : tensor<{dst_elems}xf32>
+  func.call {candidate.root_symbol}(%src0, %src1, %idx, %dst) : (tensor<{src0_elems}xi8>, tensor<{src1_elems}xf32>, tensor<{idx_elems}xi32>, tensor<{dst_elems}xf32>)
   check.expect.close actual(%dst) expected(%expected) atol(0.08) rtol(0.02) nan(same) : tensor<{dst_elems}xf32>
   check.return
 }}
@@ -2648,6 +2734,11 @@ ORACLE_SPECS: tuple[OracleSpec, ...] = (
         family_ids=("mul_mat_q4_k_f32",),
         generate=_mul_mat_q4_k_f32,
         write_workbench=_write_mul_mat_q4_workbench,
+    ),
+    OracleSpec(
+        family_ids=("mul_mat_id_q4_k_f32",),
+        generate=_mul_mat_id_q4_k_f32,
+        write_workbench=_write_mul_mat_id_q4_workbench,
     ),
     OracleSpec(
         family_ids=("rms_norm_f32",),

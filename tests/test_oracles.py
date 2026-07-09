@@ -865,6 +865,50 @@ def test_mul_mat_q4_k_oracle_and_workbench_use_kernel_abi_buffers(tmp_path: Path
     assert "check.expect.close" in workbench
 
 
+def test_mul_mat_id_q4_k_oracle_and_workbench_use_kernel_abi_buffers(tmp_path: Path) -> None:
+    candidate = _candidate(
+        candidate_id="mul_mat_id_q4_k_f32_expert_planes_3d",
+        shape={
+            "k": 256,
+            "rows": 16,
+            "nexperts": 4,
+            "nselected": 2,
+            "ntokens": 3,
+            "src1_selected_stride": 256,
+            "src1_token_stride": 512,
+            "idx_token_stride": 2,
+            "dst_token_stride": 32,
+        },
+        family="mul_mat_id_q4_k_f32",
+        source_id="mul_mat_id_q4_k_f32",
+        root_symbol="@mul_mat_id_q4_k_f32_static",
+        export_name="mul_mat_id_q4_k_f32_static",
+        op="MUL_MAT_ID",
+        source_path="kernels/v2/mul_mat_id/q4_k_f32_expert_planes.loom",
+    )
+
+    result = generate_oracle(candidate, tmp_path / "fixtures", force=True)
+
+    assert result.status == "fixtures_ready"
+    assert np.load(tmp_path / "fixtures" / "src0.npy").shape == (9216,)
+    assert np.load(tmp_path / "fixtures" / "src1.npy").shape == (1536,)
+    assert np.load(tmp_path / "fixtures" / "idx.npy").shape == (6,)
+    assert np.load(tmp_path / "fixtures" / "dst_init.npy").shape == (96,)
+    assert np.load(tmp_path / "fixtures" / "expected.npy").shape == (96,)
+
+    linked_source = tmp_path / "linked.loom"
+    linked_source.write_text(
+        'kernel.def export("mul_mat_id_q4_k_f32_static") @mul_mat_id_q4_k_f32_static() {}\n',
+        encoding="utf-8",
+    )
+    _, metadata = write_workbench(candidate, linked_source, tmp_path / "workbench.loom", tmp_path / "fixtures")
+
+    assert metadata["status"] == "ok"
+    workbench = (tmp_path / "workbench.loom").read_text(encoding="utf-8")
+    assert "tensor<9216xi8>, tensor<1536xf32>, tensor<6xi32>, tensor<96xf32>" in workbench
+    assert "check.expect.close" in workbench
+
+
 def test_mul_mat_q6_k_oracle_and_workbench_use_packed_kernel_abi_buffers(tmp_path: Path) -> None:
     candidate = _candidate(
         candidate_id="mul_mat_q6_k_f32_direct_contiguous_2d",
