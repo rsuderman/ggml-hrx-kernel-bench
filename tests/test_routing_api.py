@@ -1346,11 +1346,44 @@ def test_v2_quantize_route_resolves_rms_norm_mul_quantize_q8_1_x4_case() -> None
     }
 
 
-def test_v2_quantize_route_rejects_non_x4_destination() -> None:
+def test_v2_quantize_route_resolves_standalone_q8_1_case() -> None:
     catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
     case = ImportedCase(
         op="QUANTIZE",
-        dtype={"type_src": "f32", "type_weight": "f32", "type_dst": "q8_1"},
+        dtype={"type_src": "f32", "type_dst": "q8_1"},
+        raw_case={},
+        normalized_params={
+            "ne": [256, 1, 1, 1],
+        },
+        source_path="tests/kernels/data/additional_test.yaml",
+        source_group_index=1,
+        source_case_index=0,
+    )
+
+    routes = list(routes_for_op(catalog, "QUANTIZE"))
+
+    resolved_route, shape, reason, detail = resolve_route_for_case(case, routes)
+
+    assert reason is None
+    assert detail is None
+    assert resolved_route is not None
+    assert resolved_route.id == "quantize_q8_1_f32_contiguous_n256_r1"
+    assert shape == {
+        "d0": 256,
+        "d1": 1,
+        "ncols": 256,
+        "nrows": 1,
+        "q8_1.blocks": 8,
+        "q8_1.ne1": 1,
+        "q8_1.z_count": 1,
+    }
+
+
+def test_v2_quantize_route_rejects_unsupported_destination() -> None:
+    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
+    case = ImportedCase(
+        op="QUANTIZE",
+        dtype={"type_src": "f32", "type_dst": "q8_0"},
         raw_case={},
         normalized_params={
             "eps": 0.0,

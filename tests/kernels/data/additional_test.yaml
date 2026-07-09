@@ -7,6 +7,11 @@ ops:
       cases:
         - eps: 0.0
           ne: [3072, 1, 1, 1]
+    - dtype:
+        type_dst: q8_1
+        type_src: f32
+      cases:
+        - ne: [256, 1, 1, 1]
 
   FLASH_ATTN_EXT:
     - dtype:

@@ -95,6 +95,7 @@
       "neg/neg_f32.json"
     ],
     "QUANTIZE": [
+      "quantize/quantize_q8_1_f32_contiguous_n256_r1.json",
       "quantize/rms_norm_mul_quantize_q8_1_f32_n3072_r1_x4_recompute.json"
     ],
     "ROPE": [

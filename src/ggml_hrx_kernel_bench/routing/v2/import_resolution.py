@@ -296,6 +296,36 @@ def lower_rms_norm_mul_quantize_tensors(
     return tensors, {"ncols": ncols, "nrows": nrows}
 
 
+def lower_quantize_q8_1_tensors(
+    case: ImportedCase,
+) -> tuple[dict[str, ConcreteTensor], dict[str, int]]:
+    ne = case.normalized_params.get("ne")
+    if not isinstance(ne, list) or len(ne) != 4:
+        raise ValueError("quantize_q8_1_f32 lowering requires a 4-D ne extent list")
+    if any(not isinstance(value, int) for value in ne):
+        raise ValueError("quantize_q8_1_f32 lowering requires integer ne extents")
+    if str(case.dtype.get("type_src", case.dtype.get("type", ""))).upper() != "F32":
+        raise ValueError("quantize_q8_1_f32 routing requires type_src=f32")
+    if str(case.dtype.get("type_dst", "")).upper() != "Q8_1":
+        raise ValueError("quantize_q8_1_f32 routing requires type_dst=q8_1")
+    ncols = int(ne[0])
+    nrows = int(ne[1]) * int(ne[2]) * int(ne[3])
+    if ncols % 32 != 0:
+        raise ValueError("quantize_q8_1_f32 routing currently requires ne[0] to be a multiple of 32")
+    dimensions = _dimensions_from_extents([ncols, nrows])
+    tensors = {
+        "src0": ConcreteTensor(dtype="F32", dimensions=dimensions),
+        "dst": ConcreteTensor(dtype="Q8_1", dimensions=dimensions),
+    }
+    return tensors, {
+        "ncols": ncols,
+        "nrows": nrows,
+        "q8_1.blocks": (ncols + 31) // 32,
+        "q8_1.ne1": int(ne[1]),
+        "q8_1.z_count": int(ne[2]) * int(ne[3]),
+    }
+
+
 def lower_add_rms_norm_mul_tensors(
     case: ImportedCase,
 ) -> tuple[dict[str, ConcreteTensor], dict[str, int]]:
@@ -1489,6 +1519,8 @@ def lower_tensors_for_route(
         return lower_rms_norm_mul_tensors(case)
     if route.family == "add_rms_norm_mul_f32":
         return lower_add_rms_norm_mul_tensors(case)
+    if route.family == "quantize_q8_1_f32":
+        return lower_quantize_q8_1_tensors(case)
     if route.family == "rms_norm_mul_quantize_q8_1_f32":
         return lower_rms_norm_mul_quantize_tensors(case)
     if route.op == "ROPE":

@@ -538,6 +538,39 @@ def test_rms_norm_mul_quantize_oracle_and_workbench_use_fused_kernel_abi(tmp_pat
     assert "check.expect.equal actual(%dst) expected(%expected)" in workbench
 
 
+def test_quantize_q8_1_oracle_and_workbench_use_generic_kernel_abi(tmp_path: Path) -> None:
+    candidate = _candidate(
+        candidate_id="quantize_q8_1_f32_contiguous_n256_r1",
+        shape={"d0": 256, "d1": 1, "ncols": 256, "nrows": 1, "q8_1.blocks": 8, "q8_1.ne1": 1, "q8_1.z_count": 1},
+        family="quantize_q8_1_f32",
+        source_id="quantize_q8_1_f32",
+        root_symbol="@quantize_q8_1_f32",
+        export_name="quantize_q8_1_f32",
+        op="QUANTIZE",
+        source_path="kernels/v2/quantize/quantize_q8_1_f32.loom",
+    )
+
+    result = generate_oracle(candidate, tmp_path / "fixtures", force=True)
+
+    assert result.status == "fixtures_ready"
+    assert np.load(tmp_path / "fixtures" / "src0.npy").shape == (256,)
+    assert np.load(tmp_path / "fixtures" / "expected.npy").shape == (288,)
+
+    linked_source = tmp_path / "linked.loom"
+    linked_source.write_text(
+        'kernel.def export("quantize_q8_1_f32") @quantize_q8_1_f32() {}\n',
+        encoding="utf-8",
+    )
+    _, metadata = write_workbench(candidate, linked_source, tmp_path / "workbench.loom", tmp_path / "fixtures")
+
+    assert metadata["status"] == "ok"
+    workbench = (tmp_path / "workbench.loom").read_text(encoding="utf-8")
+    assert "%ne00 = check.literal value(256) : index" in workbench
+    assert "tensor<256xf32>, tensor<288xi8>" in workbench
+    assert "func.call @quantize_q8_1_f32(%ne00, %s01, %s02, %s03, %ne0, %ne1, %ne2, %src, %dst)" in workbench
+    assert "check.expect.equal actual(%dst) expected(%expected)" in workbench
+
+
 def test_swiglu_oracle_and_workbench_use_packed_src_shape(tmp_path: Path) -> None:
     candidate = _candidate(
         candidate_id="swiglu_f32_ranked_4d",
