@@ -1,8 +1,8 @@
 {
   "schema": "ggml_hrx_kernel_bench.import_test_coverage.v1",
   "operation_count": 115,
-  "total_pass_case_count": 580,
-  "total_fail_case_count": 10752,
+  "total_pass_case_count": 614,
+  "total_fail_case_count": 10718,
   "operations": [
     {
       "op": "ABS",
@@ -476,8 +476,8 @@
     },
     {
       "op": "SOFT_MAX",
-      "pass_case_count": 16,
-      "fail_case_count": 196
+      "pass_case_count": 50,
+      "fail_case_count": 162
     },
     {
       "op": "SOFT_MAX_BACK",

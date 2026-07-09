@@ -907,6 +907,35 @@ def test_soft_max_oracle_and_workbench_use_flattened_rows(tmp_path: Path) -> Non
     assert "check.expect.close" in workbench
 
 
+def test_masked_soft_max_oracle_and_workbench_include_mask_buffer(tmp_path: Path) -> None:
+    candidate = _candidate(
+        candidate_id="soft_max_f32_mask_ranked_2d",
+        shape={"d0": 16, "d1": 16},
+        family="soft_max_f32",
+        source_id="soft_max_f32",
+        root_symbol="@hrx2_soft_max_f32_mask",
+        export_name="hrx2_soft_max_f32_mask",
+        op="SOFT_MAX",
+        source_path="kernels/v2/soft_max/masked_contiguous_f32.loom",
+    )
+
+    result = generate_oracle(candidate, tmp_path / "fixtures", force=True)
+
+    assert result.status == "fixtures_ready"
+    assert np.load(tmp_path / "fixtures" / "src0.npy").shape == (256,)
+    assert np.load(tmp_path / "fixtures" / "mask.npy").shape == (256,)
+    assert np.load(tmp_path / "fixtures" / "expected.npy").shape == (256,)
+
+    linked_source = tmp_path / "linked.loom"
+    linked_source.write_text('kernel.def export("hrx2_soft_max_f32_mask") @hrx2_soft_max_f32_mask() {}\n', encoding="utf-8")
+    _, metadata = write_workbench(candidate, linked_source, tmp_path / "workbench.loom", tmp_path / "fixtures")
+
+    assert metadata["status"] == "ok"
+    workbench = (tmp_path / "workbench.loom").read_text(encoding="utf-8")
+    assert "tensor<256xf32>, tensor<256xf32>, tensor<256xf32>" in workbench
+    assert "check.expect.close" in workbench
+
+
 @pytest.mark.parametrize(
     ("family", "op", "root_symbol", "export_name", "source_path"),
     (

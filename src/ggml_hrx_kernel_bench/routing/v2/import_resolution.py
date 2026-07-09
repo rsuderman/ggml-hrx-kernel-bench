@@ -673,18 +673,49 @@ def lower_rope_tensors(
     }
 
 
+def _soft_max_route_requires_mask(route: V2Route) -> bool:
+    return "mask" in route.root_symbol
+
+
+def _preferred_soft_max_routes_for_case(
+    case: ImportedCase,
+    routes: list[V2Route],
+) -> list[V2Route]:
+    mask = case.normalized_params.get("mask")
+    if not isinstance(mask, int) or mask not in {0, 1}:
+        return routes
+    routed_mask_value = bool(mask)
+    matching_routes = [route for route in routes if _soft_max_route_requires_mask(route) == routed_mask_value]
+    return matching_routes or routes
+
+
+def _preferred_routes_for_case(
+    case: ImportedCase,
+    routes: list[V2Route],
+) -> list[V2Route]:
+    if case.op == "SOFT_MAX":
+        return _preferred_soft_max_routes_for_case(case, routes)
+    return routes
+
+
 def lower_soft_max_tensors(
     case: ImportedCase,
+    route: V2Route,
 ) -> tuple[dict[str, ConcreteTensor], dict[str, int]]:
     ne = case.normalized_params.get("ne")
+    nr23 = case.normalized_params.get("nr23")
     mask = case.normalized_params.get("mask", 0)
     sinks = case.normalized_params.get("sinks", 0)
     max_bias = case.normalized_params.get("max_bias", 0.0)
     inplace = case.normalized_params.get("inplace", 0)
     if not isinstance(ne, list) or len(ne) != 4:
         raise ValueError("SOFT_MAX lowering requires a 4-D ne extent list")
+    if not isinstance(nr23, list) or len(nr23) != 2:
+        raise ValueError("SOFT_MAX lowering requires a 2-D nr23 extent list")
     if any(not isinstance(value, int) for value in ne):
         raise ValueError("SOFT_MAX lowering requires integer ne extents")
+    if any(not isinstance(value, int) for value in nr23):
+        raise ValueError("SOFT_MAX lowering requires integer nr23 extents")
     for name, value in (("mask", mask), ("sinks", sinks), ("inplace", inplace)):
         if not isinstance(value, int):
             raise ValueError(f"SOFT_MAX lowering requires integer {name}")
@@ -699,7 +730,13 @@ def lower_soft_max_tensors(
         max_bias_value = float(max_bias)
     else:
         raise ValueError("SOFT_MAX lowering requires numeric max_bias")
-    if mask != 0:
+    requires_mask = _soft_max_route_requires_mask(route)
+    if requires_mask:
+        if mask != 1:
+            raise ValueError("SOFT_MAX masked v2 routing currently requires mask=1")
+        if nr23 != [1, 1]:
+            raise ValueError("SOFT_MAX masked v2 routing currently requires nr23=[1, 1]")
+    elif mask != 0:
         raise ValueError("SOFT_MAX v2 routing currently requires mask=0")
     if sinks != 0:
         raise ValueError("SOFT_MAX v2 routing currently requires sinks=0")
@@ -724,6 +761,11 @@ def lower_soft_max_tensors(
             dimensions=_dimensions_from_extents([ncols, nrows]),
         ),
     }
+    if requires_mask:
+        tensors["mask"] = ConcreteTensor(
+            dtype="F32",
+            dimensions=_dimensions_from_extents([ncols, nrows]),
+        )
     return tensors, _shape_from_extents([ncols, nrows])
 
 
@@ -1024,7 +1066,7 @@ def lower_tensors_for_route(
     if route.op == "RMS_NORM":
         return lower_rms_norm_tensors(case)
     if route.op == "SOFT_MAX":
-        return lower_soft_max_tensors(case)
+        return lower_soft_max_tensors(case, route)
     if route.op == "SWIGLU":
         return lower_swiglu_tensors(case)
     if route.op == "SUM_ROWS":
@@ -1077,7 +1119,7 @@ def resolve_route_for_case(
 
     lowering_errors: list[str] = []
     lowered_any = False
-    for route in dtype_matching:
+    for route in _preferred_routes_for_case(case, dtype_matching):
         try:
             tensors, shape = lower_tensors_for_route(case, route)
         except ValueError as exc:

@@ -2539,11 +2539,43 @@ def test_v2_soft_max_masked_case_stays_unmapped() -> None:
 
     resolved_route, shape, reason, detail = resolve_route_for_case(case, soft_max_routes)
 
+    assert reason is None
+    assert detail is None
+    assert resolved_route is not None
+    assert resolved_route.id == "soft_max_f32_mask_contiguous_2d"
+    assert shape == {"d0": 1024, "d1": 16}
+
+
+def test_v2_soft_max_masked_broadcast_case_stays_unmapped() -> None:
+    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
+    case = ImportedCase(
+        op="SOFT_MAX",
+        dtype={"type": "f32"},
+        raw_case={},
+        normalized_params={
+            "inplace": 0,
+            "m_prec": "f16",
+            "mask": 1,
+            "max_bias": 0.0,
+            "ne": [15, 15, 1, 1],
+            "nr23": [2, 3],
+            "scale": 1.0,
+            "sinks": 0,
+        },
+        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_group_index=0,
+        source_case_index=0,
+    )
+
+    soft_max_routes = list(routes_for_op(catalog, "SOFT_MAX"))
+
+    resolved_route, shape, reason, detail = resolve_route_for_case(case, soft_max_routes)
+
     assert resolved_route is None
     assert shape is None
     assert reason is not None
     assert reason.value == "shape_lowering_not_implemented"
-    assert detail == "SOFT_MAX v2 routing currently requires mask=0"
+    assert detail == "SOFT_MAX masked v2 routing currently requires nr23=[1, 1]"
 
 
 def test_v2_soft_max_large_ncols_case_stays_unmapped() -> None:
