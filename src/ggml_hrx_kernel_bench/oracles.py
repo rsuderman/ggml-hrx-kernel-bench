@@ -1744,19 +1744,40 @@ def _rope_arrays(np: Any, candidate: Candidate, seed: int) -> dict[str, Any]:
 
 
 def _softmax_kqv_arrays(np: Any, candidate: Candidate, seed: int) -> dict[str, Any]:
+    scale = np.float32(0.75)
     k, rows, cols = _matmul_dims(candidate)
-    logits = f32_pattern(np, (cols, k), seed=seed)
-    shifted = logits - np.max(logits, axis=1, keepdims=True)
+    nheads_kv = int(candidate.shape.get("nheads_kv", 8))
+    if nheads_kv <= 0:
+        raise ValueError(f"softmax_kqv requires nheads_kv > 0, got {nheads_kv}")
+    if cols % nheads_kv != 0:
+        raise ValueError(
+            f"softmax_kqv requires cols divisible by nheads_kv, got cols={cols} nheads_kv={nheads_kv}"
+        )
+    heads_per_kv = cols // nheads_kv
+    kq = f32_pattern(np, (cols, k), seed=seed)
+    mask = f32_pattern(np, (k,), seed=seed + 1, scale=0.125)
+    shifted = (kq * scale) + mask[None, :]
+    shifted = shifted - np.max(shifted, axis=1, keepdims=True)
     weights = np.exp(shifted, dtype=np.float32)
     weights = (weights / np.sum(weights, axis=1, keepdims=True)).astype(np.float32)
-    values = f32_pattern(np, (k, rows), seed=seed + 1)
-    expected = np.matmul(weights, values).astype(np.float32)
+    values = f16_pattern(np, (nheads_kv, rows, k), seed=seed + 2)
+    expected = np.empty((cols, rows), dtype=np.float32)
+    for head in range(cols):
+        kv_head = head // heads_per_kv
+        expected[head] = np.matmul(values[kv_head].astype(np.float32), weights[head]).astype(np.float32)
     return {
         "arrays": {
-            "logits": logits.reshape(cols * k),
-            "values": values.reshape(k * rows),
+            "kq": kq.reshape(cols * k),
+            "mask": mask,
+            "v": values.reshape(nheads_kv * rows * k),
+            "dst_init": f32_pattern(np, (cols * rows,), seed=seed + 3, scale=0.25),
             "expected": expected.reshape(cols * rows),
-        }
+        },
+        "metadata": {
+            "scale": float(scale),
+            "nheads_kv": nheads_kv,
+            "heads_per_kv": heads_per_kv,
+        },
     }
 
 
@@ -2276,6 +2297,35 @@ def _write_quantized_mul_mat_static_workbench(
     return _emit_case(linked_source, workbench_path, case_name, bench_name, "\n".join(lines))
 
 
+def _write_softmax_kqv_workbench(
+    candidate: Candidate,
+    linked_source: Path,
+    workbench_path: Path,
+    fixture_dir: Path,
+) -> tuple[str, dict[str, Any]]:
+    k, rows, cols = _matmul_dims(candidate)
+    nheads_kv = int(candidate.shape.get("nheads_kv", 8))
+    src0_elems = cols * k
+    mask_elems = k
+    src1_elems = nheads_kv * rows * k
+    dst_elems = rows * cols
+    case_name, bench_name = _case_names(candidate)
+    lines = [
+        "  %scale = check.literal value(0.75) : f32",
+        _read_f32(workbench_path, fixture_dir, "kq", src0_elems),
+        _read_f32(workbench_path, fixture_dir, "mask", mask_elems),
+        _read_f16(workbench_path, fixture_dir, "v", src1_elems),
+        _read_f32(workbench_path, fixture_dir, "dst_init", dst_elems).replace("%dst_init", "%dst"),
+        _read_f32(workbench_path, fixture_dir, "expected", dst_elems),
+        (
+            f"  func.call {candidate.root_symbol}(%scale, %kq, %mask, %v, %dst) : "
+            f"(f32, tensor<{src0_elems}xf32>, tensor<{mask_elems}xf32>, tensor<{src1_elems}xf16>, tensor<{dst_elems}xf32>)"
+        ),
+        f"  check.expect.close actual(%dst) expected(%expected) atol(0.08) rtol(0.02) nan(same) : tensor<{dst_elems}xf32>",
+    ]
+    return _emit_case(linked_source, workbench_path, case_name, bench_name, "\n".join(lines))
+
+
 def _write_rope_workbench(candidate: Candidate, linked_source: Path, workbench_path: Path, fixture_dir: Path) -> tuple[str | None, dict[str, Any]]:
     if candidate.family == "rope_set_rows_f32":
         src0_dims = _captured_tensor_dims(candidate, "src0")
@@ -2529,6 +2579,19 @@ ORACLE_SPECS: tuple[OracleSpec, ...] = (
         family_ids=("mul_mat_f16_f32_batched",),
         generate=_logical_generate(LogicalOracleSpec(("mul_mat_f16_f32_batched",), "mul_mat_numpy_logical", {"atol": 0.08, "rtol": 0.02}, _matmul_f16_f32_arrays, exact_kernel_abi=True)),
         write_workbench=_write_mul_mat_f16_f32_batched_workbench,
+    ),
+    OracleSpec(
+        family_ids=("softmax_kqv_f32_f16",),
+        generate=_logical_generate(
+            LogicalOracleSpec(
+                ("softmax_kqv_f32_f16",),
+                "softmax_kqv_f32_f16_numpy_logical",
+                {"atol": 0.08, "rtol": 0.02},
+                _softmax_kqv_arrays,
+                exact_kernel_abi=True,
+            )
+        ),
+        write_workbench=_write_softmax_kqv_workbench,
     ),
     OracleSpec(
         family_ids=("rope_f32", "rope_neox_f32", "rope_scale_f32"),

@@ -39,6 +39,25 @@ ACTUAL_V2_ROUTING_DIR = Path(__file__).resolve().parents[1] / "catalog" / "v2"
 ACTUAL_V2_KERNEL_DIR = Path(__file__).resolve().parents[1] / "kernels" / "v2"
 
 
+def _softmax_kqv_shape(k: int, *, rows: int = 128, cols: int = 24, nheads_kv: int = 8) -> dict[str, int]:
+    return {
+        "d0": cols,
+        "d1": rows,
+        "src0_d0": k,
+        "src0_d1": cols,
+        "mask_d0": k,
+        "mask_d1": 1,
+        "src1_d0": k,
+        "src1_d1": rows * nheads_kv,
+        "dst_d0": rows,
+        "dst_d1": cols,
+        "k": k,
+        "rows": rows,
+        "cols": cols,
+        "nheads_kv": nheads_kv,
+    }
+
+
 def _write_v2_descriptor(routing_dir: Path) -> None:
     routing_dir.mkdir(parents=True, exist_ok=True)
     (routing_dir / "router.json").write_text(
@@ -2084,6 +2103,209 @@ def test_v2_mul_mat_route_resolves_for_q6_direct_case() -> None:
         "rows": 16,
         "cols": 8,
     }
+
+
+@pytest.mark.parametrize(
+    ("route_id", "k", "workgroup_count"),
+    (
+        ("softmax_kqv_f32_f16_decode_kv256_d128_h24_hkv8_wg64_rows2", 256, [64, 24, 1]),
+        ("softmax_kqv_f32_f16_decode_kv512_d128_h24_hkv8_wg256_rows128", 512, [1, 24, 1]),
+        ("softmax_kqv_f32_f16_decode_kv768_d128_h24_hkv8_wg256_rows128", 768, [1, 24, 1]),
+    ),
+)
+def test_v2_flash_attn_ext_routes_materialize_softmax_kqv_decode_variants(
+    route_id: str,
+    k: int,
+    workgroup_count: list[int],
+) -> None:
+    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
+    routes = list(routes_for_op(catalog, "FLASH_ATTN_EXT"))
+    route = next(current for current in routes if current.id == route_id)
+
+    candidate = candidate_from_shape(
+        kernel_dir=ACTUAL_V2_KERNEL_DIR,
+        route=route,
+        shape=_softmax_kqv_shape(k),
+    )
+
+    assert candidate.family == "softmax_kqv_f32_f16"
+    assert candidate.status == "planned"
+    assert candidate.dispatch["workgroup_count"] == workgroup_count
+    assert candidate.shape["k"] == k
+    assert candidate.shape["rows"] == 128
+    assert candidate.shape["cols"] == 24
+    assert candidate.shape["nheads_kv"] == 8
+
+
+@pytest.mark.parametrize(
+    ("route_id", "kv"),
+    (
+        ("softmax_kqv_f32_f16_decode_kv256_d128_h24_hkv8_wg64_rows2", 256),
+        ("softmax_kqv_f32_f16_decode_kv512_d128_h24_hkv8_wg256_rows128", 512),
+        ("softmax_kqv_f32_f16_decode_kv768_d128_h24_hkv8_wg256_rows128", 768),
+    ),
+)
+def test_v2_flash_attn_ext_fixed_decode_routes_resolve_grouped_yaml_cases(
+    route_id: str,
+    kv: int,
+) -> None:
+    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
+    case = ImportedCase(
+        op="FLASH_ATTN_EXT",
+        dtype={"type_KV": "f16"},
+        raw_case={},
+        normalized_params={
+            "hsk": 128,
+            "hsv": 128,
+            "kv": kv,
+            "logit_softcap": 0.0,
+            "mask": 1,
+            "max_bias": 0.0,
+            "nb": 1,
+            "nh": 24,
+            "nr23": [4, 1],
+            "permute": [0, 1, 2, 3],
+            "prec": "f32",
+            "sinks": 0,
+        },
+        source_path="tests/kernels/data/additional_test.yaml",
+        source_group_index=0,
+        source_case_index=0,
+    )
+
+    resolved_route, shape, reason, detail = resolve_route_for_case(
+        case, list(routes_for_op(catalog, "FLASH_ATTN_EXT"))
+    )
+
+    assert reason is None
+    assert detail is None
+    assert resolved_route is not None
+    assert resolved_route.id == route_id
+    assert shape == {
+        "d0": 24,
+        "d1": 128,
+        "src0_d0": kv,
+        "src0_d1": 24,
+        "mask_d0": kv,
+        "mask_d1": 1,
+        "src1_d0": kv,
+        "src1_d1": 1024,
+        "dst_d0": 128,
+        "dst_d1": 24,
+        "k": kv,
+        "rows": 128,
+        "cols": 24,
+        "nheads_kv": 8,
+    }
+
+
+def test_v2_flash_attn_ext_route_leaves_maskless_grouped_yaml_case_unmapped() -> None:
+    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
+    case = ImportedCase(
+        op="FLASH_ATTN_EXT",
+        dtype={"type_KV": "f16"},
+        raw_case={},
+        normalized_params={
+            "hsk": 128,
+            "hsv": 128,
+            "kv": 4096,
+            "nb": 1,
+            "nh": 8,
+            "nr23": [4, 1],
+            "permute": [0, 1, 2, 3],
+            "mask": 0,
+            "sinks": 0,
+        },
+        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_group_index=1,
+        source_case_index=3,
+    )
+
+    resolved_route, shape, reason, detail = resolve_route_for_case(
+        case, list(routes_for_op(catalog, "FLASH_ATTN_EXT"))
+    )
+
+    assert resolved_route is None
+    assert shape is None
+    assert reason is not None
+    assert reason.value == "shape_lowering_not_implemented"
+    assert detail == "FLASH_ATTN_EXT v2 routing currently requires mask=1"
+
+
+@pytest.mark.parametrize("kv", (512, 1024, 2048, 4096))
+def test_v2_flash_attn_ext_masked_identity_route_resolves_grouped_yaml_family(kv: int) -> None:
+    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
+    case = ImportedCase(
+        op="FLASH_ATTN_EXT",
+        dtype={"type_KV": "f16"},
+        raw_case={},
+        normalized_params={
+            "hsk": 128,
+            "hsv": 128,
+            "kv": kv,
+            "logit_softcap": 0.0,
+            "mask": 1,
+            "max_bias": 0.0,
+            "nb": 1,
+            "nh": 8,
+            "nr23": [4, 1],
+            "permute": [0, 1, 2, 3],
+            "prec": "f32",
+            "sinks": 0,
+        },
+        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_group_index=1,
+        source_case_index=0,
+    )
+
+    resolved_route, shape, reason, detail = resolve_route_for_case(
+        case, list(routes_for_op(catalog, "FLASH_ATTN_EXT"))
+    )
+
+    assert reason is None
+    assert detail is None
+    assert resolved_route is not None
+    assert resolved_route.id == "softmax_kqv_f32_f16_masked_identity_kv512_4096_d128_h8_wg256_row1"
+    assert shape == {
+        "d0": 8,
+        "d1": 128,
+        "src0_d0": kv,
+        "src0_d1": 8,
+        "mask_d0": kv,
+        "mask_d1": 1,
+        "src1_d0": kv,
+        "src1_d1": 1024,
+        "dst_d0": 128,
+        "dst_d1": 8,
+        "k": kv,
+        "rows": 128,
+        "cols": 8,
+        "nheads_kv": 8,
+    }
+
+
+@pytest.mark.parametrize("kv", (512, 1024, 2048, 4096))
+def test_v2_flash_attn_ext_masked_identity_route_materializes_candidates(kv: int) -> None:
+    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
+    route = next(
+        current
+        for current in routes_for_op(catalog, "FLASH_ATTN_EXT")
+        if current.id == "softmax_kqv_f32_f16_masked_identity_kv512_4096_d128_h8_wg256_row1"
+    )
+
+    candidate = candidate_from_shape(
+        kernel_dir=ACTUAL_V2_KERNEL_DIR,
+        route=route,
+        shape=_softmax_kqv_shape(kv, cols=8),
+    )
+
+    assert candidate.family == "softmax_kqv_f32_f16"
+    assert candidate.status == "planned"
+    assert candidate.dispatch["workgroup_count"] == [128, 8, 1]
+    assert candidate.shape["k"] == kv
+    assert candidate.shape["rows"] == 128
+    assert candidate.shape["cols"] == 8
+    assert candidate.shape["nheads_kv"] == 8
 
 
 def test_v2_mul_mat_broadcast_case_stays_unmapped() -> None:

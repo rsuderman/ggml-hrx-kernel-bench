@@ -50,6 +50,25 @@ def _materialized_copy_non_contiguous_source_path(tmp_path: Path, route_id: str)
     return str(asset_root / "kernels" / "v2" / "copy" / f"{route_id}.loom")
 
 
+def _softmax_kqv_shape(k: int, *, rows: int = 128, cols: int = 24, nheads_kv: int = 8) -> dict[str, int]:
+    return {
+        "d0": cols,
+        "d1": rows,
+        "src0_d0": k,
+        "src0_d1": cols,
+        "mask_d0": k,
+        "mask_d1": 1,
+        "src1_d0": k,
+        "src1_d1": rows * nheads_kv,
+        "dst_d0": rows,
+        "dst_d1": cols,
+        "k": k,
+        "rows": rows,
+        "cols": cols,
+        "nheads_kv": nheads_kv,
+    }
+
+
 def test_add_oracle_uses_ranked_shape_for_fixture_size(tmp_path: Path) -> None:
     candidate = _candidate(candidate_id="add_ranked_4d", shape={"d0": 10, "d1": 5, "d2": 4, "d3": 3})
 
@@ -934,6 +953,68 @@ def test_masked_soft_max_oracle_and_workbench_include_mask_buffer(tmp_path: Path
     workbench = (tmp_path / "workbench.loom").read_text(encoding="utf-8")
     assert "tensor<256xf32>, tensor<256xf32>, tensor<256xf32>" in workbench
     assert "check.expect.close" in workbench
+
+
+def test_softmax_kqv_oracle_and_workbench_use_exact_attention_abi(tmp_path: Path) -> None:
+    candidate = _candidate(
+        candidate_id="softmax_kqv_f32_f16_decode_kv512",
+        shape=_softmax_kqv_shape(512),
+        family="softmax_kqv_f32_f16",
+        source_id="softmax_kqv_f32_f16",
+        root_symbol="@hrx2_softmax_kqv_f32_f16_decode_kv512_rows128_wg256",
+        export_name="hrx2_softmax_kqv_f32_f16_decode_kv512_rows128_wg256",
+        op="FLASH_ATTN_EXT",
+        source_path="kernels/v2/softmax_kqv/decode_kv512_rows128_wg256.loom",
+    )
+
+    result = generate_oracle(candidate, tmp_path / "fixtures", force=True)
+
+    assert result.status == "fixtures_ready"
+    assert np.load(tmp_path / "fixtures" / "kq.npy").shape == (12288,)
+    assert np.load(tmp_path / "fixtures" / "mask.npy").shape == (512,)
+    assert np.load(tmp_path / "fixtures" / "v.npy").shape == (524288,)
+    assert np.load(tmp_path / "fixtures" / "v.npy").dtype == np.float16
+    assert np.load(tmp_path / "fixtures" / "dst_init.npy").shape == (3072,)
+    assert np.load(tmp_path / "fixtures" / "expected.npy").shape == (3072,)
+
+    linked_source = tmp_path / "linked.loom"
+    linked_source.write_text(
+        'kernel.def export("hrx2_softmax_kqv_f32_f16_decode_kv512_rows128_wg256") @hrx2_softmax_kqv_f32_f16_decode_kv512_rows128_wg256() {}\n',
+        encoding="utf-8",
+    )
+    _, metadata = write_workbench(candidate, linked_source, tmp_path / "workbench.loom", tmp_path / "fixtures")
+
+    assert metadata["status"] == "ok"
+    workbench = (tmp_path / "workbench.loom").read_text(encoding="utf-8")
+    assert "%scale = check.literal value(0.75) : f32" in workbench
+    assert "tensor<12288xf32>" in workbench
+    assert "tensor<512xf32>" in workbench
+    assert "tensor<524288xf16>" in workbench
+    assert "tensor<3072xf32>" in workbench
+    assert "check.expect.close" in workbench
+
+
+def test_softmax_kqv_oracle_supports_masked_identity_h8_attention_abi(tmp_path: Path) -> None:
+    candidate = _candidate(
+        candidate_id="softmax_kqv_f32_f16_masked_identity_kv1024_h8",
+        shape=_softmax_kqv_shape(1024, cols=8),
+        family="softmax_kqv_f32_f16",
+        source_id="softmax_kqv_f32_f16",
+        root_symbol="@hrx2_softmax_kqv_f32_f16_masked_identity_kv512_4096_d128_h8_wg256_row1",
+        export_name="hrx2_softmax_kqv_f32_f16_masked_identity_kv512_4096_d128_h8_wg256_row1",
+        op="FLASH_ATTN_EXT",
+        source_path="kernels/v2/softmax_kqv/masked_identity_kv512_4096_d128_h8_wg256_row1.loom",
+    )
+
+    result = generate_oracle(candidate, tmp_path / "fixtures", force=True)
+
+    assert result.status == "fixtures_ready"
+    assert np.load(tmp_path / "fixtures" / "kq.npy").shape == (8192,)
+    assert np.load(tmp_path / "fixtures" / "mask.npy").shape == (1024,)
+    assert np.load(tmp_path / "fixtures" / "v.npy").shape == (1048576,)
+    assert np.load(tmp_path / "fixtures" / "v.npy").dtype == np.float16
+    assert np.load(tmp_path / "fixtures" / "dst_init.npy").shape == (1024,)
+    assert np.load(tmp_path / "fixtures" / "expected.npy").shape == (1024,)
 
 
 @pytest.mark.parametrize(

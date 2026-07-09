@@ -698,6 +698,114 @@ def _preferred_routes_for_case(
     return routes
 
 
+def lower_flash_attn_ext_tensors(
+    case: ImportedCase,
+    route: V2Route,
+) -> tuple[dict[str, ConcreteTensor], dict[str, int]]:
+    fixed_decode_kv = {
+        "softmax_kqv_f32_f16_decode_kv256_d128_h24_hkv8_wg64_rows2": 256,
+        "softmax_kqv_f32_f16_decode_kv512_d128_h24_hkv8_wg256_rows128": 512,
+        "softmax_kqv_f32_f16_decode_kv768_d128_h24_hkv8_wg256_rows128": 768,
+    }
+    masked_identity_route_id = "softmax_kqv_f32_f16_masked_identity_kv512_4096_d128_h8_wg256_row1"
+    is_masked_identity = route.id == masked_identity_route_id
+    fixed_decode_expected_kv = fixed_decode_kv.get(route.id)
+    if not is_masked_identity and fixed_decode_expected_kv is None:
+        raise ValueError(
+            "FLASH_ATTN_EXT v2 grouped-YAML lowering is not implemented for the fixed softmax_kqv decode routes"
+        )
+    kv = case.normalized_params.get("kv")
+    hsk = case.normalized_params.get("hsk")
+    hsv = case.normalized_params.get("hsv")
+    nb = case.normalized_params.get("nb")
+    nh = case.normalized_params.get("nh")
+    nr23 = case.normalized_params.get("nr23")
+    permute = case.normalized_params.get("permute")
+    mask = case.normalized_params.get("mask")
+    sinks = case.normalized_params.get("sinks", 0)
+    logit_softcap = case.normalized_params.get("logit_softcap", 0.0)
+    max_bias = case.normalized_params.get("max_bias", 0.0)
+    if not all(isinstance(value, int) for value in (kv, hsk, hsv, nb, nh, mask, sinks)):
+        raise ValueError("FLASH_ATTN_EXT lowering requires integer kv/hsk/hsv/nb/nh/mask/sinks")
+    if not isinstance(nr23, list) or len(nr23) != 2 or any(not isinstance(value, int) for value in nr23):
+        raise ValueError("FLASH_ATTN_EXT lowering requires a 2-D integer nr23 extent list")
+    if not isinstance(permute, list) or len(permute) != 4 or any(not isinstance(value, int) for value in permute):
+        raise ValueError("FLASH_ATTN_EXT lowering requires a 4-D integer permute list")
+    if isinstance(logit_softcap, bool) or not isinstance(logit_softcap, (int, float)):
+        raise ValueError("FLASH_ATTN_EXT lowering requires numeric logit_softcap")
+    if isinstance(max_bias, bool) or not isinstance(max_bias, (int, float)):
+        raise ValueError("FLASH_ATTN_EXT lowering requires numeric max_bias")
+    kv_value = int(kv)
+    if is_masked_identity:
+        if kv_value < 512 or kv_value > 4096 or kv_value % 512 != 0:
+            raise ValueError("FLASH_ATTN_EXT v2 routing currently requires kv to be a multiple of 512 between 512 and 4096")
+    else:
+        if kv_value != fixed_decode_expected_kv:
+            raise ValueError(f"FLASH_ATTN_EXT v2 routing currently requires kv={fixed_decode_expected_kv}")
+    if int(hsk) != 128:
+        raise ValueError("FLASH_ATTN_EXT v2 routing currently requires hsk=128")
+    if int(hsv) != 128:
+        raise ValueError("FLASH_ATTN_EXT v2 routing currently requires hsv=128")
+    if int(nb) != 1:
+        raise ValueError("FLASH_ATTN_EXT v2 routing currently requires nb=1")
+    if is_masked_identity:
+        if int(nh) != 8:
+            raise ValueError("FLASH_ATTN_EXT v2 routing currently requires nh=8")
+    else:
+        if int(nh) != 24:
+            raise ValueError("FLASH_ATTN_EXT v2 routing currently requires nh=24")
+    if nr23 != [4, 1]:
+        raise ValueError("FLASH_ATTN_EXT v2 routing currently requires nr23=[4, 1]")
+    if tuple(int(value) for value in permute) != POINTWISE_BASE_PERMUTATION:
+        raise ValueError("FLASH_ATTN_EXT v2 routing currently requires permute=[0, 1, 2, 3]")
+    if int(mask) != 1:
+        raise ValueError("FLASH_ATTN_EXT v2 routing currently requires mask=1")
+    if int(sinks) != 0:
+        raise ValueError("FLASH_ATTN_EXT v2 routing currently requires sinks=0")
+    if float(logit_softcap) != 0.0:
+        raise ValueError("FLASH_ATTN_EXT v2 routing currently requires logit_softcap=0.0")
+    if float(max_bias) != 0.0:
+        raise ValueError("FLASH_ATTN_EXT v2 routing currently requires max_bias=0.0")
+    rows = 128
+    cols = 8 if is_masked_identity else 24
+    nheads_kv = 8
+    src1_cols = rows * nheads_kv
+    tensors = {
+        "src0": ConcreteTensor(
+            dtype="F32",
+            dimensions=_dimensions_from_extents([kv_value, cols]),
+        ),
+        "mask": ConcreteTensor(
+            dtype="F32",
+            dimensions=_dimensions_from_extents([kv_value, 1]),
+        ),
+        "src1": ConcreteTensor(
+            dtype="F16",
+            dimensions=_dimensions_from_extents([kv_value, src1_cols]),
+        ),
+        "dst": ConcreteTensor(
+            dtype="F32",
+            dimensions=_dimensions_from_extents([rows, cols]),
+        ),
+    }
+    return tensors, {
+        "d0": cols,
+        "d1": rows,
+        "k": kv_value,
+        "rows": rows,
+        "cols": cols,
+        "nheads_kv": nheads_kv,
+        "src0_d0": kv_value,
+        "src0_d1": cols,
+        "mask_d0": kv_value,
+        "mask_d1": 1,
+        "src1_d0": kv_value,
+        "src1_d1": src1_cols,
+        "dst_d0": rows,
+        "dst_d1": cols,
+    }
+
+
 def lower_soft_max_tensors(
     case: ImportedCase,
     route: V2Route,
@@ -1057,6 +1165,8 @@ def lower_tensors_for_route(
         return lower_contiguous_scale_or_clamp_tensors(case)
     if route.op == "CONT":
         return lower_contiguous_cont_tensors(case)
+    if route.op == "FLASH_ATTN_EXT":
+        return lower_flash_attn_ext_tensors(case, route)
     if route.op == "GET_ROWS":
         return lower_get_rows_tensors(case)
     if route.op == "MUL_MAT":
@@ -1095,13 +1205,10 @@ def shape_for_resolved_route(
 ) -> EncodedRouteShape:
     if not route.tensors:
         return EncodedRouteShape(items=tuple((str(name), int(value)) for name, value in fallback_shape.items()))
-    encoded = list(encode_route_shape(route, tensors).items)
-    present = {name for name, _ in encoded}
+    encoded = dict(encode_route_shape(route, tensors).items)
     for name, value in fallback_shape.items():
-        if str(name) in present:
-            continue
-        encoded.append((str(name), int(value)))
-    return EncodedRouteShape(items=tuple(encoded))
+        encoded[str(name)] = int(value)
+    return EncodedRouteShape(items=tuple(encoded.items()))
 
 
 def resolve_route_for_case(

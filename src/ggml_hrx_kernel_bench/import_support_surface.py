@@ -11,6 +11,7 @@ VALIDATED_IMPORT_OPS = frozenset(
         "CPY",
         "DIV",
         "EXP",
+        "FLASH_ATTN_EXT",
         "GET_ROWS",
         "MUL",
         "MUL_MAT",

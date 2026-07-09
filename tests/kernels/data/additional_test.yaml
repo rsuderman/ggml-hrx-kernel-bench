@@ -1,0 +1,49 @@
+ops:
+  FLASH_ATTN_EXT:
+    - dtype:
+        type_KV: f16
+      cases:
+        # Intended target:
+        # softmax_kqv_f32_f16_decode_kv256_d128_h24_hkv8_wg64_rows2
+        - hsk: 128
+          hsv: 128
+          kv: 256
+          logit_softcap: 0.0
+          mask: 1
+          max_bias: 0.0
+          nb: 1
+          nh: 24
+          nr23: [4, 1]
+          permute: [0, 1, 2, 3]
+          prec: f32
+          sinks: 0
+
+        # Intended target:
+        # softmax_kqv_f32_f16_decode_kv512_d128_h24_hkv8_wg256_rows128
+        - hsk: 128
+          hsv: 128
+          kv: 512
+          logit_softcap: 0.0
+          mask: 1
+          max_bias: 0.0
+          nb: 1
+          nh: 24
+          nr23: [4, 1]
+          permute: [0, 1, 2, 3]
+          prec: f32
+          sinks: 0
+
+        # Intended target:
+        # softmax_kqv_f32_f16_decode_kv768_d128_h24_hkv8_wg256_rows128
+        - hsk: 128
+          hsv: 128
+          kv: 768
+          logit_softcap: 0.0
+          mask: 1
+          max_bias: 0.0
+          nb: 1
+          nh: 24
+          nr23: [4, 1]
+          permute: [0, 1, 2, 3]
+          prec: f32
+          sinks: 0

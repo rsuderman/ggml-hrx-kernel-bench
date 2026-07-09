@@ -42,6 +42,12 @@
       "exp/exp_f16.json",
       "exp/exp_f32.json"
     ],
+    "FLASH_ATTN_EXT": [
+      "softmax_kqv/softmax_kqv_f32_f16_masked_identity_kv512_4096_d128_h8_wg256_row1.json",
+      "softmax_kqv/softmax_kqv_f32_f16_decode_kv256_d128_h24_hkv8_wg64_rows2.json",
+      "softmax_kqv/softmax_kqv_f32_f16_decode_kv512_d128_h24_hkv8_wg256_rows128.json",
+      "softmax_kqv/softmax_kqv_f32_f16_decode_kv768_d128_h24_hkv8_wg256_rows128.json"
+    ],
     "GET_ROWS": [
       "get_rows/get_rows_f32_embedding_rows_2d.json"
     ],
