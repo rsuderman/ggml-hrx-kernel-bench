@@ -1818,6 +1818,69 @@ def test_v2_mul_mat_route_resolves_for_logits_cols1_f16_batched_case() -> None:
     assert candidate.config["@hrx2.tuning.mul_mat_f16.workgroup_size"] == "256"
 
 
+def test_v2_mul_mat_route_resolves_for_batched_logits_cols1_f16_case() -> None:
+    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
+    case = ImportedCase(
+        op="MUL_MAT",
+        dtype={"type_a": "f16", "type_b": "f32"},
+        raw_case={},
+        normalized_params={
+            "bs": [2, 3],
+            "k": 1056,
+            "k_v": 2112,
+            "m": 128,
+            "n": 1,
+            "nr": [1, 1],
+            "o": 1,
+            "per": [0, 1, 2, 3],
+        },
+        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_group_index=2,
+        source_case_index=40,
+    )
+
+    routes = list(routes_for_op(catalog, "MUL_MAT"))
+
+    resolved_route, shape, reason, detail = resolve_route_for_case(case, routes)
+
+    assert reason is None
+    assert detail is None
+    assert resolved_route is not None
+    assert resolved_route.id == "mul_mat_f16_f32_batched_logits_cols1_4d"
+    assert shape == {
+        "d0": 128,
+        "d1": 1,
+        "d2": 2,
+        "d3": 3,
+        "dst_d2_stride": 128,
+        "dst_d3_stride": 256,
+        "src0_d0": 1056,
+        "src0_d1": 128,
+        "src0_d2": 1,
+        "src0_d3": 1,
+        "src1_d0": 1056,
+        "src1_d2_stride": 1056,
+        "src1_d3_stride": 2112,
+        "k": 1056,
+        "rows": 128,
+        "cols": 1,
+    }
+
+    candidate = candidate_from_shape(
+        kernel_dir=ACTUAL_V2_KERNEL_DIR,
+        route=resolved_route,
+        shape=shape,
+    )
+    assert candidate.config["@hrx2.shape.mul_mat_f16.dst_ne2"] == "2"
+    assert candidate.config["@hrx2.shape.mul_mat_f16.dst_ne3"] == "3"
+    assert candidate.config["@hrx2.shape.mul_mat_f16.src1_stride_col"] == "1056"
+    assert candidate.config["@hrx2.shape.mul_mat_f16.src1_stride_ne2"] == "1056"
+    assert candidate.config["@hrx2.shape.mul_mat_f16.src1_stride_ne3"] == "2112"
+    assert candidate.config["@hrx2.shape.mul_mat_f16.dst_stride_col"] == "128"
+    assert candidate.config["@hrx2.shape.mul_mat_f16.dst_stride_ne2"] == "128"
+    assert candidate.config["@hrx2.shape.mul_mat_f16.dst_stride_ne3"] == "256"
+
+
 def test_v2_mul_mat_route_resolves_for_q8_0_case() -> None:
     catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
     case = ImportedCase(
@@ -1856,6 +1919,47 @@ def test_v2_mul_mat_route_resolves_for_q8_0_case() -> None:
         "k": 256,
         "rows": 1,
         "cols": 64,
+    }
+
+
+def test_v2_mul_mat_route_resolves_for_q4_k_direct_case() -> None:
+    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
+    case = ImportedCase(
+        op="MUL_MAT",
+        dtype={"type_a": "q4_k", "type_b": "f32"},
+        raw_case={},
+        normalized_params={
+            "bs": [1, 1],
+            "k": 256,
+            "k_v": 0,
+            "m": 16,
+            "n": 8,
+            "nr": [1, 1],
+            "o": 1,
+            "per": [0, 1, 2, 3],
+        },
+        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_group_index=0,
+        source_case_index=0,
+    )
+
+    routes = list(routes_for_op(catalog, "MUL_MAT"))
+
+    resolved_route, shape, reason, detail = resolve_route_for_case(case, routes)
+
+    assert reason is None
+    assert detail is None
+    assert resolved_route is not None
+    assert resolved_route.id == "mul_mat_q4_k_f32_direct_contiguous_2d"
+    assert shape == {
+        "d0": 16,
+        "d1": 8,
+        "src0_d0": 256,
+        "src0_d1": 16,
+        "src1_d0": 256,
+        "k": 256,
+        "rows": 16,
+        "cols": 8,
     }
 
 

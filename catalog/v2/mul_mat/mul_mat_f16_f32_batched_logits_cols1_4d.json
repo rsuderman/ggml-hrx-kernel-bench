@@ -1,0 +1,274 @@
+{
+  "id": "mul_mat_f16_f32_batched_logits_cols1_4d",
+  "family": "mul_mat_f16_f32_batched",
+  "kernel": {
+    "source_id": "mul_mat_f16_f32_batched",
+    "path": "mul_mat/f16_f32_batched.loom",
+    "root_symbol": "@hrx2_mul_mat_f16_f32_batched",
+    "export_name": "hrx2_mul_mat_f16_f32_batched"
+  },
+  "tensors": {
+    "src0": {
+      "dtype": "F16",
+      "dimensions": "src0_dimensions",
+      "strides": "src0_strides"
+    },
+    "src1": {
+      "dtype": "F32",
+      "dimensions": "src1_dimensions",
+      "strides": "src1_strides"
+    },
+    "dst": {
+      "dtype": "F32",
+      "dimensions": "dst_dimensions",
+      "strides": "dst_strides"
+    }
+  },
+  "values": [
+    {
+      "name": "src0_contiguous_strides",
+      "contiguous_strides": "src0_dimensions"
+    },
+    {
+      "name": "src1_contiguous_strides",
+      "contiguous_strides": "src1_dimensions"
+    },
+    {
+      "name": "dst_contiguous_strides",
+      "contiguous_strides": "dst_dimensions"
+    },
+    {
+      "name": "src0_k",
+      "head": {
+        "source": "src0_dimensions",
+        "take": 1
+      }
+    },
+    {
+      "name": "src1_k",
+      "head": {
+        "source": "src1_dimensions",
+        "take": 1
+      }
+    },
+    {
+      "name": "src0_rows",
+      "tail": {
+        "source": "src0_dimensions",
+        "drop": 1
+      }
+    },
+    {
+      "name": "dst_rows",
+      "head": {
+        "source": "dst_dimensions",
+        "take": 1
+      }
+    },
+    {
+      "name": "src1_cols",
+      "tail": {
+        "source": "src1_dimensions",
+        "drop": 1
+      }
+    },
+    {
+      "name": "dst_cols",
+      "tail": {
+        "source": "dst_dimensions",
+        "drop": 1
+      }
+    }
+  ],
+  "constraints": [
+    {
+      "name": "src0_dimensions",
+      "length": 4
+    },
+    {
+      "name": "src1_dimensions",
+      "length": 4
+    },
+    {
+      "name": "dst_dimensions",
+      "length": 4
+    },
+    {
+      "name": "src0_dimensions",
+      "index": 0,
+      "min": 1056,
+      "max": 1057
+    },
+    {
+      "name": "src0_dimensions",
+      "index": 1,
+      "min": 128,
+      "max": 129
+    },
+    {
+      "name": "src0_dimensions",
+      "index": 2,
+      "min": 1,
+      "max": 1
+    },
+    {
+      "name": "src0_dimensions",
+      "index": 3,
+      "min": 1,
+      "max": 1
+    },
+    {
+      "name": "src1_dimensions",
+      "index": 1,
+      "min": 1,
+      "max": 1
+    },
+    {
+      "name": "src1_dimensions",
+      "index": 2,
+      "min": 1,
+      "max": 4096
+    },
+    {
+      "name": "src1_dimensions",
+      "index": 3,
+      "min": 1,
+      "max": 4096
+    },
+    {
+      "name": "dst_dimensions",
+      "index": 0,
+      "min": 128,
+      "max": 129
+    },
+    {
+      "name": "dst_dimensions",
+      "index": 1,
+      "min": 1,
+      "max": 1
+    },
+    {
+      "name": "dst_dimensions",
+      "index": 2,
+      "min": 1,
+      "max": 4096
+    },
+    {
+      "name": "dst_dimensions",
+      "index": 3,
+      "min": 1,
+      "max": 4096
+    },
+    {
+      "equals": [
+        "src0_k",
+        "src1_k"
+      ]
+    },
+    {
+      "equals": [
+        "src1_cols",
+        "dst_cols"
+      ]
+    },
+    {
+      "equals": [
+        "src0_contiguous_strides",
+        "src0_strides"
+      ]
+    },
+    {
+      "equals": [
+        "src1_contiguous_strides",
+        "src1_strides"
+      ]
+    },
+    {
+      "equals": [
+        "dst_contiguous_strides",
+        "dst_strides"
+      ]
+    }
+  ],
+  "launch": {
+    "workgroup_size": [
+      256,
+      1,
+      1
+    ],
+    "rows_per_workgroup": 1,
+    "cols_per_workgroup": 1
+  },
+  "config": {
+    "bindings": [
+      {
+        "key": "@hrx2.shape.mul_mat_f16.k",
+        "source": "shape.k"
+      },
+      {
+        "key": "@hrx2.shape.mul_mat_f16.rows",
+        "source": "shape.rows"
+      },
+      {
+        "key": "@hrx2.shape.mul_mat_f16.cols",
+        "source": "shape.cols"
+      },
+      {
+        "key": "@hrx2.shape.mul_mat_f16.dst_ne2",
+        "source": "shape.d2"
+      },
+      {
+        "key": "@hrx2.shape.mul_mat_f16.dst_ne3",
+        "source": "shape.d3"
+      },
+      {
+        "key": "@hrx2.shape.mul_mat_f16.src0_ne2",
+        "value": "1"
+      },
+      {
+        "key": "@hrx2.shape.mul_mat_f16.src0_ne3",
+        "value": "1"
+      },
+      {
+        "key": "@hrx2.shape.mul_mat_f16.src0_stride_row",
+        "source": "tensor.src0.dimensions.d1.stride"
+      },
+      {
+        "key": "@hrx2.shape.mul_mat_f16.src0_stride_ne2",
+        "value": "1"
+      },
+      {
+        "key": "@hrx2.shape.mul_mat_f16.src0_stride_ne3",
+        "value": "1"
+      },
+      {
+        "key": "@hrx2.shape.mul_mat_f16.src1_stride_col",
+        "source": "tensor.src1.dimensions.d1.stride"
+      },
+      {
+        "key": "@hrx2.shape.mul_mat_f16.src1_stride_ne2",
+        "source": "shape.src1_d2_stride"
+      },
+      {
+        "key": "@hrx2.shape.mul_mat_f16.src1_stride_ne3",
+        "source": "shape.src1_d3_stride"
+      },
+      {
+        "key": "@hrx2.shape.mul_mat_f16.dst_stride_col",
+        "source": "tensor.dst.dimensions.d1.stride"
+      },
+      {
+        "key": "@hrx2.shape.mul_mat_f16.dst_stride_ne2",
+        "source": "shape.dst_d2_stride"
+      },
+      {
+        "key": "@hrx2.shape.mul_mat_f16.dst_stride_ne3",
+        "source": "shape.dst_d3_stride"
+      },
+      {
+        "key": "@hrx2.tuning.mul_mat_f16.workgroup_size",
+        "value": "256"
+      }
+    ]
+  }
+}

@@ -515,8 +515,7 @@ def lower_mul_mat_tensors(
         raise ValueError("MUL_MAT lowering requires a 4-D per permutation list")
     if any(not isinstance(value, int) for value in permutation):
         raise ValueError("MUL_MAT lowering requires integer per values")
-    if [int(value) for value in bs] != [1, 1]:
-        raise ValueError("MUL_MAT v2 routing currently requires bs=[1, 1]")
+    batch_extents = [int(value) for value in bs]
     if [int(value) for value in nr] != [1, 1]:
         raise ValueError("MUL_MAT v2 routing currently requires nr=[1, 1]")
     if int(output_count) != 1:
@@ -526,6 +525,45 @@ def lower_mul_mat_tensors(
     k_extent = int(k)
     row_extent = int(rows)
     col_extent = int(cols)
+    if batch_extents != [1, 1]:
+        if (
+            str(case.dtype.get("type_a", "")).lower() != "f16"
+            or str(case.dtype.get("type_b", "")).lower() != "f32"
+        ):
+            raise ValueError("MUL_MAT v2 routing currently requires bs=[1, 1]")
+        src1_extents = [k_extent, col_extent, *batch_extents]
+        dst_extents = [row_extent, col_extent, *batch_extents]
+        tensors = {
+            "src0": ConcreteTensor(
+                dtype="F16",
+                dimensions=_dimensions_from_extents([k_extent, row_extent, 1, 1]),
+            ),
+            "src1": ConcreteTensor(
+                dtype="F32",
+                dimensions=_dimensions_from_extents(src1_extents),
+            ),
+            "dst": ConcreteTensor(
+                dtype="F32",
+                dimensions=_dimensions_from_extents(dst_extents),
+            ),
+        }
+        src1_stride_ne2 = k_extent * col_extent
+        src1_stride_ne3 = src1_stride_ne2 * batch_extents[0]
+        dst_stride_ne2 = row_extent * col_extent
+        dst_stride_ne3 = dst_stride_ne2 * batch_extents[0]
+        return tensors, {
+            **_shape_from_extents(dst_extents),
+            "src0_d0": k_extent,
+            "src0_d1": row_extent,
+            "src1_d0": k_extent,
+            "src1_d2_stride": src1_stride_ne2,
+            "src1_d3_stride": src1_stride_ne3,
+            "dst_d2_stride": dst_stride_ne2,
+            "dst_d3_stride": dst_stride_ne3,
+            "k": k_extent,
+            "rows": row_extent,
+            "cols": col_extent,
+        }
     tensors = {
         "src0": ConcreteTensor(
             dtype=str(case.dtype.get("type_a", "")).upper(),

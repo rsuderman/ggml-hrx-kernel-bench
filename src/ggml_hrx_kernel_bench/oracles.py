@@ -729,6 +729,22 @@ def _matmul_dims(candidate: Candidate) -> tuple[int, int, int]:
     return k, rows, cols
 
 
+def _batched_mul_mat_f16_f32_dims(
+    candidate: Candidate,
+) -> tuple[tuple[int, int], tuple[int, int, int, int], tuple[int, int, int, int], tuple[int, int, int, int], tuple[int, int, int, int]] | None:
+    dst_dims = _captured_tensor_dims(candidate, "dst")
+    src1_dims = _captured_tensor_dims(candidate, "src1")
+    if dst_dims is None or src1_dims is None:
+        return None
+    if dst_dims[2:] == (1, 1):
+        return None
+    k, rows, _ = _matmul_dims(candidate)
+    src0_dims = (k, rows)
+    src1_strides = _copy_tensor_strides(candidate, "src1", src1_dims)
+    dst_strides = _copy_tensor_strides(candidate, "dst", dst_dims)
+    return src0_dims, src1_dims, dst_dims, src1_strides, dst_strides
+
+
 def _captured_tensor_dims(candidate: Candidate, tensor_name: str) -> tuple[int, int, int, int] | None:
     keys = tuple(f"{tensor_name}_d{index}" for index in range(4))
     if all(key in candidate.shape for key in keys):
@@ -1291,6 +1307,35 @@ def _matmul_f32_arrays(np: Any, candidate: Candidate, seed: int) -> dict[str, An
 
 
 def _matmul_f16_f32_arrays(np: Any, candidate: Candidate, seed: int) -> dict[str, Any]:
+    batched = _batched_mul_mat_f16_f32_dims(candidate)
+    if batched is not None:
+        (src0_dims, src1_dims, dst_dims, src1_strides, dst_strides) = batched
+        k, rows = src0_dims
+        cols = dst_dims[1]
+        lhs = f16_pattern(np, (rows, k), seed=seed)
+        src1_len = _buffer_length(src1_dims, src1_strides)
+        dst_len = _buffer_length(dst_dims, dst_strides)
+        src1 = np.zeros((src1_len,), dtype=np.float32)
+        dst_init = f32_pattern(np, (dst_len,), seed=seed + 2, scale=0.25)
+        expected = dst_init.copy()
+        for i3 in range(dst_dims[3]):
+            for i2 in range(dst_dims[2]):
+                rhs = f32_pattern(np, (cols, k), seed=seed + 1 + i2 + dst_dims[2] * i3)
+                dot = np.matmul(lhs.astype(np.float32), rhs.T.astype(np.float32)).T.astype(np.float32)
+                for col in range(cols):
+                    src1_col_base = col * src1_strides[1] + i2 * src1_strides[2] + i3 * src1_strides[3]
+                    src1[src1_col_base : src1_col_base + k] = rhs[col]
+                    dst_col_base = col * dst_strides[1] + i2 * dst_strides[2] + i3 * dst_strides[3]
+                    expected[dst_col_base : dst_col_base + rows] = dot[col]
+        return {
+            "arrays": {
+                "src0": lhs.reshape(rows * k),
+                "src1": src1,
+                "dst_init": dst_init,
+                "expected": expected,
+            },
+            "metadata": {"logical_packed_weight_fixture": False},
+        }
     k, rows, cols = _matmul_dims(candidate)
     lhs = f16_pattern(np, (rows, k), seed=seed)
     rhs = f32_pattern(np, (cols, k), seed=seed + 1)
@@ -1329,10 +1374,17 @@ def _write_mul_mat_f16_f32_batched_workbench(
     workbench_path: Path,
     fixture_dir: Path,
 ) -> tuple[str, dict[str, Any]]:
-    k, rows, cols = _matmul_dims(candidate)
-    src0_elems = rows * k
-    src1_elems = cols * k
-    dst_elems = rows * cols
+    batched = _batched_mul_mat_f16_f32_dims(candidate)
+    if batched is not None:
+        (src0_dims, src1_dims, dst_dims, src1_strides, dst_strides) = batched
+        src0_elems = src0_dims[0] * src0_dims[1]
+        src1_elems = _buffer_length(src1_dims, src1_strides)
+        dst_elems = _buffer_length(dst_dims, dst_strides)
+    else:
+        k, rows, cols = _matmul_dims(candidate)
+        src0_elems = rows * k
+        src1_elems = cols * k
+        dst_elems = rows * cols
     case_name, bench_name = _case_names(candidate)
     lines = [
         _read_f16(workbench_path, fixture_dir, "src0", src0_elems),
