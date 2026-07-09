@@ -331,6 +331,57 @@ def test_abs_oracle_contiguous_view_is_unchanged(tmp_path: Path) -> None:
     assert np.array_equal(expected, np.abs(src0))
 
 
+@pytest.mark.parametrize(
+    ("op", "np_apply"),
+    (
+        ("exp", np.exp),
+        ("neg", np.negative),
+        ("relu", lambda x: np.maximum(x, np.float32(0.0))),
+    ),
+)
+@pytest.mark.parametrize("dt", ("f32", "f16"))
+def test_strided_unary_oracle_and_workbench_model_view(tmp_path: Path, op: str, np_apply, dt: str) -> None:
+    # exp/neg/relu share _unary_arrays/_write_unary_workbench with abs, so the strided view
+    # path is generic. Same padded src0 buffer + contiguous gathered expected as abs.
+    family = f"{op}_{dt}"
+    candidate = _candidate(
+        candidate_id=f"{family}_non_contiguous_4d",
+        shape=dict(_ABS_STRIDED_SHAPE),
+        family=family,
+        source_id=f"pointwise_{dt}",
+        root_symbol=f"@{family}_non_contiguous_4d",
+        export_name=f"{family}_non_contiguous_4d",
+        op=op.upper(),
+        source_path=f"kernels/v2/{op}/non_contiguous_4d.loom",
+    )
+
+    result = generate_oracle(candidate, tmp_path / "fixtures", force=True)
+
+    assert result.status == "fixtures_ready"
+    src0 = np.load(tmp_path / "fixtures" / "src0.npy")
+    expected = np.load(tmp_path / "fixtures" / "expected.npy")
+    assert src0.shape == (_ABS_STRIDED_BUFFER_LEN,)
+    assert expected.shape == (_ABS_STRIDED_DST_ELEMS,)
+    if dt == "f16":
+        view = _abs_gathered_view(src0.view(np.float16))
+        want = np_apply(view.astype(np.float32)).astype(np.float16).view(np.int16)
+    else:
+        want = np_apply(_abs_gathered_view(src0)).astype(np.float32)
+    assert np.array_equal(expected, want)
+
+    linked_source = tmp_path / "linked.loom"
+    linked_source.write_text(
+        f'kernel.def export("{family}_non_contiguous_4d") @{family}_non_contiguous_4d() {{}}\n',
+        encoding="utf-8",
+    )
+    _, metadata = write_workbench(candidate, linked_source, tmp_path / "workbench.loom", tmp_path / "fixtures")
+
+    assert metadata["status"] == "ok"
+    workbench = (tmp_path / "workbench.loom").read_text(encoding="utf-8")
+    tt = "i16" if dt == "f16" else "f32"
+    assert f"tensor<{_ABS_STRIDED_BUFFER_LEN}x{tt}>, tensor<{_ABS_STRIDED_DST_ELEMS}x{tt}>" in workbench
+
+
 def test_set_rows_oracle_and_workbench_support_ranked_v2_shape(tmp_path: Path) -> None:
     candidate = _candidate(
         candidate_id="set_rows_f32_ranked_4d",

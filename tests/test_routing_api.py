@@ -35,8 +35,17 @@ from ggml_hrx_kernel_bench.routing.v2.matching import materialize_route_tensors,
 from ggml_hrx_kernel_bench.routing.v2.query import load_route_catalog, routes_for_op
 
 
-ACTUAL_V2_ROUTING_DIR = Path(__file__).resolve().parents[1] / "catalog" / "v2"
-ACTUAL_V2_KERNEL_DIR = Path(__file__).resolve().parents[1] / "kernels" / "v2"
+# Unary + copy families are code-generated into the materialized asset tree (not the source catalog),
+# so resolve routes against a once-materialized catalog rather than catalog/v2 on disk.
+import tempfile as _tempfile
+
+from ggml_hrx_kernel_bench.materialized_assets import materialize_asset_root as _materialize_asset_root
+
+_MATERIALIZED_V2_ASSETS = _materialize_asset_root(
+    Path(_tempfile.mkdtemp(prefix="hrx-v2-routing-assets-")) / "assets", force=True
+)
+ACTUAL_V2_ROUTING_DIR = _MATERIALIZED_V2_ASSETS / "catalog" / "v2"
+ACTUAL_V2_KERNEL_DIR = _MATERIALIZED_V2_ASSETS / "kernels" / "v2"
 
 
 def _softmax_kqv_shape(k: int, *, rows: int = 128, cols: int = 24, nheads_kv: int = 8) -> dict[str, int]:
@@ -597,35 +606,39 @@ def test_v2_resolve_ne_a_unary_route_for_contiguous_case(op: str, dtype: str, ro
     assert shape == {"d0": 4, "d1": 3, "d2": 2, "d3": 5}
 
 
-def test_v2_relu_view_case_remains_unmapped_without_non_contiguous_unary_route() -> None:
+@pytest.mark.parametrize("op", ("EXP", "NEG", "RELU"))
+def test_v2_unary_view_case_maps_to_non_contiguous_route(op: str) -> None:
+    # ne_a=[4,3,2,5] v=1 -> ggml view src0 strides [1, 3*4, 6*4*3, 30*4*3*2] = [1,12,72,720].
+    # The generated non-contiguous unary routes accept the strided src0 the import query emits.
     catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
     case = ImportedCase(
-        op="RELU",
+        op=op,
         dtype={"type": "f32"},
         raw_case={},
-        normalized_params={
-            "ne_a": [4, 3, 2, 5],
-            "v": 1,
-        },
+        normalized_params={"ne_a": [4, 3, 2, 5], "v": 1},
         source_path="tests/kernels/data/llamacpp_test.yaml",
         source_group_index=0,
         source_case_index=0,
     )
 
-    route, shape, reason, detail = resolve_route_for_case(case, list(routes_for_op(catalog, "RELU")))
+    route, shape, reason, detail = resolve_route_for_case(case, list(routes_for_op(catalog, op)))
 
-    assert route is None
-    assert shape is None
-    assert reason is not None
-    assert reason.value == "shape_lowering_not_implemented"
-    assert detail == "YAML import tensor query did not satisfy any v2 route"
+    assert reason is None
+    assert detail is None
+    assert route is not None
+    assert route.id == f"{op.lower()}_f32_non_contiguous_4d"
+    assert shape is not None
+    assert shape["d0"] == 4 and shape["d1"] == 3 and shape["d2"] == 2 and shape["d3"] == 5
+    assert shape["src0_d1_stride"] == 12
+    assert shape["src0_d2_stride"] == 72
+    assert shape["src0_d3_stride"] == 720
 
 
 @pytest.mark.parametrize(
     ("dtype", "route_id"),
     (
-        ("f16", "abs_f16_contiguous_1d"),
-        ("f32", "abs_f32_contiguous_1d"),
+        ("f16", "abs_f16_contiguous_4d"),
+        ("f32", "abs_f32_contiguous_4d"),
     ),
 )
 def test_v2_resolve_abs_contiguous_case(dtype: str, route_id: str) -> None:
