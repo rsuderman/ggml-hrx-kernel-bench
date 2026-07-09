@@ -1420,6 +1420,58 @@ def test_rope_neox_oracle_and_workbench_use_shape_rope_values(tmp_path: Path) ->
     assert "check.expect.close" in workbench
 
 
+def test_rope_scale_oracle_and_workbench_use_freq_scale_abi(tmp_path: Path) -> None:
+    candidate = Candidate(
+        id="rope_scale_f32_neox_freq_n128_d96_h24_t1_contiguous_4d",
+        family="rope_scale_f32",
+        op="ROPE_SCALE",
+        source_id="rope_neox_f32_freq_scale",
+        source_path=Path("kernels/v2/rope/neox_f32_freq_scale.loom"),
+        root_symbol="@rope_neox_f32_freq_scale",
+        export_name="rope_neox_f32_freq_scale",
+        route_id="rope_scale_f32_neox_freq_n128_d96_h24_t1_contiguous_4d",
+        route=None,
+        shape={"d0": 128, "d1": 24, "d2": 1, "d3": 1},
+        values={
+            "shape.rope.ncols": 128,
+            "shape.rope.n_dims": 96,
+            "shape.rope.nheads": 24,
+            "shape.rope.ntokens": 1,
+            "shape.rope.src0_head_stride": 128,
+            "shape.rope.src0_token_stride": 3072,
+            "shape.rope.dst_head_stride": 128,
+            "shape.rope.dst_token_stride": 3072,
+            "shape.rope.pos_token_stride": 1,
+        },
+        config={},
+        dispatch={},
+        supports={},
+        coverage="route_backed",
+    )
+
+    result = generate_oracle(candidate, tmp_path / "fixtures", force=True)
+
+    assert result.status == "fixtures_ready"
+    assert np.load(tmp_path / "fixtures" / "src0.npy").shape == (3072,)
+    assert np.load(tmp_path / "fixtures" / "positions.npy").shape == (1,)
+    assert np.load(tmp_path / "fixtures" / "freq.npy").shape == (48,)
+    assert np.load(tmp_path / "fixtures" / "expected.npy").shape == (3072,)
+
+    linked_source = tmp_path / "linked.loom"
+    linked_source.write_text(
+        'kernel.def export("rope_neox_f32_freq_scale") @rope_neox_f32_freq_scale() {}\n',
+        encoding="utf-8",
+    )
+    _, metadata = write_workbench(candidate, linked_source, tmp_path / "workbench.loom", tmp_path / "fixtures")
+
+    assert metadata["status"] == "ok"
+    workbench = (tmp_path / "workbench.loom").read_text(encoding="utf-8")
+    assert "%output_scale = check.literal value(0.5) : f32" in workbench
+    assert "tensor<3072xf32>, tensor<1xi32>, tensor<48xf32>, tensor<3072xf32>" in workbench
+    assert "func.call @rope_neox_f32_freq_scale" in workbench
+    assert "check.expect.close" in workbench
+
+
 def test_rope_set_rows_oracle_and_workbench_use_f16_dst_abi(tmp_path: Path) -> None:
     candidate = Candidate(
         id="rope_set_rows_f16_normal_n128_h32_t1_contiguous_4d",

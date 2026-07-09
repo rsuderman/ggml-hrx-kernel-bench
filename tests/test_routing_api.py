@@ -3206,6 +3206,92 @@ def test_v2_rope_neox_partial_dims_case_stays_unmapped() -> None:
     assert detail == "ROPE NEOX v2 routing currently requires n_dims == ne_a[0]"
 
 
+def test_v2_rope_scale_route_resolves_for_neox_freq_f32_case() -> None:
+    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
+    case = ImportedCase(
+        op="ROPE_SCALE",
+        dtype={"type": "f32"},
+        raw_case={},
+        normalized_params={
+            "af": 1.0,
+            "ef": 0.0,
+            "ff": 1,
+            "fs": 1.0,
+            "inplace": 0,
+            "mode": 2,
+            "n_ctx": 512,
+            "n_dims": 96,
+            "ne_a": [128, 24, 1, 1],
+            "v": 0,
+        },
+        source_path="tests/kernels/data/additional_test.yaml",
+        source_group_index=0,
+        source_case_index=0,
+    )
+
+    routes = list(routes_for_op(catalog, "ROPE_SCALE"))
+
+    resolved_route, shape, reason, detail = resolve_route_for_case(case, routes)
+
+    assert reason is None
+    assert detail is None
+    assert resolved_route is not None
+    assert resolved_route.id == "rope_scale_f32_neox_freq_n128_d96_h24_t1_contiguous_4d"
+    assert shape == {
+        "d0": 128,
+        "d1": 24,
+        "d2": 1,
+        "d3": 1,
+        "src1_d0": 1,
+        "src1_d1": 1,
+        "src2_d0": 48,
+        "src2_d1": 1,
+        "rope.ncols": 128,
+        "rope.n_dims": 96,
+        "rope.nheads": 24,
+        "rope.ntokens": 1,
+        "rope.src0_head_stride": 128,
+        "rope.src0_token_stride": 3072,
+        "rope.dst_head_stride": 128,
+        "rope.dst_token_stride": 3072,
+        "rope.pos_token_stride": 1,
+    }
+
+
+def test_v2_rope_scale_nonzero_ext_factor_stays_unmapped() -> None:
+    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
+    case = ImportedCase(
+        op="ROPE_SCALE",
+        dtype={"type": "f32"},
+        raw_case={},
+        normalized_params={
+            "af": 1.0,
+            "ef": 1.0,
+            "ff": 1,
+            "fs": 1.0,
+            "inplace": 0,
+            "mode": 2,
+            "n_ctx": 512,
+            "n_dims": 96,
+            "ne_a": [128, 24, 1, 1],
+            "v": 0,
+        },
+        source_path="tests/kernels/data/additional_test.yaml",
+        source_group_index=0,
+        source_case_index=0,
+    )
+
+    routes = list(routes_for_op(catalog, "ROPE_SCALE"))
+
+    resolved_route, shape, reason, detail = resolve_route_for_case(case, routes)
+
+    assert resolved_route is None
+    assert shape is None
+    assert reason is not None
+    assert reason.value == "shape_lowering_not_implemented"
+    assert detail == "ROPE_SCALE v2 routing currently requires ef=0.0"
+
+
 def test_v2_rope_set_rows_route_resolves_for_f16_mode0_case() -> None:
     catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
     case = ImportedCase(

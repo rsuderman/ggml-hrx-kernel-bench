@@ -2089,9 +2089,14 @@ def _rope_arrays(np: Any, candidate: Candidate, seed: int) -> dict[str, Any]:
             writeable=True,
         )
         pairs = np.arange(half_cols, dtype=np.int32)
+        active = pairs < half_dims
         if neox:
-            idx0 = pairs
-            idx1 = pairs + half_cols
+            idx0 = pairs.copy()
+            idx1 = pairs + half_dims
+            if np.any(~active):
+                tail_pairs = pairs[~active] - half_dims
+                idx0[~active] = n_dims + tail_pairs * 2
+                idx1[~active] = idx0[~active] + 1
         else:
             idx0 = pairs * 2
             idx1 = idx0 + 1
@@ -2100,7 +2105,6 @@ def _rope_arrays(np: Any, candidate: Candidate, seed: int) -> dict[str, Any]:
         x1 = src_view[:, :, idx1]
         out0 = x0.copy()
         out1 = x1.copy()
-        active = pairs < half_dims
         if np.any(active):
             active_pairs = pairs[active]
             pos = positions[np.arange(ntokens, dtype=np.int64) * pos_token_stride].astype(np.float32)
@@ -2122,6 +2126,9 @@ def _rope_arrays(np: Any, candidate: Candidate, seed: int) -> dict[str, Any]:
                 rot1 = (rot1 * output_scale).astype(np.float32)
             out0[:, :, active] = rot0
             out1[:, :, active] = rot1
+        if scale_output and np.any(~active):
+            out0[:, :, ~active] = (out0[:, :, ~active] * output_scale).astype(np.float32)
+            out1[:, :, ~active] = (out1[:, :, ~active] * output_scale).astype(np.float32)
         dst_view[:, :, idx0] = out0.astype(np.float32)
         dst_view[:, :, idx1] = out1.astype(np.float32)
     arrays: dict[str, Any] = {

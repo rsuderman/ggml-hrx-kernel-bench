@@ -1,0 +1,230 @@
+{
+  "id": "rope_scale_f32_neox_freq_n128_d96_h24_t1_contiguous_4d",
+  "family": "rope_scale_f32",
+  "kernel": {
+    "source_id": "rope_neox_f32_freq_scale",
+    "path": "rope/neox_f32_freq_scale.loom",
+    "root_symbol": "@rope_neox_f32_freq_scale",
+    "export_name": "rope_neox_f32_freq_scale"
+  },
+  "tensors": {
+    "src0": {
+      "dtype": "F32",
+      "dimensions": "src0_dimensions",
+      "strides": "src0_strides"
+    },
+    "src1": {
+      "dtype": "I32",
+      "dimensions": "src1_dimensions",
+      "strides": "src1_strides"
+    },
+    "src2": {
+      "dtype": "F32",
+      "dimensions": "src2_dimensions",
+      "strides": "src2_strides"
+    },
+    "dst": {
+      "dtype": "F32",
+      "dimensions": "dst_dimensions",
+      "strides": "dst_strides"
+    }
+  },
+  "values": [
+    {
+      "name": "src0_contiguous_strides",
+      "contiguous_strides": "src0_dimensions"
+    },
+    {
+      "name": "src1_contiguous_strides",
+      "contiguous_strides": "src1_dimensions"
+    },
+    {
+      "name": "src2_contiguous_strides",
+      "contiguous_strides": "src2_dimensions"
+    },
+    {
+      "name": "dst_contiguous_strides",
+      "contiguous_strides": "dst_dimensions"
+    },
+    {
+      "name": "total_size",
+      "product": "dst_dimensions"
+    }
+  ],
+  "constraints": [
+    {
+      "name": "total_size",
+      "min": 1,
+      "max": 1073741824
+    },
+    {
+      "name": "src0_dimensions",
+      "length": 4
+    },
+    {
+      "name": "src1_dimensions",
+      "length": 4
+    },
+    {
+      "name": "src2_dimensions",
+      "length": 4
+    },
+    {
+      "name": "dst_dimensions",
+      "length": 4
+    },
+    {
+      "name": "dst_dimensions",
+      "index": 0,
+      "min": 128,
+      "max": 128
+    },
+    {
+      "name": "dst_dimensions",
+      "index": 1,
+      "min": 24,
+      "max": 24
+    },
+    {
+      "name": "dst_dimensions",
+      "index": 2,
+      "min": 1,
+      "max": 1
+    },
+    {
+      "name": "dst_dimensions",
+      "index": 3,
+      "min": 1,
+      "max": 1
+    },
+    {
+      "name": "src1_dimensions",
+      "index": 0,
+      "min": 1,
+      "max": 1
+    },
+    {
+      "name": "src1_dimensions",
+      "index": 1,
+      "min": 1,
+      "max": 1
+    },
+    {
+      "name": "src1_dimensions",
+      "index": 2,
+      "min": 1,
+      "max": 1
+    },
+    {
+      "name": "src1_dimensions",
+      "index": 3,
+      "min": 1,
+      "max": 1
+    },
+    {
+      "name": "src2_dimensions",
+      "index": 0,
+      "min": 48,
+      "max": 48
+    },
+    {
+      "name": "src2_dimensions",
+      "index": 1,
+      "min": 1,
+      "max": 1
+    },
+    {
+      "name": "src2_dimensions",
+      "index": 2,
+      "min": 1,
+      "max": 1
+    },
+    {
+      "name": "src2_dimensions",
+      "index": 3,
+      "min": 1,
+      "max": 1
+    },
+    {
+      "equals": [
+        "src0_dimensions",
+        "dst_dimensions"
+      ]
+    },
+    {
+      "equals": [
+        "src0_contiguous_strides",
+        "src0_strides"
+      ]
+    },
+    {
+      "equals": [
+        "src1_contiguous_strides",
+        "src1_strides"
+      ]
+    },
+    {
+      "equals": [
+        "src2_contiguous_strides",
+        "src2_strides"
+      ]
+    },
+    {
+      "equals": [
+        "dst_contiguous_strides",
+        "dst_strides"
+      ]
+    }
+  ],
+  "launch": {
+    "workgroup_size": [
+      256,
+      1,
+      1
+    ]
+  },
+  "config": {
+    "bindings": [
+      {
+        "key": "@hrx2.shape.rope.ncols",
+        "source": "shape.rope.ncols"
+      },
+      {
+        "key": "@hrx2.shape.rope.n_dims",
+        "source": "shape.rope.n_dims"
+      },
+      {
+        "key": "@hrx2.shape.rope.nheads",
+        "source": "shape.rope.nheads"
+      },
+      {
+        "key": "@hrx2.shape.rope.ntokens",
+        "source": "shape.rope.ntokens"
+      },
+      {
+        "key": "@hrx2.shape.rope.src0_head_stride",
+        "source": "shape.rope.src0_head_stride"
+      },
+      {
+        "key": "@hrx2.shape.rope.src0_token_stride",
+        "source": "shape.rope.src0_token_stride"
+      },
+      {
+        "key": "@hrx2.shape.rope.dst_head_stride",
+        "source": "shape.rope.dst_head_stride"
+      },
+      {
+        "key": "@hrx2.shape.rope.dst_token_stride",
+        "source": "shape.rope.dst_token_stride"
+      },
+      {
+        "key": "@hrx2.shape.rope.pos_token_stride",
+        "source": "shape.rope.pos_token_stride"
+      },
+      {
+        "key": "@hrx2.tuning.rope.workgroup_size",
+        "value": "256"
+      }
+    ]
+  }
+}

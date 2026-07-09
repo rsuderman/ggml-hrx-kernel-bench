@@ -932,7 +932,11 @@ def _rope_route_mode_and_freq(route: V2Route) -> tuple[int, int]:
         return 2, 0
     if route.root_symbol == "@hrx2_rope_normal_f32_freq":
         return 0, 1
-    if route.root_symbol in {"@hrx2_rope_neox_f32_freq", "@hrx2_rope_neox_f32_freq_scale"}:
+    if route.root_symbol in {
+        "@hrx2_rope_neox_f32_freq",
+        "@hrx2_rope_neox_f32_freq_scale",
+        "@rope_neox_f32_freq_scale",
+    }:
         return 2, 1
     raise ValueError(f"ROPE v2 routing is not implemented for {route.root_symbol}")
 
@@ -979,6 +983,8 @@ def lower_rope_tensors(
     # extension, and attention scaling through its launch ABI, so grouped-YAML
     # scale variants stay on the same route as long as mode/layout match.
     extents = [int(value) for value in ne]
+    if route.family == "rope_scale_f32" and float(ext_factor) != 0.0:
+        raise ValueError("ROPE_SCALE v2 routing currently requires ef=0.0")
     if route.root_symbol == "@hrx2_rope_neox_f32" and int(n_dims) != extents[0]:
         raise ValueError("ROPE NEOX v2 routing currently requires n_dims == ne_a[0]")
     ncols = extents[0]
@@ -999,6 +1005,11 @@ def lower_rope_tensors(
             dimensions=_dimensions_from_extents(extents),
         ),
     }
+    if "freq" in route.root_symbol:
+        tensors["src2"] = ConcreteTensor(
+            dtype="F32",
+            dimensions=_dimensions_from_extents([max(int(n_dims) // 2, 1), 1, 1, 1]),
+        )
     return tensors, {
         **_shape_from_extents(extents),
         "rope.ncols": ncols,
@@ -1523,7 +1534,7 @@ def lower_tensors_for_route(
         return lower_quantize_q8_1_tensors(case)
     if route.family == "rms_norm_mul_quantize_q8_1_f32":
         return lower_rms_norm_mul_quantize_tensors(case)
-    if route.op == "ROPE":
+    if route.op in {"ROPE", "ROPE_SCALE"}:
         return lower_rope_tensors(case, route)
     if route.op == "RMS_NORM":
         return lower_rms_norm_tensors(case)

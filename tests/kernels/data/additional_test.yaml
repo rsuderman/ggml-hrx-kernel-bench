@@ -13,6 +13,21 @@ ops:
       cases:
         - ne: [256, 1, 1, 1]
 
+  ROPE_SCALE:
+    - dtype:
+        type: f32
+      cases:
+        - af: 1.0
+          ef: 0.0
+          ff: 1
+          fs: 1.0
+          inplace: 0
+          mode: 2
+          n_ctx: 512
+          n_dims: 96
+          ne_a: [128, 24, 1, 1]
+          v: 0
+
   FLASH_ATTN_EXT:
     - dtype:
         type_KV: f16
