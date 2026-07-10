@@ -1,13 +1,13 @@
 {
   "schema": "ggml_hrx_kernel_bench.import_test_coverage.v1",
   "operation_count": 10,
-  "total_pass_case_count": 4,
-  "total_fail_case_count": 28,
+  "total_pass_case_count": 24,
+  "total_fail_case_count": 8,
   "operations": [
     {
       "op": "ADD",
-      "pass_case_count": 0,
-      "fail_case_count": 2
+      "pass_case_count": 2,
+      "fail_case_count": 0
     },
     {
       "op": "CPY",
@@ -21,18 +21,18 @@
     },
     {
       "op": "GET_ROWS",
-      "pass_case_count": 0,
-      "fail_case_count": 4
+      "pass_case_count": 4,
+      "fail_case_count": 0
     },
     {
       "op": "MUL",
-      "pass_case_count": 0,
-      "fail_case_count": 2
+      "pass_case_count": 2,
+      "fail_case_count": 0
     },
     {
       "op": "MUL_MAT",
-      "pass_case_count": 0,
-      "fail_case_count": 10
+      "pass_case_count": 10,
+      "fail_case_count": 0
     },
     {
       "op": "RMS_NORM",
@@ -51,8 +51,8 @@
     },
     {
       "op": "SWIGLU",
-      "pass_case_count": 0,
-      "fail_case_count": 2
+      "pass_case_count": 2,
+      "fail_case_count": 0
     }
   ]
 }

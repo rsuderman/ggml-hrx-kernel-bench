@@ -7,8 +7,6 @@ from typing import Any
 from .models import (
     BindingDefinition,
     ConstraintCheck,
-    LOWERING_KIND_COPY_CONTIGUOUS,
-    LOWERING_KIND_COPY_NON_CONTIGUOUS_4D,
     RouteConstraints,
     TensorDescriptor,
     V2Route,
@@ -338,30 +336,6 @@ def _parse_non_empty_string(path: Path, context: str, raw: Any) -> str:
     return raw.strip()
 
 
-def _parse_lowering_kind(path: Path, route_index: Any, raw: Any) -> str | None:
-    if raw is None:
-        return None
-    lowering = _parse_non_empty_string(path, f"v2 route {route_index} lowering", raw)
-    if lowering not in {LOWERING_KIND_COPY_CONTIGUOUS, LOWERING_KIND_COPY_NON_CONTIGUOUS_4D}:
-        raise RuntimeError(f"v2 route {route_index} lowering {lowering!r} is not supported: {path}")
-    return lowering
-
-
-def _infer_copy_lowering_kind(
-    *,
-    op: str,
-    route_id: str,
-    kernel_path: str,
-) -> str | None:
-    if op != "CPY":
-        return None
-    if route_id.endswith("_contiguous_1d") or kernel_path.endswith("_contiguous_1d.loom"):
-        return LOWERING_KIND_COPY_CONTIGUOUS
-    if route_id.endswith("_non_contiguous_4d") or kernel_path.endswith("_non_contiguous_4d.loom"):
-        return LOWERING_KIND_COPY_NON_CONTIGUOUS_4D
-    return None
-
-
 def _parse_bindings(path: Path, route_index: Any, raw: Any) -> tuple[BindingDefinition, ...]:
     if raw is None:
         return ()
@@ -445,6 +419,19 @@ def _parse_route_entry(path: Path, route_index: Any, op: str, raw: Any) -> V2Rou
         raise RuntimeError(f"v2 route {route_index} launch must be a JSON object: {path}")
     if not isinstance(config, dict):
         raise RuntimeError(f"v2 route {route_index} config must be a JSON object: {path}")
+    extra_keys = set(raw) - {
+        "bindings",
+        "config",
+        "constraints",
+        "family",
+        "id",
+        "kernel",
+        "launch",
+        "tensors",
+        "values",
+    }
+    if extra_keys:
+        raise RuntimeError(f"v2 route {route_index} has unsupported keys {sorted(extra_keys)!r}: {path}")
     return V2Route(
         id=route_id,
         family=family,
@@ -458,14 +445,6 @@ def _parse_route_entry(path: Path, route_index: Any, op: str, raw: Any) -> V2Rou
         constraints=_parse_constraints(path, route_index, raw.get("constraints")),
         launch=dict(launch),
         bindings=_parse_bindings(path, route_index, config.get("bindings")),
-        lowering_kind=(
-            _parse_lowering_kind(path, route_index, raw.get("lowering"))
-            or _infer_copy_lowering_kind(
-                op=op,
-                route_id=route_id,
-                kernel_path=str(kernel["path"]),
-            )
-        ),
     )
 
 

@@ -450,15 +450,24 @@ def test_v2_resolve_copy_route_for_chained_source_and_destination_permutations(t
     }
 
 
-def test_v2_copy_catalog_infers_lowering_kinds_from_generated_descriptors(tmp_path: Path) -> None:
+def test_v2_copy_catalog_keeps_generated_descriptors_declarative(tmp_path: Path) -> None:
     routing_dir = tmp_path / "routing"
     _write_v2_copy_descriptor(routing_dir)
 
     catalog = load_route_catalog(routing_dir)
     by_id = {route.id: route for route in catalog.routes}
+    descriptors = [
+        json.loads((routing_dir / "copy" / descriptor_name).read_text(encoding="utf-8"))
+        for descriptor_name in (
+            "copy_f32_f16_contiguous_1d.json",
+            "copy_f32_f32_non_contiguous_4d.json",
+        )
+    ]
 
-    assert by_id["copy_f32_f16_contiguous_1d"].lowering_kind == "copy_contiguous"
-    assert by_id["copy_f32_f32_non_contiguous_4d"].lowering_kind == "copy_non_contiguous_4d"
+    assert by_id["copy_f32_f16_contiguous_1d"]
+    assert by_id["copy_f32_f32_non_contiguous_4d"]
+    assert all("import" not in descriptor for descriptor in descriptors)
+    assert all("lowering" not in descriptor for descriptor in descriptors)
 
 
 def test_v2_resolve_cont_route_for_contiguous_f32_case() -> None:
@@ -585,7 +594,7 @@ def test_v2_resolve_ne_a_unary_route_for_contiguous_case(op: str, dtype: str, ro
     assert detail is None
     assert route is not None
     assert route.id == route_id
-    assert shape == {"d0": 4, "d1": 3, "d2": 2, "d3": 5, "pointwise.d1": 30}
+    assert shape == {"d0": 4, "d1": 3, "d2": 2, "d3": 5}
 
 
 def test_v2_relu_view_case_remains_unmapped_without_non_contiguous_unary_route() -> None:
@@ -609,7 +618,7 @@ def test_v2_relu_view_case_remains_unmapped_without_non_contiguous_unary_route()
     assert shape is None
     assert reason is not None
     assert reason.value == "shape_lowering_not_implemented"
-    assert detail == "contiguous unary routing requires contiguous input (v=0)"
+    assert detail == "YAML import tensor query did not satisfy any v2 route"
 
 
 @pytest.mark.parametrize(
@@ -636,7 +645,7 @@ def test_v2_resolve_abs_contiguous_case(dtype: str, route_id: str) -> None:
     assert reason is None
     assert route is not None
     assert route.id == route_id
-    assert shape == {"d0": 5, "d1": 7, "d2": 11, "d3": 13, "pointwise.d1": 1001}
+    assert shape == {"d0": 5, "d1": 7, "d2": 11, "d3": 13}
 
 
 @pytest.mark.parametrize(
@@ -671,7 +680,6 @@ def test_v2_resolve_abs_view_case_encodes_strided_src0(dtype: str, route_id: str
     assert shape["src0_d1_stride"] == 15
     assert shape["src0_d2_stride"] == 210
     assert shape["src0_d3_stride"] == 11550
-    assert shape["pointwise.d1"] == 1001
 
 
 def test_v2_abs_view_shape_round_trips_through_materialize() -> None:
@@ -1286,6 +1294,83 @@ def test_v2_mul_route_resolves_rms_norm_mul_f32_fused_case() -> None:
     }
 
 
+def test_v2_model_style_add_resolves_to_generic_2d_route() -> None:
+    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
+    case = ImportedCase(
+        op="ADD",
+        dtype={
+            "type": "f32",
+            "type_dst": "f32",
+            "type_src": "f32",
+            "type_src0": "f32",
+            "type_src1": "f32",
+        },
+        raw_case={},
+        normalized_params={
+            "ne": [4096, 512, 1, 1],
+            "sources": "f32[4096,512,1,1],f32[4096,512,1,1]",
+        },
+        source_path="tests/models/data/Llama-3.3-8B-Instruct.Q8_0.yaml",
+        source_group_index=0,
+        source_case_index=1,
+    )
+
+    routes = list(routes_for_op(catalog, "ADD"))
+
+    resolved_route, shape, reason, detail = resolve_route_for_case(case, routes)
+
+    assert reason is None
+    assert detail is None
+    assert resolved_route is not None
+    assert resolved_route.id == "add_f32_generic_2d"
+    assert shape == {
+        "d0": 4096,
+        "d1": 512,
+        "src0_d1_stride": 4096,
+        "src1_d0": 4096,
+        "src1_d1_stride": 4096,
+    }
+
+
+def test_v2_model_style_mul_broadcast_resolves_to_generic_2d_route() -> None:
+    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
+    case = ImportedCase(
+        op="MUL",
+        dtype={
+            "type": "f32",
+            "type_dst": "f32",
+            "type_src": "f32",
+            "type_src0": "f32",
+            "type_src1": "f32",
+        },
+        raw_case={},
+        normalized_params={
+            "ne": [4096, 512, 1, 1],
+            "sources": "f32[4096,512,1,1],f32[4096,1,1,1]",
+        },
+        source_path="tests/models/data/Llama-3.3-8B-Instruct.Q8_0.yaml",
+        source_group_index=0,
+        source_case_index=1,
+    )
+
+    routes = list(routes_for_op(catalog, "MUL"))
+
+    resolved_route, shape, reason, detail = resolve_route_for_case(case, routes)
+
+    assert reason is None
+    assert detail is None
+    assert resolved_route is not None
+    assert resolved_route.id == "mul_f32_generic_2d"
+    assert shape == {
+        "d0": 4096,
+        "d1": 512,
+        "src1_d1": 1,
+        "src1_d1_stride": 0,
+        "src0_d1_stride": 4096,
+        "src1_d0": 4096,
+    }
+
+
 def test_v2_add_rms_norm_route_resolves_fused_mul_case() -> None:
     catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
     case = ImportedCase(
@@ -1666,7 +1751,7 @@ def test_v2_oversized_contiguous_pointwise_case_becomes_unmapped() -> None:
     assert shape is None
     assert reason is not None
     assert reason.value == "no_route_match"
-    assert detail == "lowered tensor descriptors did not satisfy any v2 route"
+    assert detail == "YAML import tensor query did not satisfy any v2 route"
 
 
 def test_v2_sum_rows_route_resolves_for_contiguous_case() -> None:
@@ -1814,6 +1899,73 @@ def test_v2_swiglu_route_resolves_for_packed_contiguous_case() -> None:
     assert shape == {"d0": 128, "d1": 2, "d2": 2, "d3": 2, "src0_d0": 256}
 
 
+@pytest.mark.parametrize("rows", [1, 512])
+def test_v2_model_style_swiglu_split_sources_pack_into_existing_route(rows: int) -> None:
+    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
+    case = ImportedCase(
+        op="SWIGLU",
+        dtype={
+            "type": "f32",
+            "type_dst": "f32",
+            "type_src": "f32",
+            "type_src0": "f32",
+            "type_src1": "f32",
+        },
+        raw_case={},
+        normalized_params={
+            "ne": [14336, rows, 1, 1],
+            "op_params": ["0:2"],
+            "sources": f"f32[14336,{rows},1,1],f32[14336,{rows},1,1]",
+        },
+        source_path="tests/models/data/Llama-3.3-8B-Instruct.Q8_0.yaml",
+        source_group_index=0,
+        source_case_index=0,
+    )
+
+    swiglu_routes = list(routes_for_op(catalog, "SWIGLU"))
+
+    resolved_route, shape, reason, detail = resolve_route_for_case(case, swiglu_routes)
+
+    assert reason is None
+    assert detail is None
+    assert resolved_route is not None
+    assert resolved_route.id == "swiglu_f32_packed_contiguous_4d"
+    assert shape == {"d0": 14336, "d1": rows, "d2": 1, "d3": 1, "src0_d0": 28672}
+
+
+def test_v2_model_style_swiglu_unknown_op_params_stays_unmapped() -> None:
+    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
+    case = ImportedCase(
+        op="SWIGLU",
+        dtype={
+            "type": "f32",
+            "type_dst": "f32",
+            "type_src": "f32",
+            "type_src0": "f32",
+            "type_src1": "f32",
+        },
+        raw_case={},
+        normalized_params={
+            "ne": [14336, 1, 1, 1],
+            "op_params": ["1:2"],
+            "sources": "f32[14336,1,1,1],f32[14336,1,1,1]",
+        },
+        source_path="tests/models/data/Llama-3.3-8B-Instruct.Q8_0.yaml",
+        source_group_index=0,
+        source_case_index=0,
+    )
+
+    swiglu_routes = list(routes_for_op(catalog, "SWIGLU"))
+
+    resolved_route, shape, reason, detail = resolve_route_for_case(case, swiglu_routes)
+
+    assert resolved_route is None
+    assert shape is None
+    assert reason is not None
+    assert reason.value == "shape_lowering_not_implemented"
+    assert detail == "SWIGLU YAML import currently requires op_params=['0:2']"
+
+
 def test_v2_swiglu_split_case_stays_unmapped_without_split_route() -> None:
     catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
     case = ImportedCase(
@@ -1943,6 +2095,81 @@ def test_v2_get_rows_route_resolves_for_q8_0_case() -> None:
         "src0_d1": 5,
         "src1_d0": 1,
         "get_rows.src0_nrows": 5,
+        "get_rows.idx_row_stride": 1,
+    }
+
+
+def test_v2_model_style_get_rows_f32_uses_source_table_row_count() -> None:
+    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
+    case = ImportedCase(
+        op="GET_ROWS",
+        dtype={
+            "type": "f32",
+            "type_dst": "f32",
+            "type_idx": "i32",
+            "type_src": "f32",
+            "type_src0": "f32",
+            "type_src1": "i32",
+        },
+        raw_case={},
+        normalized_params={
+            "ne": [4096, 512, 1, 1],
+            "sources": "f32[4096,512,1,1],i32[512,1,1,1]",
+        },
+        source_path="tests/models/data/Llama-3.3-8B-Instruct.Q8_0.yaml",
+        source_group_index=0,
+        source_case_index=1,
+    )
+
+    resolved_route, shape, reason, detail = resolve_route_for_case(case, list(routes_for_op(catalog, "GET_ROWS")))
+
+    assert reason is None
+    assert detail is None
+    assert resolved_route is not None
+    assert resolved_route.id == "get_rows_f32_embedding_rows_2d"
+    assert shape == {
+        "d0": 4096,
+        "d1": 512,
+        "src1_d0": 1,
+        "get_rows.src0_nrows": 512,
+        "get_rows.idx_row_stride": 1,
+    }
+
+
+def test_v2_model_style_get_rows_q8_0_preserves_embedding_table_rows() -> None:
+    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
+    case = ImportedCase(
+        op="GET_ROWS",
+        dtype={
+            "type": "q8_0",
+            "type_dst": "f32",
+            "type_idx": "i32",
+            "type_src": "q8_0",
+            "type_src0": "q8_0",
+            "type_src1": "i32",
+        },
+        raw_case={},
+        normalized_params={
+            "ne": [4096, 512, 1, 1],
+            "sources": "q8_0[4096,128256,1,1],i32[512,1,1,1]",
+        },
+        source_path="tests/models/data/Llama-3.3-8B-Instruct.Q8_0.yaml",
+        source_group_index=1,
+        source_case_index=1,
+    )
+
+    resolved_route, shape, reason, detail = resolve_route_for_case(case, list(routes_for_op(catalog, "GET_ROWS")))
+
+    assert reason is None
+    assert detail is None
+    assert resolved_route is not None
+    assert resolved_route.id == "get_rows_q8_0_f32_embedding_rows_2d"
+    assert shape == {
+        "d0": 4096,
+        "d1": 512,
+        "src0_d1": 128256,
+        "src1_d0": 1,
+        "get_rows.src0_nrows": 128256,
         "get_rows.idx_row_stride": 1,
     }
 
@@ -2234,7 +2461,7 @@ def test_v2_argsort_non_route_shape_case_stays_unmapped() -> None:
     assert shape is None
     assert reason is not None
     assert reason.value == "no_route_match"
-    assert detail == "lowered tensor descriptors did not satisfy any v2 route"
+    assert detail == "YAML import tensor query did not satisfy any v2 route"
 
 
 def test_v2_mul_mat_route_resolves_for_small_contiguous_f32_case() -> None:
@@ -2475,6 +2702,80 @@ def test_v2_mul_mat_route_resolves_for_q8_0_case() -> None:
         "rows": 1,
         "cols": 64,
     }
+
+
+@pytest.mark.parametrize(
+    ("name", "ne", "sources", "expected_shape"),
+    (
+        (
+            "Qcur-0",
+            [4096, 1, 1, 1],
+            "q8_0[4096,4096,1,1],f32[4096,1,1,1]",
+            {
+                "d0": 4096,
+                "d1": 1,
+                "src0_d0": 4096,
+                "src0_d1": 4096,
+                "src1_d0": 4096,
+                "k": 4096,
+                "rows": 4096,
+                "cols": 1,
+            },
+        ),
+        (
+            "ffn_gate-0",
+            [14336, 512, 1, 1],
+            "q8_0[4096,14336,1,1],f32[4096,512,1,1]",
+            {
+                "d0": 14336,
+                "d1": 512,
+                "src0_d0": 4096,
+                "src0_d1": 14336,
+                "src1_d0": 4096,
+                "k": 4096,
+                "rows": 14336,
+                "cols": 512,
+            },
+        ),
+    ),
+)
+def test_v2_model_style_mul_mat_q8_0_resolves_to_contiguous_2d_route(
+    name: str,
+    ne: list[int],
+    sources: str,
+    expected_shape: dict[str, int],
+) -> None:
+    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
+    case = ImportedCase(
+        op="MUL_MAT",
+        dtype={
+            "type": "f32",
+            "type_a": "q8_0",
+            "type_b": "f32",
+            "type_dst": "f32",
+            "type_src": "q8_0",
+            "type_src0": "q8_0",
+            "type_src1": "f32",
+        },
+        raw_case={},
+        normalized_params={
+            "name": name,
+            "ne": ne,
+            "op_params": [],
+            "sources": sources,
+        },
+        source_path="tests/models/data/Llama-3.3-8B-Instruct.Q8_0.yaml",
+        source_group_index=0,
+        source_case_index=0,
+    )
+
+    resolved_route, shape, reason, detail = resolve_route_for_case(case, list(routes_for_op(catalog, "MUL_MAT")))
+
+    assert reason is None
+    assert detail is None
+    assert resolved_route is not None
+    assert resolved_route.id == "mul_mat_q8_0_f32_contiguous_2d"
+    assert shape == expected_shape
 
 
 def test_v2_mul_mat_route_resolves_for_q4_k_direct_case() -> None:

@@ -14,15 +14,15 @@
       "cont/cont_f32_contiguous_4d.json"
     ],
     "ADD": [
+      "add/add_f16_generic_2d.json",
+      "add/add_f32_generic_2d.json",
       "add/add_f16_contiguous_2d.json",
       "add/add_f16_rhs_row_broadcast_2d.json",
       "add/add_f16_contiguous_1d.json",
-      "add/add_f16_generic_2d.json",
       "add/add_f16_generic_4d.json",
       "add/add_f32_contiguous_2d.json",
       "add/add_f32_rhs_row_broadcast_2d.json",
       "add/add_f32_contiguous_1d.json",
-      "add/add_f32_generic_2d.json",
       "add/add_f32_generic_4d.json"
     ],
     "ADD_RMS_NORM": [
@@ -32,15 +32,15 @@
       "argsort/argsort_f32_i32_n128_r1_desc_wg128.json"
     ],
     "DIV": [
+      "div/div_f16_generic_2d.json",
+      "div/div_f32_generic_2d.json",
       "div/div_f16_contiguous_2d.json",
       "div/div_f16_rhs_row_broadcast_2d.json",
       "div/div_f16_contiguous_1d.json",
-      "div/div_f16_generic_2d.json",
       "div/div_f16_generic_4d.json",
       "div/div_f32_contiguous_2d.json",
       "div/div_f32_rhs_row_broadcast_2d.json",
       "div/div_f32_contiguous_1d.json",
-      "div/div_f32_generic_2d.json",
       "div/div_f32_generic_4d.json"
     ],
     "EXP": [
@@ -78,15 +78,15 @@
       "mul_mat_id/mul_mat_id_q6_k_f32_expert_planes_3d.json"
     ],
     "MUL": [
+      "mul/mul_f16_generic_2d.json",
+      "mul/mul_f32_generic_2d.json",
       "mul/mul_f16_contiguous_2d.json",
       "mul/mul_f16_rhs_row_broadcast_2d.json",
       "mul/mul_f16_contiguous_1d.json",
-      "mul/mul_f16_generic_2d.json",
       "mul/mul_f16_generic_4d.json",
       "mul/mul_f32_contiguous_2d.json",
       "mul/mul_f32_rhs_row_broadcast_2d.json",
       "mul/mul_f32_contiguous_1d.json",
-      "mul/mul_f32_generic_2d.json",
       "mul/mul_f32_generic_4d.json",
       "mul/rms_norm_mul_f32_n16_r60_vector_tail.json"
     ],
@@ -138,15 +138,15 @@
       "sqrt/sqrt_f32.json"
     ],
     "SUB": [
+      "sub/sub_f16_generic_2d.json",
+      "sub/sub_f32_generic_2d.json",
       "sub/sub_f16_contiguous_2d.json",
       "sub/sub_f16_rhs_row_broadcast_2d.json",
       "sub/sub_f16_contiguous_1d.json",
-      "sub/sub_f16_generic_2d.json",
       "sub/sub_f16_generic_4d.json",
       "sub/sub_f32_contiguous_2d.json",
       "sub/sub_f32_rhs_row_broadcast_2d.json",
       "sub/sub_f32_contiguous_1d.json",
-      "sub/sub_f32_generic_2d.json",
       "sub/sub_f32_generic_4d.json"
     ],
     "SWIGLU": [

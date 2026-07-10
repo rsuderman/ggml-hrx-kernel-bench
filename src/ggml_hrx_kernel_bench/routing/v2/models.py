@@ -16,14 +16,6 @@ VALUE_OPERATION_SPEC: dict[str, tuple[int, int]] = {
     "permuted_contiguous_strides": (2, 0),
 }
 
-LOWERING_KIND_COPY_CONTIGUOUS = "copy_contiguous"
-LOWERING_KIND_COPY_NON_CONTIGUOUS_4D = "copy_non_contiguous_4d"
-SUPPORTED_LOWERING_KINDS = {
-    LOWERING_KIND_COPY_CONTIGUOUS,
-    LOWERING_KIND_COPY_NON_CONTIGUOUS_4D,
-}
-
-
 def _freeze_value(value: Any) -> Any:
     if isinstance(value, dict):
         return MappingProxyType({str(key): _freeze_value(inner) for key, inner in value.items()})
@@ -127,13 +119,10 @@ class V2Route:
     constraints: RouteConstraints
     launch: Mapping[str, Any]
     bindings: tuple[BindingDefinition, ...]
-    lowering_kind: str | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "tensors", _freeze_mapping(self.tensors))
         object.__setattr__(self, "launch", _freeze_mapping(self.launch))
-        if self.lowering_kind is not None and self.lowering_kind not in SUPPORTED_LOWERING_KINDS:
-            raise ValueError(f"unsupported lowering kind: {self.lowering_kind!r}")
 
 
 def stable_id(*parts: Any, length: int = 10) -> str:

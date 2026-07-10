@@ -53,6 +53,12 @@
       "length": 2
     },
     {
+      "divides": [
+        "src1_dimensions",
+        "dst_dimensions"
+      ]
+    },
+    {
       "name": "src1_strides",
       "index": 0,
       "min": 1,

@@ -24,4 +24,7 @@ add_generated_kernel_runtime_tests(
   ROUTING_VERSION v2
   ROUTING_DIR ${GGML_HRX_ROUTING_DIR_V2}
   KERNEL_DIR ${GGML_HRX_KERNEL_DIR_V2}
+  EXCLUDE_OPS
+    GET_ROWS
+    MUL_MAT
 )

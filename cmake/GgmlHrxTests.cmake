@@ -105,7 +105,8 @@ endfunction()
 function(add_generated_kernel_runtime_tests)
   set(options)
   set(one_value_args NAME GENERATED_IMPORT_DIR GROUPED_YAML RUNTIME_OUTPUT_DIR ROUTING_VERSION ROUTING_DIR KERNEL_DIR)
-  cmake_parse_arguments(GGML_HRX_GKRT "${options}" "${one_value_args}" "" ${ARGN})
+  set(multi_value_args EXCLUDE_OPS)
+  cmake_parse_arguments(GGML_HRX_GKRT "${options}" "${one_value_args}" "${multi_value_args}" ${ARGN})
 
   if(NOT GGML_HRX_GKRT_NAME)
     message(FATAL_ERROR "add_generated_kernel_runtime_tests requires NAME")
@@ -149,6 +150,9 @@ function(add_generated_kernel_runtime_tests)
   if(GGML_HRX_ROCM_PATH)
     list(APPEND generate_tests_command --rocm-path ${GGML_HRX_ROCM_PATH})
   endif()
+  foreach(excluded_op IN LISTS GGML_HRX_GKRT_EXCLUDE_OPS)
+    list(APPEND generate_tests_command --exclude-op ${excluded_op})
+  endforeach()
 
   execute_process(
     COMMAND ${generate_tests_command}

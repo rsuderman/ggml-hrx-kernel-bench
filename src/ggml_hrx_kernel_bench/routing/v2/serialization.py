@@ -124,7 +124,6 @@ def route_summary_json(route: V2Route) -> dict[str, Any]:
         "source_id": route.source_id,
         "root_symbol": route.root_symbol,
         "export_name": route.export_name,
-        "lowering": route.lowering_kind,
         "tensors": tensor_descriptors_json(route),
         "values": tensor_values_json(route),
         "constraints": tensor_constraints_json(route),
