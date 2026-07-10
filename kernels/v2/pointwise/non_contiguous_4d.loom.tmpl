@@ -1,0 +1,160 @@
+config.decl @hrx2.shape.pointwise.ne0 : %value: index where [range(%value, 1, 1073741824)]
+config.decl @hrx2.shape.pointwise.ne1 : %value: index where [range(%value, 1, 1073741824)]
+config.decl @hrx2.shape.pointwise.ne2 : %value: index where [range(%value, 1, 1073741824)]
+config.decl @hrx2.shape.pointwise.ne3 : %value: index where [range(%value, 1, 1073741824)]
+config.decl @hrx2.stride.pointwise.src0_nb0 : %value: index where [range(%value, 0, 1073741824)]
+config.decl @hrx2.stride.pointwise.src0_nb1 : %value: index where [range(%value, 0, 1073741824)]
+config.decl @hrx2.stride.pointwise.src0_nb2 : %value: index where [range(%value, 0, 1073741824)]
+config.decl @hrx2.stride.pointwise.src0_nb3 : %value: index where [range(%value, 0, 1073741824)]
+config.decl @hrx2.tuning.pointwise.workgroup_size : %value: index where [range(%value, 32, 1024), mul(%value, 32)]
+
+kernel.def export("${op}_f32_non_contiguous_4d") @${op}_f32_non_contiguous_4d() {
+  %unit = index.constant 1 : index
+  %minus_one = index.constant -1 : index
+  %ne0 = config.get @hrx2.shape.pointwise.ne0 : index
+  %ne1 = config.get @hrx2.shape.pointwise.ne1 : index
+  %ne2 = config.get @hrx2.shape.pointwise.ne2 : index
+  %ne3 = config.get @hrx2.shape.pointwise.ne3 : index
+  %workgroup_size = config.get @hrx2.tuning.pointwise.workgroup_size : index
+  %ne01 = index.mul %ne0, %ne1 : index
+  %ne012 = index.mul %ne01, %ne2 : index
+  %total = index.mul %ne012, %ne3 : index
+  %rounding = index.add %workgroup_size, %minus_one : index
+  %rounded = index.add %total, %rounding : index
+  %workgroups = index.div %rounded, %workgroup_size : index
+  kernel.launch.config workgroups(%workgroups, %unit, %unit) workgroup_size(%workgroup_size, %unit, %unit) : index
+} launch(%src0: buffer, %dst: buffer) {
+  %base = index.constant 0 : offset
+$preamble  %ne0 = config.get @hrx2.shape.pointwise.ne0 : index
+  %ne1 = config.get @hrx2.shape.pointwise.ne1 : index
+  %ne2 = config.get @hrx2.shape.pointwise.ne2 : index
+  %ne3 = config.get @hrx2.shape.pointwise.ne3 : index
+  %src0_nb0 = config.get @hrx2.stride.pointwise.src0_nb0 : index
+  %src0_nb1 = config.get @hrx2.stride.pointwise.src0_nb1 : index
+  %src0_nb2 = config.get @hrx2.stride.pointwise.src0_nb2 : index
+  %src0_nb3 = config.get @hrx2.stride.pointwise.src0_nb3 : index
+  %workgroup_size = config.get @hrx2.tuning.pointwise.workgroup_size : index
+  %ne0_bounded = index.assume %ne0 [range(%ne0, 1, 1073741824)] : index
+  %ne1_bounded = index.assume %ne1 [range(%ne1, 1, 1073741824)] : index
+  %ne2_bounded = index.assume %ne2 [range(%ne2, 1, 1073741824)] : index
+  %ne3_bounded = index.assume %ne3 [range(%ne3, 1, 1073741824)] : index
+  %workgroup0 = kernel.workgroup.id<x> : index
+  %lane0 = kernel.workitem.id<x> : index
+  %workgroup = index.assume %workgroup0 [range(%workgroup0, 0, 4194303)] : index
+  %lane = index.assume %lane0 [range(%lane0, 0, 1023)] : index
+  %linear_base0 = index.mul %workgroup, %workgroup_size : index
+  %linear_base = index.assume %linear_base0 [range(%linear_base0, 0, 1073741823)] : index
+  %linear0 = index.add %linear_base, %lane : index
+  %linear = index.assume %linear0 [range(%linear0, 0, 1073741823)] : index
+  %ne01 = index.mul %ne0_bounded, %ne1_bounded : index
+  %ne012 = index.mul %ne01, %ne2_bounded : index
+  %total0 = index.mul %ne012, %ne3_bounded : index
+  %total = index.assume %total0 [range(%total0, 1, 1073741824)] : index
+  %in_bounds = index.cmp ult, %linear, %total : index
+
+  %src0_global = buffer.assume.memory_space<global> %src0 : buffer
+  %dst_global = buffer.assume.memory_space<global> %dst : buffer
+  %src0_noalias, %dst_noalias = buffer.assume.noalias %src0_global, %dst_global : buffer, buffer
+  %src0_view = buffer.view %src0_noalias[%base] : buffer -> view<1073741824xf32, #dense>
+  %dst_view = buffer.view %dst_noalias[%base] : buffer -> view<1073741824xf32, #dense>
+
+  scf.if %in_bounds {
+    %i0 = index.rem %linear, %ne0_bounded : index
+    %q0 = index.div %linear, %ne0_bounded : index
+    %i1 = index.rem %q0, %ne1_bounded : index
+    %q1 = index.div %q0, %ne1_bounded : index
+    %i2 = index.rem %q1, %ne2_bounded : index
+    %i3 = index.div %q1, %ne2_bounded : index
+
+    %src0_o0 = index.mul %i0, %src0_nb0 : index
+    %src0_o1 = index.mul %i1, %src0_nb1 : index
+    %src0_o2 = index.mul %i2, %src0_nb2 : index
+    %src0_o3 = index.mul %i3, %src0_nb3 : index
+    %src0_o01 = index.add %src0_o0, %src0_o1 : index
+    %src0_o23 = index.add %src0_o2, %src0_o3 : index
+    %src0_idx0 = index.add %src0_o01, %src0_o23 : index
+    %src0_idx = index.assume %src0_idx0 [range(%src0_idx0, 0, 1073741823)] : index
+
+    %value = view.load %src0_view[%src0_idx] : view<1073741824xf32, #dense> -> f32
+$compute_block
+    view.store %result, %dst_view[%linear] : f32, view<1073741824xf32, #dense>
+  }
+  kernel.return
+}
+
+kernel.def export("${op}_f16_non_contiguous_4d") @${op}_f16_non_contiguous_4d() {
+  %unit = index.constant 1 : index
+  %minus_one = index.constant -1 : index
+  %ne0 = config.get @hrx2.shape.pointwise.ne0 : index
+  %ne1 = config.get @hrx2.shape.pointwise.ne1 : index
+  %ne2 = config.get @hrx2.shape.pointwise.ne2 : index
+  %ne3 = config.get @hrx2.shape.pointwise.ne3 : index
+  %workgroup_size = config.get @hrx2.tuning.pointwise.workgroup_size : index
+  %ne01 = index.mul %ne0, %ne1 : index
+  %ne012 = index.mul %ne01, %ne2 : index
+  %total = index.mul %ne012, %ne3 : index
+  %rounding = index.add %workgroup_size, %minus_one : index
+  %rounded = index.add %total, %rounding : index
+  %workgroups = index.div %rounded, %workgroup_size : index
+  kernel.launch.config workgroups(%workgroups, %unit, %unit) workgroup_size(%workgroup_size, %unit, %unit) : index
+} launch(%src0: buffer, %dst: buffer) {
+  %base = index.constant 0 : offset
+$preamble  %ne0 = config.get @hrx2.shape.pointwise.ne0 : index
+  %ne1 = config.get @hrx2.shape.pointwise.ne1 : index
+  %ne2 = config.get @hrx2.shape.pointwise.ne2 : index
+  %ne3 = config.get @hrx2.shape.pointwise.ne3 : index
+  %src0_nb0 = config.get @hrx2.stride.pointwise.src0_nb0 : index
+  %src0_nb1 = config.get @hrx2.stride.pointwise.src0_nb1 : index
+  %src0_nb2 = config.get @hrx2.stride.pointwise.src0_nb2 : index
+  %src0_nb3 = config.get @hrx2.stride.pointwise.src0_nb3 : index
+  %workgroup_size = config.get @hrx2.tuning.pointwise.workgroup_size : index
+  %ne0_bounded = index.assume %ne0 [range(%ne0, 1, 1073741824)] : index
+  %ne1_bounded = index.assume %ne1 [range(%ne1, 1, 1073741824)] : index
+  %ne2_bounded = index.assume %ne2 [range(%ne2, 1, 1073741824)] : index
+  %ne3_bounded = index.assume %ne3 [range(%ne3, 1, 1073741824)] : index
+  %workgroup0 = kernel.workgroup.id<x> : index
+  %lane0 = kernel.workitem.id<x> : index
+  %workgroup = index.assume %workgroup0 [range(%workgroup0, 0, 4194303)] : index
+  %lane = index.assume %lane0 [range(%lane0, 0, 1023)] : index
+  %linear_base0 = index.mul %workgroup, %workgroup_size : index
+  %linear_base = index.assume %linear_base0 [range(%linear_base0, 0, 1073741823)] : index
+  %linear0 = index.add %linear_base, %lane : index
+  %linear = index.assume %linear0 [range(%linear0, 0, 1073741823)] : index
+  %ne01 = index.mul %ne0_bounded, %ne1_bounded : index
+  %ne012 = index.mul %ne01, %ne2_bounded : index
+  %total0 = index.mul %ne012, %ne3_bounded : index
+  %total = index.assume %total0 [range(%total0, 1, 1073741824)] : index
+  %in_bounds = index.cmp ult, %linear, %total : index
+
+  %src0_global = buffer.assume.memory_space<global> %src0 : buffer
+  %dst_global = buffer.assume.memory_space<global> %dst : buffer
+  %src0_noalias, %dst_noalias = buffer.assume.noalias %src0_global, %dst_global : buffer, buffer
+  %src0_view = buffer.view %src0_noalias[%base] : buffer -> view<1073741824xf16, #dense>
+  %dst_view = buffer.view %dst_noalias[%base] : buffer -> view<1073741824xi16, #dense>
+
+  scf.if %in_bounds {
+    %i0 = index.rem %linear, %ne0_bounded : index
+    %q0 = index.div %linear, %ne0_bounded : index
+    %i1 = index.rem %q0, %ne1_bounded : index
+    %q1 = index.div %q0, %ne1_bounded : index
+    %i2 = index.rem %q1, %ne2_bounded : index
+    %i3 = index.div %q1, %ne2_bounded : index
+
+    %src0_o0 = index.mul %i0, %src0_nb0 : index
+    %src0_o1 = index.mul %i1, %src0_nb1 : index
+    %src0_o2 = index.mul %i2, %src0_nb2 : index
+    %src0_o3 = index.mul %i3, %src0_nb3 : index
+    %src0_o01 = index.add %src0_o0, %src0_o1 : index
+    %src0_o23 = index.add %src0_o2, %src0_o3 : index
+    %src0_idx0 = index.add %src0_o01, %src0_o23 : index
+    %src0_idx = index.assume %src0_idx0 [range(%src0_idx0, 0, 1073741823)] : index
+
+    %half_in = view.load %src0_view[%src0_idx] : view<1073741824xf16, #dense> -> f16
+    %value = scalar.extf %half_in : f16 to f32
+$compute_block
+    %half_out = scalar.fptrunc %result : f32 to f16
+    %half_bits = scalar.bitcast %half_out : f16 to i16
+    view.store %half_bits, %dst_view[%linear] : i16, view<1073741824xi16, #dense>
+  }
+  kernel.return
+}
