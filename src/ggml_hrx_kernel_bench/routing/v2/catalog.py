@@ -8,6 +8,7 @@ from .models import (
     BindingDefinition,
     ConstraintCheck,
     RouteConstraints,
+    SyntheticTensorDescriptor,
     TensorDescriptor,
     V2Route,
     ValueDefinition,
@@ -89,6 +90,97 @@ def _parse_tensors(path: Path, route_index: Any, raw: Any) -> dict[str, TensorDe
     }
 
 
+def _parse_synthetic_tensor_descriptor(
+    path: Path,
+    route_index: Any,
+    tensor_name: str,
+    raw: Any,
+) -> SyntheticTensorDescriptor:
+    if not isinstance(raw, dict):
+        raise RuntimeError(
+            f"v2 synthetic tensor descriptor must be a JSON object for route {route_index} tensor {tensor_name!r}: {path}"
+        )
+    extra_keys = set(raw) - {"dtype", "dimensions"}
+    if extra_keys:
+        raise RuntimeError(
+            f"v2 synthetic tensor descriptor has unsupported keys {sorted(extra_keys)!r} for route {route_index} tensor {tensor_name!r}: {path}"
+        )
+    dtype = _normalize_dtype(raw.get("dtype"))
+    if dtype is None:
+        raise RuntimeError(
+            f"v2 synthetic tensor descriptor requires dtype for route {route_index} tensor {tensor_name!r}: {path}"
+        )
+    dimensions = raw.get("dimensions")
+    if isinstance(dimensions, str):
+        dimensions_source: Any = _parse_capture_name(path, route_index, tensor_name, "dimensions", dimensions)
+    elif isinstance(dimensions, list) and dimensions:
+        dimensions_source = tuple(
+            _parse_synthetic_dimension_source(path, route_index, tensor_name, index, entry)
+            for index, entry in enumerate(dimensions)
+        )
+    else:
+        raise RuntimeError(
+            f"v2 synthetic tensor descriptor dimensions must be a capture name or non-empty list for route {route_index} tensor {tensor_name!r}: {path}"
+        )
+    return SyntheticTensorDescriptor(
+        dtype=dtype,
+        dimensions_source=dimensions_source,
+    )
+
+
+def _parse_synthetic_dimension_source(
+    path: Path,
+    route_index: Any,
+    tensor_name: str,
+    index: int,
+    raw: Any,
+) -> Any:
+    if isinstance(raw, int) and not isinstance(raw, bool):
+        return raw
+    if not isinstance(raw, dict):
+        raise RuntimeError(
+            f"v2 synthetic tensor dimension {index} for route {route_index} tensor {tensor_name!r} must be an integer or JSON object: {path}"
+        )
+    source = raw.get("source")
+    source_index = raw.get("index")
+    extra_keys = set(raw) - {"source", "index"}
+    if extra_keys:
+        raise RuntimeError(
+            f"v2 synthetic tensor dimension {index} has unsupported keys {sorted(extra_keys)!r} for route {route_index} tensor {tensor_name!r}: {path}"
+        )
+    if not isinstance(source, str) or not source.strip():
+        raise RuntimeError(
+            f"v2 synthetic tensor dimension {index} source must reference a capture name for route {route_index} tensor {tensor_name!r}: {path}"
+        )
+    if not isinstance(source_index, int) or isinstance(source_index, bool) or source_index < 0:
+        raise RuntimeError(
+            f"v2 synthetic tensor dimension {index} index must be a non-negative integer for route {route_index} tensor {tensor_name!r}: {path}"
+        )
+    return {"source": source.strip(), "index": int(source_index)}
+
+
+def _parse_synthetic_tensors(
+    path: Path,
+    route_index: Any,
+    raw: Any,
+    tensors: dict[str, TensorDescriptor],
+) -> dict[str, SyntheticTensorDescriptor]:
+    if raw is None:
+        return {}
+    if not isinstance(raw, dict):
+        raise RuntimeError(f"v2 route {route_index} synthetic_tensors must be a JSON object: {path}")
+    synthetic_tensors = {
+        str(name): _parse_synthetic_tensor_descriptor(path, route_index, str(name), descriptor)
+        for name, descriptor in raw.items()
+    }
+    missing = set(synthetic_tensors) - set(tensors)
+    if missing:
+        raise RuntimeError(
+            f"v2 route {route_index} synthetic_tensors must reference declared tensors, missing {sorted(missing)!r}: {path}"
+        )
+    return synthetic_tensors
+
+
 def _parse_value_definition(path: Path, route_index: Any, raw: Any) -> ValueDefinition:
     if not isinstance(raw, dict):
         raise RuntimeError(f"v2 route value definition must be a JSON object: {path}")
@@ -98,6 +190,7 @@ def _parse_value_definition(path: Path, route_index: Any, raw: Any) -> ValueDefi
     contiguous_strides = raw.get("contiguous_strides")
     product = raw.get("product")
     inverse_permutation = raw.get("inverse_permutation")
+    element = raw.get("element")
     head = raw.get("head")
     tail = raw.get("tail")
     chain_permutations = raw.get("chain_permutations")
@@ -108,6 +201,7 @@ def _parse_value_definition(path: Path, route_index: Any, raw: Any) -> ValueDefi
             contiguous_strides,
             product,
             inverse_permutation,
+            element,
             head,
             tail,
             chain_permutations,
@@ -132,6 +226,21 @@ def _parse_value_definition(path: Path, route_index: Any, raw: Any) -> ValueDefi
         raise RuntimeError(
             f"v2 route {route_index} value definition {name!r} inverse_permutation must reference a capture name: {path}"
         )
+    if element is not None:
+        if not isinstance(element, dict):
+            raise RuntimeError(
+                f"v2 route {route_index} value definition {name!r} element must be a JSON object: {path}"
+            )
+        source = element.get("source")
+        index = element.get("index")
+        if not isinstance(source, str) or not source.strip():
+            raise RuntimeError(
+                f"v2 route {route_index} value definition {name!r} element.source must reference a capture name: {path}"
+            )
+        if not isinstance(index, int) or isinstance(index, bool) or index < 0:
+            raise RuntimeError(
+                f"v2 route {route_index} value definition {name!r} element.index must be a non-negative integer: {path}"
+            )
     for operation_name, operation_value in (("head", head), ("tail", tail)):
         if operation_value is None:
             continue
@@ -191,6 +300,13 @@ def _parse_value_definition(path: Path, route_index: Any, raw: Any) -> ValueDefi
             name=name,
             operation_kind="inverse_permutation",
             sources=(inverse_permutation.strip(),),
+        )
+    if element is not None:
+        return ValueDefinition(
+            name=name,
+            operation_kind="element",
+            sources=(str(element["source"]).strip(),),
+            parameters=(int(element["index"]),),
         )
     if head is not None:
         return ValueDefinition(
@@ -330,6 +446,14 @@ def _parse_constraints(path: Path, route_index: Any, raw: Any) -> RouteConstrain
     return RouteConstraints(checks=tuple(checks))
 
 
+def _parse_attributes(path: Path, route_index: Any, raw: Any) -> dict[str, Any]:
+    if raw is None:
+        return {}
+    if not isinstance(raw, dict):
+        raise RuntimeError(f"v2 route {route_index} attributes must be a JSON object: {path}")
+    return {str(key): value for key, value in raw.items()}
+
+
 def _parse_non_empty_string(path: Path, context: str, raw: Any) -> str:
     if not isinstance(raw, str) or not raw.strip():
         raise RuntimeError(f"{context} must be a non-empty string: {path}")
@@ -420,6 +544,7 @@ def _parse_route_entry(path: Path, route_index: Any, op: str, raw: Any) -> V2Rou
     if not isinstance(config, dict):
         raise RuntimeError(f"v2 route {route_index} config must be a JSON object: {path}")
     extra_keys = set(raw) - {
+        "attributes",
         "bindings",
         "config",
         "constraints",
@@ -427,11 +552,13 @@ def _parse_route_entry(path: Path, route_index: Any, op: str, raw: Any) -> V2Rou
         "id",
         "kernel",
         "launch",
+        "synthetic_tensors",
         "tensors",
         "values",
     }
     if extra_keys:
         raise RuntimeError(f"v2 route {route_index} has unsupported keys {sorted(extra_keys)!r}: {path}")
+    tensors = _parse_tensors(path, route_index, raw.get("tensors"))
     return V2Route(
         id=route_id,
         family=family,
@@ -440,9 +567,11 @@ def _parse_route_entry(path: Path, route_index: Any, op: str, raw: Any) -> V2Rou
         kernel_path=str(kernel["path"]),
         root_symbol=str(kernel["root_symbol"]),
         export_name=None if kernel.get("export_name") is None else str(kernel["export_name"]),
-        tensors=_parse_tensors(path, route_index, raw.get("tensors")),
+        tensors=tensors,
+        synthetic_tensors=_parse_synthetic_tensors(path, route_index, raw.get("synthetic_tensors"), tensors),
         values=_parse_values(path, route_index, raw.get("values")),
         constraints=_parse_constraints(path, route_index, raw.get("constraints")),
+        attributes=_parse_attributes(path, route_index, raw.get("attributes")),
         launch=dict(launch),
         bindings=_parse_bindings(path, route_index, config.get("bindings")),
     )

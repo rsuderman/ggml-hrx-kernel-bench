@@ -1,0 +1,124 @@
+{
+  "id": "soft_max_f32_contiguous_4d",
+  "family": "soft_max_f32",
+  "kernel": {
+    "source_id": "soft_max_f32",
+    "path": "soft_max/contiguous_f32.loom",
+    "root_symbol": "@hrx2_soft_max_f32",
+    "export_name": "hrx2_soft_max_f32"
+  },
+  "attributes": {
+    "mask": 0,
+    "sinks": 0,
+    "max_bias": 0.0,
+    "nr23": [
+      1,
+      1
+    ]
+  },
+  "tensors": {
+    "src0": {
+      "dtype": "F32",
+      "dimensions": "src0_dimensions",
+      "strides": "src0_strides"
+    },
+    "dst": {
+      "dtype": "F32",
+      "dimensions": "dst_dimensions",
+      "strides": "dst_strides"
+    }
+  },
+  "values": [
+    {
+      "name": "contiguous_strides",
+      "contiguous_strides": "dst_dimensions"
+    },
+    {
+      "name": "total_size",
+      "product": "dst_dimensions"
+    },
+    {
+      "name": "ncols_dims",
+      "head": {
+        "source": "dst_dimensions",
+        "take": 1
+      }
+    },
+    {
+      "name": "nrows_dims",
+      "tail": {
+        "source": "dst_dimensions",
+        "drop": 1
+      }
+    },
+    {
+      "name": "ncols",
+      "product": "ncols_dims"
+    },
+    {
+      "name": "nrows",
+      "product": "nrows_dims"
+    }
+  ],
+  "constraints": [
+    {
+      "name": "total_size",
+      "min": 1,
+      "max": 1073741824
+    },
+    {
+      "name": "src0_dimensions",
+      "length": 4
+    },
+    {
+      "name": "dst_dimensions",
+      "length": 4
+    },
+    {
+      "name": "ncols",
+      "min": 1,
+      "max": 1024
+    },
+    {
+      "name": "nrows",
+      "min": 1,
+      "max": 1048576
+    },
+    {
+      "equals": [
+        "src0_dimensions",
+        "dst_dimensions"
+      ]
+    },
+    {
+      "equals": [
+        "contiguous_strides",
+        "src0_strides",
+        "dst_strides"
+      ]
+    }
+  ],
+  "launch": {
+    "workgroup_size": [
+      1024,
+      1,
+      1
+    ]
+  },
+  "config": {
+    "bindings": [
+      {
+        "key": "@hrx2.shape.soft_max.ncols",
+        "source": "shape.ncols"
+      },
+      {
+        "key": "@hrx2.shape.soft_max.nrows",
+        "source": "shape.nrows"
+      },
+      {
+        "key": "@hrx2.tuning.soft_max.workgroup_size",
+        "value": "1024"
+      }
+    ]
+  }
+}

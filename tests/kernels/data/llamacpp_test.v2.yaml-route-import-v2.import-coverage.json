@@ -1,0 +1,583 @@
+{
+  "schema": "ggml_hrx_kernel_bench.import_test_coverage.v1",
+  "operation_count": 115,
+  "total_pass_case_count": 564,
+  "total_fail_case_count": 10633,
+  "operations": [
+    {
+      "op": "ABS",
+      "pass_case_count": 8,
+      "fail_case_count": 0
+    },
+    {
+      "op": "ACC",
+      "pass_case_count": 0,
+      "fail_case_count": 6
+    },
+    {
+      "op": "ADD",
+      "pass_case_count": 90,
+      "fail_case_count": 4
+    },
+    {
+      "op": "ADD1",
+      "pass_case_count": 0,
+      "fail_case_count": 2
+    },
+    {
+      "op": "ADD_ID",
+      "pass_case_count": 0,
+      "fail_case_count": 36
+    },
+    {
+      "op": "ADD_RMS_NORM",
+      "pass_case_count": 0,
+      "fail_case_count": 25
+    },
+    {
+      "op": "ARANGE",
+      "pass_case_count": 0,
+      "fail_case_count": 2
+    },
+    {
+      "op": "ARGMAX",
+      "pass_case_count": 0,
+      "fail_case_count": 7
+    },
+    {
+      "op": "ARGSORT",
+      "pass_case_count": 0,
+      "fail_case_count": 58
+    },
+    {
+      "op": "CEIL",
+      "pass_case_count": 0,
+      "fail_case_count": 14
+    },
+    {
+      "op": "CLAMP",
+      "pass_case_count": 3,
+      "fail_case_count": 3
+    },
+    {
+      "op": "CONCAT",
+      "pass_case_count": 0,
+      "fail_case_count": 36
+    },
+    {
+      "op": "CONT",
+      "pass_case_count": 8,
+      "fail_case_count": 28
+    },
+    {
+      "op": "CONV_2D",
+      "pass_case_count": 0,
+      "fail_case_count": 1568
+    },
+    {
+      "op": "CONV_2D_DW",
+      "pass_case_count": 0,
+      "fail_case_count": 4
+    },
+    {
+      "op": "CONV_3D",
+      "pass_case_count": 0,
+      "fail_case_count": 146
+    },
+    {
+      "op": "CONV_TRANSPOSE_1D",
+      "pass_case_count": 0,
+      "fail_case_count": 115
+    },
+    {
+      "op": "CONV_TRANSPOSE_2D",
+      "pass_case_count": 0,
+      "fail_case_count": 6
+    },
+    {
+      "op": "COS",
+      "pass_case_count": 0,
+      "fail_case_count": 6
+    },
+    {
+      "op": "COUNT_EQUAL",
+      "pass_case_count": 0,
+      "fail_case_count": 2
+    },
+    {
+      "op": "CPY",
+      "pass_case_count": 48,
+      "fail_case_count": 372
+    },
+    {
+      "op": "CROSS_ENTROPY_LOSS",
+      "pass_case_count": 0,
+      "fail_case_count": 2
+    },
+    {
+      "op": "CROSS_ENTROPY_LOSS_BACK",
+      "pass_case_count": 0,
+      "fail_case_count": 2
+    },
+    {
+      "op": "CUMSUM",
+      "pass_case_count": 0,
+      "fail_case_count": 15
+    },
+    {
+      "op": "DIAG",
+      "pass_case_count": 0,
+      "fail_case_count": 3
+    },
+    {
+      "op": "DIAG_MASK_INF",
+      "pass_case_count": 0,
+      "fail_case_count": 3
+    },
+    {
+      "op": "DIV",
+      "pass_case_count": 87,
+      "fail_case_count": 4
+    },
+    {
+      "op": "DUP",
+      "pass_case_count": 0,
+      "fail_case_count": 10
+    },
+    {
+      "op": "ELU",
+      "pass_case_count": 0,
+      "fail_case_count": 8
+    },
+    {
+      "op": "EXP",
+      "pass_case_count": 8,
+      "fail_case_count": 0
+    },
+    {
+      "op": "EXPM1",
+      "pass_case_count": 0,
+      "fail_case_count": 8
+    },
+    {
+      "op": "FILL",
+      "pass_case_count": 0,
+      "fail_case_count": 4
+    },
+    {
+      "op": "FLASH_ATTN_EXT",
+      "pass_case_count": 0,
+      "fail_case_count": 20
+    },
+    {
+      "op": "FLOOR",
+      "pass_case_count": 0,
+      "fail_case_count": 14
+    },
+    {
+      "op": "GATED_DELTA_NET",
+      "pass_case_count": 0,
+      "fail_case_count": 18
+    },
+    {
+      "op": "GATED_LINEAR_ATTN",
+      "pass_case_count": 0,
+      "fail_case_count": 4
+    },
+    {
+      "op": "GEGLU",
+      "pass_case_count": 0,
+      "fail_case_count": 24
+    },
+    {
+      "op": "GEGLU_ERF",
+      "pass_case_count": 0,
+      "fail_case_count": 24
+    },
+    {
+      "op": "GEGLU_QUICK",
+      "pass_case_count": 0,
+      "fail_case_count": 24
+    },
+    {
+      "op": "GELU",
+      "pass_case_count": 0,
+      "fail_case_count": 8
+    },
+    {
+      "op": "GELU_ERF",
+      "pass_case_count": 0,
+      "fail_case_count": 8
+    },
+    {
+      "op": "GELU_QUICK",
+      "pass_case_count": 0,
+      "fail_case_count": 8
+    },
+    {
+      "op": "GET_ROWS",
+      "pass_case_count": 0,
+      "fail_case_count": 107
+    },
+    {
+      "op": "GET_ROWS_BACK",
+      "pass_case_count": 0,
+      "fail_case_count": 51
+    },
+    {
+      "op": "GROUP_NORM",
+      "pass_case_count": 0,
+      "fail_case_count": 2
+    },
+    {
+      "op": "GROUP_NORM_MUL_ADD",
+      "pass_case_count": 0,
+      "fail_case_count": 2
+    },
+    {
+      "op": "HARDSIGMOID",
+      "pass_case_count": 0,
+      "fail_case_count": 8
+    },
+    {
+      "op": "HARDSWISH",
+      "pass_case_count": 0,
+      "fail_case_count": 8
+    },
+    {
+      "op": "IM2COL",
+      "pass_case_count": 0,
+      "fail_case_count": 88
+    },
+    {
+      "op": "IM2COL_3D",
+      "pass_case_count": 0,
+      "fail_case_count": 2051
+    },
+    {
+      "op": "L2_NORM",
+      "pass_case_count": 0,
+      "fail_case_count": 20
+    },
+    {
+      "op": "LEAKY_RELU",
+      "pass_case_count": 0,
+      "fail_case_count": 6
+    },
+    {
+      "op": "LOG",
+      "pass_case_count": 0,
+      "fail_case_count": 6
+    },
+    {
+      "op": "MEAN",
+      "pass_case_count": 0,
+      "fail_case_count": 7
+    },
+    {
+      "op": "MUL",
+      "pass_case_count": 87,
+      "fail_case_count": 4
+    },
+    {
+      "op": "MUL_MAT",
+      "pass_case_count": 33,
+      "fail_case_count": 1267
+    },
+    {
+      "op": "MUL_MAT_ID",
+      "pass_case_count": 0,
+      "fail_case_count": 686
+    },
+    {
+      "op": "MUL_MAT_ID_FUSION",
+      "pass_case_count": 0,
+      "fail_case_count": 13
+    },
+    {
+      "op": "MUL_MAT_VEC_FUSION",
+      "pass_case_count": 0,
+      "fail_case_count": 270
+    },
+    {
+      "op": "NEG",
+      "pass_case_count": 8,
+      "fail_case_count": 0
+    },
+    {
+      "op": "NORM",
+      "pass_case_count": 0,
+      "fail_case_count": 20
+    },
+    {
+      "op": "NORM_MUL_ADD",
+      "pass_case_count": 0,
+      "fail_case_count": 20
+    },
+    {
+      "op": "OPT_STEP_ADAMW",
+      "pass_case_count": 0,
+      "fail_case_count": 1
+    },
+    {
+      "op": "OPT_STEP_SGD",
+      "pass_case_count": 0,
+      "fail_case_count": 1
+    },
+    {
+      "op": "OUT_PROD",
+      "pass_case_count": 0,
+      "fail_case_count": 1152
+    },
+    {
+      "op": "PAD",
+      "pass_case_count": 0,
+      "fail_case_count": 15
+    },
+    {
+      "op": "PAD_REFLECT_1D",
+      "pass_case_count": 0,
+      "fail_case_count": 2
+    },
+    {
+      "op": "POOL_1D",
+      "pass_case_count": 0,
+      "fail_case_count": 48
+    },
+    {
+      "op": "POOL_2D",
+      "pass_case_count": 0,
+      "fail_case_count": 128
+    },
+    {
+      "op": "REGLU",
+      "pass_case_count": 0,
+      "fail_case_count": 24
+    },
+    {
+      "op": "RELU",
+      "pass_case_count": 8,
+      "fail_case_count": 0
+    },
+    {
+      "op": "REPEAT",
+      "pass_case_count": 0,
+      "fail_case_count": 14
+    },
+    {
+      "op": "REPEAT_BACK",
+      "pass_case_count": 0,
+      "fail_case_count": 9
+    },
+    {
+      "op": "RMS_NORM",
+      "pass_case_count": 11,
+      "fail_case_count": 10
+    },
+    {
+      "op": "RMS_NORM_BACK",
+      "pass_case_count": 0,
+      "fail_case_count": 10
+    },
+    {
+      "op": "RMS_NORM_MUL_ADD",
+      "pass_case_count": 0,
+      "fail_case_count": 30
+    },
+    {
+      "op": "RMS_NORM_MUL_ROPE",
+      "pass_case_count": 0,
+      "fail_case_count": 64
+    },
+    {
+      "op": "ROLL",
+      "pass_case_count": 0,
+      "fail_case_count": 1
+    },
+    {
+      "op": "ROPE",
+      "pass_case_count": 4,
+      "fail_case_count": 284
+    },
+    {
+      "op": "ROPE_BACK",
+      "pass_case_count": 0,
+      "fail_case_count": 228
+    },
+    {
+      "op": "ROPE_SET_ROWS",
+      "pass_case_count": 0,
+      "fail_case_count": 48
+    },
+    {
+      "op": "ROUND",
+      "pass_case_count": 0,
+      "fail_case_count": 14
+    },
+    {
+      "op": "RWKV_WKV6",
+      "pass_case_count": 0,
+      "fail_case_count": 4
+    },
+    {
+      "op": "RWKV_WKV7",
+      "pass_case_count": 0,
+      "fail_case_count": 4
+    },
+    {
+      "op": "SCALE",
+      "pass_case_count": 4,
+      "fail_case_count": 0
+    },
+    {
+      "op": "SET",
+      "pass_case_count": 0,
+      "fail_case_count": 12
+    },
+    {
+      "op": "SET_ROWS",
+      "pass_case_count": 0,
+      "fail_case_count": 315
+    },
+    {
+      "op": "SGN",
+      "pass_case_count": 0,
+      "fail_case_count": 8
+    },
+    {
+      "op": "SIGMOID",
+      "pass_case_count": 0,
+      "fail_case_count": 8
+    },
+    {
+      "op": "SILU",
+      "pass_case_count": 0,
+      "fail_case_count": 8
+    },
+    {
+      "op": "SILU_BACK",
+      "pass_case_count": 0,
+      "fail_case_count": 1
+    },
+    {
+      "op": "SIN",
+      "pass_case_count": 0,
+      "fail_case_count": 6
+    },
+    {
+      "op": "SOFTCAP",
+      "pass_case_count": 0,
+      "fail_case_count": 1
+    },
+    {
+      "op": "SOFTPLUS",
+      "pass_case_count": 0,
+      "fail_case_count": 8
+    },
+    {
+      "op": "SOFT_MAX",
+      "pass_case_count": 54,
+      "fail_case_count": 158
+    },
+    {
+      "op": "SOFT_MAX_BACK",
+      "pass_case_count": 0,
+      "fail_case_count": 48
+    },
+    {
+      "op": "SOLVE_TRI",
+      "pass_case_count": 0,
+      "fail_case_count": 24
+    },
+    {
+      "op": "SQR",
+      "pass_case_count": 6,
+      "fail_case_count": 0
+    },
+    {
+      "op": "SQRT",
+      "pass_case_count": 6,
+      "fail_case_count": 0
+    },
+    {
+      "op": "SSM_CONV",
+      "pass_case_count": 0,
+      "fail_case_count": 45
+    },
+    {
+      "op": "SSM_SCAN",
+      "pass_case_count": 0,
+      "fail_case_count": 3
+    },
+    {
+      "op": "STEP",
+      "pass_case_count": 0,
+      "fail_case_count": 8
+    },
+    {
+      "op": "SUB",
+      "pass_case_count": 87,
+      "fail_case_count": 4
+    },
+    {
+      "op": "SUM",
+      "pass_case_count": 0,
+      "fail_case_count": 8
+    },
+    {
+      "op": "SUM_ROWS",
+      "pass_case_count": 0,
+      "fail_case_count": 10
+    },
+    {
+      "op": "SWIGLU",
+      "pass_case_count": 4,
+      "fail_case_count": 20
+    },
+    {
+      "op": "SWIGLU_OAI",
+      "pass_case_count": 0,
+      "fail_case_count": 8
+    },
+    {
+      "op": "TANH",
+      "pass_case_count": 0,
+      "fail_case_count": 8
+    },
+    {
+      "op": "TIMESTEP_EMBEDDING",
+      "pass_case_count": 0,
+      "fail_case_count": 1
+    },
+    {
+      "op": "TOPK_MOE",
+      "pass_case_count": 0,
+      "fail_case_count": 192
+    },
+    {
+      "op": "TOP_K",
+      "pass_case_count": 0,
+      "fail_case_count": 310
+    },
+    {
+      "op": "TRI",
+      "pass_case_count": 0,
+      "fail_case_count": 4
+    },
+    {
+      "op": "TRUNC",
+      "pass_case_count": 0,
+      "fail_case_count": 14
+    },
+    {
+      "op": "UPSCALE",
+      "pass_case_count": 0,
+      "fail_case_count": 22
+    },
+    {
+      "op": "XIELU",
+      "pass_case_count": 0,
+      "fail_case_count": 1
+    }
+  ]
+}

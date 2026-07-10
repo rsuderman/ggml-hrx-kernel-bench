@@ -1,6 +1,7 @@
-set(GGML_HRX_GROUPED_YAML ${CMAKE_CURRENT_SOURCE_DIR}/data/llamacpp_test.yaml)
+set(GGML_HRX_GROUPED_YAML ${CMAKE_CURRENT_SOURCE_DIR}/data/llamacpp_test.v2.yaml)
 set(GGML_HRX_EXPECTED_IMPORT_COVERAGE ${CMAKE_CURRENT_SOURCE_DIR}/data/llamacpp_test.import-coverage.json)
 set(GGML_HRX_EXPECTED_IMPORT_COVERAGE_V2 ${CMAKE_CURRENT_SOURCE_DIR}/data/llamacpp_test.v2.import-coverage.json)
+set(GGML_HRX_EXPECTED_YAML_ROUTE_IMPORT_COVERAGE_V2 ${CMAKE_CURRENT_SOURCE_DIR}/data/llamacpp_test.v2.yaml-route-import-v2.import-coverage.json)
 set(GGML_HRX_ADDITIONAL_GROUPED_YAML ${CMAKE_CURRENT_SOURCE_DIR}/data/additional_test.yaml)
 set(GGML_HRX_ADDITIONAL_EXPECTED_IMPORT_COVERAGE_V2 ${CMAKE_CURRENT_SOURCE_DIR}/data/additional_test.v2.import-coverage.json)
 set(GGML_HRX_KERNEL_DIR_V1 ${GGML_HRX_ASSET_ROOT}/kernels/hrx2)
@@ -10,69 +11,93 @@ set(GGML_HRX_ROUTING_DIR_V2 ${GGML_HRX_ASSET_ROOT}/catalog/v2)
 set(GGML_HRX_GENERATED_IMPORT_DIR ${CMAKE_CURRENT_BINARY_DIR}/artifacts/llama-cpp-tests-import-v1)
 set(GGML_HRX_GENERATED_IMPORT_DIR_V2 ${CMAKE_CURRENT_BINARY_DIR}/artifacts/llama-cpp-tests-import-v2)
 set(GGML_HRX_ADDITIONAL_GENERATED_IMPORT_DIR_V2 ${CMAKE_CURRENT_BINARY_DIR}/artifacts/additional-tests-import-v2)
+set(GGML_HRX_LLAMA_CPP_YAML_ROUTE_IMPORT_DIR_V2 ${CMAKE_CURRENT_BINARY_DIR}/artifacts/llama-cpp-yaml-route-import-v2)
 
-add_grouped_yaml_import_validation_target(
-  NAME kernel-llama-cpp-tests-import-coverage
-  YAML_PATH ${GGML_HRX_GROUPED_YAML}
-  OUTPUT_DIR ${GGML_HRX_GENERATED_IMPORT_DIR}
-  EXPECTED_COVERAGE ${GGML_HRX_EXPECTED_IMPORT_COVERAGE}
-  COMMAND_ARGS
-    --routing-version v1
-    --routing-dir ${GGML_HRX_ROUTING_DIR_V1}
-    --split-by-op
+add_yaml_route_import_target(
+  NAME kernel-llama-cpp-yaml-route-import-v2
+  YAML_PATHS
+    ${GGML_HRX_GROUPED_YAML}
+  OUTPUT_DIR ${GGML_HRX_LLAMA_CPP_YAML_ROUTE_IMPORT_DIR_V2}
+  ROUTING_DIR ${GGML_HRX_ROUTING_DIR_V2}
+  EXPECTED_COVERAGE ${GGML_HRX_EXPECTED_YAML_ROUTE_IMPORT_COVERAGE_V2}
   DEPENDS
     ${GGML_HRX_RUNTIME_ASSET_TARGET}
 )
 
-add_generated_kernel_runtime_tests(
-  NAME llama-cpp-tests
-  GENERATED_IMPORT_DIR ${GGML_HRX_GENERATED_IMPORT_DIR}
+add_yaml_route_import_runtime_tests(
+  NAME llama-cpp-yaml-route-import-v2
+  GENERATED_IMPORT_DIR ${GGML_HRX_LLAMA_CPP_YAML_ROUTE_IMPORT_DIR_V2}
   GROUPED_YAML ${GGML_HRX_GROUPED_YAML}
-  ROUTING_VERSION v1
-  ROUTING_DIR ${GGML_HRX_ROUTING_DIR_V1}
-  KERNEL_DIR ${GGML_HRX_KERNEL_DIR_V1}
-)
-
-add_grouped_yaml_import_validation_target(
-  NAME kernel-llama-cpp-tests-import-coverage-v2
-  YAML_PATH ${GGML_HRX_GROUPED_YAML}
-  OUTPUT_DIR ${GGML_HRX_GENERATED_IMPORT_DIR_V2}
-  EXPECTED_COVERAGE ${GGML_HRX_EXPECTED_IMPORT_COVERAGE_V2}
-  COMMAND_ARGS
-    --routing-version v2
-    --routing-dir ${GGML_HRX_ROUTING_DIR_V2}
-    --split-by-op
-  DEPENDS
-    ${GGML_HRX_RUNTIME_ASSET_TARGET}
-)
-
-add_generated_kernel_runtime_tests(
-  NAME llama-cpp-tests-v2
-  GENERATED_IMPORT_DIR ${GGML_HRX_GENERATED_IMPORT_DIR_V2}
-  GROUPED_YAML ${GGML_HRX_GROUPED_YAML}
-  ROUTING_VERSION v2
   ROUTING_DIR ${GGML_HRX_ROUTING_DIR_V2}
   KERNEL_DIR ${GGML_HRX_KERNEL_DIR_V2}
 )
 
-add_grouped_yaml_import_validation_target(
-  NAME kernel-additional-tests-import-coverage-v2
-  YAML_PATH ${GGML_HRX_ADDITIONAL_GROUPED_YAML}
-  OUTPUT_DIR ${GGML_HRX_ADDITIONAL_GENERATED_IMPORT_DIR_V2}
-  EXPECTED_COVERAGE ${GGML_HRX_ADDITIONAL_EXPECTED_IMPORT_COVERAGE_V2}
-  COMMAND_ARGS
-    --routing-version v2
-    --routing-dir ${GGML_HRX_ROUTING_DIR_V2}
-    --split-by-op
-  DEPENDS
-    ${GGML_HRX_RUNTIME_ASSET_TARGET}
-)
+if(GGML_HRX_ENABLE_LEGACY_GROUPED_YAML_IMPORTS)
+  add_grouped_yaml_import_validation_target(
+    NAME kernel-llama-cpp-tests-import-coverage
+    YAML_PATH ${GGML_HRX_GROUPED_YAML}
+    OUTPUT_DIR ${GGML_HRX_GENERATED_IMPORT_DIR}
+    EXPECTED_COVERAGE ${GGML_HRX_EXPECTED_IMPORT_COVERAGE}
+    COMMAND_ARGS
+      --routing-version v1
+      --routing-dir ${GGML_HRX_ROUTING_DIR_V1}
+      --split-by-op
+    DEPENDS
+      ${GGML_HRX_RUNTIME_ASSET_TARGET}
+  )
 
-add_generated_kernel_runtime_tests(
-  NAME additional-tests-v2
-  GENERATED_IMPORT_DIR ${GGML_HRX_ADDITIONAL_GENERATED_IMPORT_DIR_V2}
-  GROUPED_YAML ${GGML_HRX_ADDITIONAL_GROUPED_YAML}
-  ROUTING_VERSION v2
-  ROUTING_DIR ${GGML_HRX_ROUTING_DIR_V2}
-  KERNEL_DIR ${GGML_HRX_KERNEL_DIR_V2}
-)
+  add_generated_kernel_runtime_tests(
+    NAME llama-cpp-tests
+    GENERATED_IMPORT_DIR ${GGML_HRX_GENERATED_IMPORT_DIR}
+    GROUPED_YAML ${GGML_HRX_GROUPED_YAML}
+    ROUTING_VERSION v1
+    ROUTING_DIR ${GGML_HRX_ROUTING_DIR_V1}
+    KERNEL_DIR ${GGML_HRX_KERNEL_DIR_V1}
+  )
+
+  add_grouped_yaml_import_validation_target(
+    NAME kernel-llama-cpp-tests-import-coverage-v2
+    YAML_PATH ${GGML_HRX_GROUPED_YAML}
+    OUTPUT_DIR ${GGML_HRX_GENERATED_IMPORT_DIR_V2}
+    EXPECTED_COVERAGE ${GGML_HRX_EXPECTED_IMPORT_COVERAGE_V2}
+    COMMAND_ARGS
+      --routing-version v2
+      --routing-dir ${GGML_HRX_ROUTING_DIR_V2}
+      --split-by-op
+    DEPENDS
+      ${GGML_HRX_RUNTIME_ASSET_TARGET}
+  )
+
+  add_generated_kernel_runtime_tests(
+    NAME llama-cpp-tests-v2
+    GENERATED_IMPORT_DIR ${GGML_HRX_GENERATED_IMPORT_DIR_V2}
+    GROUPED_YAML ${GGML_HRX_GROUPED_YAML}
+    ROUTING_VERSION v2
+    ROUTING_DIR ${GGML_HRX_ROUTING_DIR_V2}
+    KERNEL_DIR ${GGML_HRX_KERNEL_DIR_V2}
+  )
+endif()
+
+if(GGML_HRX_ENABLE_ADDITIONAL_YAML_IMPORT_TESTS)
+  add_grouped_yaml_import_validation_target(
+    NAME kernel-additional-tests-import-coverage-v2
+    YAML_PATH ${GGML_HRX_ADDITIONAL_GROUPED_YAML}
+    OUTPUT_DIR ${GGML_HRX_ADDITIONAL_GENERATED_IMPORT_DIR_V2}
+    EXPECTED_COVERAGE ${GGML_HRX_ADDITIONAL_EXPECTED_IMPORT_COVERAGE_V2}
+    COMMAND_ARGS
+      --routing-version v2
+      --routing-dir ${GGML_HRX_ROUTING_DIR_V2}
+      --split-by-op
+    DEPENDS
+      ${GGML_HRX_RUNTIME_ASSET_TARGET}
+  )
+
+  add_generated_kernel_runtime_tests(
+    NAME additional-tests-v2
+    GENERATED_IMPORT_DIR ${GGML_HRX_ADDITIONAL_GENERATED_IMPORT_DIR_V2}
+    GROUPED_YAML ${GGML_HRX_ADDITIONAL_GROUPED_YAML}
+    ROUTING_VERSION v2
+    ROUTING_DIR ${GGML_HRX_ROUTING_DIR_V2}
+    KERNEL_DIR ${GGML_HRX_KERNEL_DIR_V2}
+  )
+endif()

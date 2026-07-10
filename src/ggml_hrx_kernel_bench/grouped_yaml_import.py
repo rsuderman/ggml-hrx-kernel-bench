@@ -340,7 +340,6 @@ def import_coverage_payload(suite: ImportedSuite, config_paths: list[Path]) -> d
     operation_rows = _operation_coverage_rows(suite)
     return {
         "schema": IMPORT_TEST_COVERAGE_SCHEMA,
-        "source_path": suite.source_path,
         "operation_count": len(operation_rows),
         "total_pass_case_count": counts["mapped_case_count"],
         "total_fail_case_count": counts["total_cases"] - counts["mapped_case_count"],
@@ -560,7 +559,6 @@ def materialize_grouped_yaml(
 
     import_coverage_payload = {
         "schema": IMPORT_TEST_COVERAGE_SCHEMA,
-        "source_path": str(yaml_path),
         "operation_count": len(operation_payloads),
         "total_pass_case_count": sum(
             int(payload["mapped_case_count"]) for payload in operation_payloads.values()

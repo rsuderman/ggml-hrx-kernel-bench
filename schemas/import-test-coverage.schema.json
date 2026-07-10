@@ -13,10 +13,6 @@
     "schema": {
       "const": "ggml_hrx_kernel_bench.import_test_coverage.v1"
     },
-    "source_path": {
-      "type": "string",
-      "minLength": 1
-    },
     "operation_count": {
       "type": "integer",
       "minimum": 0

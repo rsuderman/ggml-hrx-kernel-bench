@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import Any, Mapping
 
@@ -10,6 +10,7 @@ VALUE_OPERATION_SPEC: dict[str, tuple[int, int]] = {
     "contiguous_strides": (1, 0),
     "product": (1, 0),
     "inverse_permutation": (1, 0),
+    "element": (1, 1),
     "head": (1, 1),
     "tail": (1, 1),
     "chain_permutations": (2, 0),
@@ -92,6 +93,12 @@ class TensorDescriptor:
 
 
 @dataclass(frozen=True)
+class SyntheticTensorDescriptor:
+    dtype: str
+    dimensions_source: Any
+
+
+@dataclass(frozen=True)
 class ConcreteTensorDimension:
     name: str
     size: int
@@ -119,9 +126,13 @@ class V2Route:
     constraints: RouteConstraints
     launch: Mapping[str, Any]
     bindings: tuple[BindingDefinition, ...]
+    attributes: Mapping[str, Any] = field(default_factory=dict)
+    synthetic_tensors: Mapping[str, SyntheticTensorDescriptor] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "tensors", _freeze_mapping(self.tensors))
+        object.__setattr__(self, "synthetic_tensors", _freeze_mapping(self.synthetic_tensors))
+        object.__setattr__(self, "attributes", _freeze_mapping(self.attributes))
         object.__setattr__(self, "launch", _freeze_mapping(self.launch))
 
 

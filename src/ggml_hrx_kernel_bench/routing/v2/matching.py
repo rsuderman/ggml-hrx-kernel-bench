@@ -55,6 +55,29 @@ def route_accepts_dtype(route: V2Route, dtype: Mapping[str, Any]) -> bool:
     return True
 
 
+def _attribute_values_equal(lhs: Any, rhs: Any) -> bool:
+    if isinstance(lhs, tuple) and isinstance(rhs, list | tuple):
+        return len(lhs) == len(rhs) and all(
+            _attribute_values_equal(left, right) for left, right in zip(lhs, rhs, strict=True)
+        )
+    if isinstance(lhs, list) and isinstance(rhs, list | tuple):
+        return len(lhs) == len(rhs) and all(
+            _attribute_values_equal(left, right) for left, right in zip(lhs, rhs, strict=True)
+        )
+    if isinstance(lhs, Mapping) and isinstance(rhs, Mapping):
+        return set(lhs) == set(rhs) and all(_attribute_values_equal(lhs[key], rhs[key]) for key in lhs)
+    return lhs == rhs
+
+
+def route_accepts_attributes(route: V2Route, attributes: Mapping[str, Any]) -> bool:
+    for key, expected in route.attributes.items():
+        if key not in attributes:
+            return False
+        if not _attribute_values_equal(expected, attributes[key]):
+            return False
+    return True
+
+
 def _bounds_accept(lower: int | None, upper: int | None, value: int) -> bool:
     if lower is not None and value < lower:
         return False
@@ -160,6 +183,13 @@ def _resolve_values(
                 return None
             resolved[definition.name] = inverse
             continue
+        if definition.operation_kind == "element":
+            source = lookup(definition.sources[0])
+            index = definition.parameters[0]
+            if not isinstance(source, tuple) or index >= len(source):
+                return None
+            resolved[definition.name] = int(source[index])
+            continue
         if definition.operation_kind == "head":
             source = lookup(definition.sources[0])
             if not isinstance(source, tuple):
@@ -264,12 +294,26 @@ def tensor_accepts_descriptor(
     return constraints_accept(constraints, {**captures, **resolved})
 
 
-def route_accepts_tensors(route: V2Route, tensors: Mapping[str, ConcreteTensor]) -> bool:
+def route_captures(
+    route: V2Route,
+    tensors: Mapping[str, ConcreteTensor],
+    *,
+    tensor_names: set[str] | None = None,
+) -> dict[str, CapturedValue] | None:
     captures: dict[str, CapturedValue] = {}
-    for tensor_name, descriptor in route.tensors.items():
+    names = route.tensors.keys() if tensor_names is None else tensor_names
+    for tensor_name in names:
+        descriptor = route.tensors.get(tensor_name)
         tensor = tensors.get(tensor_name)
-        if tensor is None or not _capture_tensor(descriptor, tensor, captures):
-            return False
+        if descriptor is None or tensor is None or not _capture_tensor(descriptor, tensor, captures):
+            return None
+    return captures
+
+
+def route_accepts_tensors(route: V2Route, tensors: Mapping[str, ConcreteTensor]) -> bool:
+    captures = route_captures(route, tensors)
+    if captures is None:
+        return False
     resolved = _resolve_values(route.values, captures)
     if resolved is None:
         return False
@@ -277,11 +321,9 @@ def route_accepts_tensors(route: V2Route, tensors: Mapping[str, ConcreteTensor])
 
 
 def route_values(route: V2Route, tensors: Mapping[str, ConcreteTensor]) -> dict[str, CapturedValue] | None:
-    captures: dict[str, CapturedValue] = {}
-    for tensor_name, descriptor in route.tensors.items():
-        tensor = tensors.get(tensor_name)
-        if tensor is None or not _capture_tensor(descriptor, tensor, captures):
-            return None
+    captures = route_captures(route, tensors)
+    if captures is None:
+        return None
     resolved = _resolve_values(route.values, captures)
     if resolved is None:
         return None

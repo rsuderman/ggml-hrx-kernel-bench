@@ -7,6 +7,15 @@
     "root_symbol": "@hrx2_rope_neox_f32",
     "export_name": "hrx2_rope_neox_f32"
   },
+  "attributes": {
+    "af": 1.0,
+    "ef": 0.0,
+    "ff": 0,
+    "fs": 1.0,
+    "mode": 2,
+    "n_ctx": 512,
+    "n_dims": 64
+  },
   "tensors": {
     "src0": {
       "dtype": "F32",
@@ -22,6 +31,20 @@
       "dtype": "F32",
       "dimensions": "dst_dimensions",
       "strides": "dst_strides"
+    }
+  },
+  "synthetic_tensors": {
+    "src1": {
+      "dtype": "I32",
+      "dimensions": [
+        1,
+        1,
+        {
+          "source": "dst_dimensions",
+          "index": 2
+        },
+        1
+      ]
     }
   },
   "values": [
@@ -40,6 +63,62 @@
     {
       "name": "total_size",
       "product": "dst_dimensions"
+    },
+    {
+      "name": "rope.ncols",
+      "element": {
+        "source": "dst_dimensions",
+        "index": 0
+      }
+    },
+    {
+      "name": "rope.nheads",
+      "element": {
+        "source": "dst_dimensions",
+        "index": 1
+      }
+    },
+    {
+      "name": "rope.ntokens",
+      "element": {
+        "source": "dst_dimensions",
+        "index": 2
+      }
+    },
+    {
+      "name": "rope.src0_head_stride",
+      "element": {
+        "source": "src0_strides",
+        "index": 1
+      }
+    },
+    {
+      "name": "rope.src0_token_stride",
+      "element": {
+        "source": "src0_strides",
+        "index": 2
+      }
+    },
+    {
+      "name": "rope.dst_head_stride",
+      "element": {
+        "source": "dst_strides",
+        "index": 1
+      }
+    },
+    {
+      "name": "rope.dst_token_stride",
+      "element": {
+        "source": "dst_strides",
+        "index": 2
+      }
+    },
+    {
+      "name": "rope.pos_token_stride",
+      "element": {
+        "source": "src1_strides",
+        "index": 2
+      }
     }
   ],
   "constraints": [
@@ -112,12 +191,6 @@
       "equals": [
         "src0_dimensions",
         "dst_dimensions"
-      ]
-    },
-    {
-      "equals": [
-        "src0_contiguous_strides",
-        "src0_strides"
       ]
     },
     {

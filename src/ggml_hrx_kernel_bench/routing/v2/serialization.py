@@ -38,6 +38,11 @@ def tensor_values_json(route: V2Route) -> list[dict[str, Any]]:
         if value.operation_kind == "inverse_permutation":
             payload.append({"name": value.name, "inverse_permutation": value.sources[0]})
             continue
+        if value.operation_kind == "element":
+            payload.append(
+                {"name": value.name, "element": {"source": value.sources[0], "index": value.parameters[0]}}
+            )
+            continue
         if value.operation_kind == "head":
             payload.append(
                 {"name": value.name, "head": {"source": value.sources[0], "take": value.parameters[0]}}
@@ -64,6 +69,16 @@ def tensor_values_json(route: V2Route) -> list[dict[str, Any]]:
             continue
         raise AssertionError(f"unsupported value operation kind: {value.operation_kind}")
     return payload
+
+
+def synthetic_tensors_json(route: V2Route) -> dict[str, Any]:
+    return {
+        tensor_name: {
+            "dtype": descriptor.dtype,
+            "dimensions": descriptor.dimensions_source,
+        }
+        for tensor_name, descriptor in route.synthetic_tensors.items()
+    }
 
 
 def tensor_constraints_json(route: V2Route) -> list[dict[str, Any]]:
@@ -125,6 +140,8 @@ def route_summary_json(route: V2Route) -> dict[str, Any]:
         "root_symbol": route.root_symbol,
         "export_name": route.export_name,
         "tensors": tensor_descriptors_json(route),
+        "synthetic_tensors": synthetic_tensors_json(route),
+        "attributes": dict(route.attributes),
         "values": tensor_values_json(route),
         "constraints": tensor_constraints_json(route),
         "launch": dict(route.launch),

@@ -23,6 +23,7 @@ from ggml_hrx_kernel_bench.routing.api import (
     RuntimeCaseRequest,
     create_router,
 )
+from ggml_hrx_kernel_bench.yaml_route_import import materialize_yaml_route_import
 from ggml_hrx_kernel_bench.import_route_resolution import resolve_case_routes
 from ggml_hrx_kernel_bench.routing.v2.import_resolution import (
     resolve_imported_suite,
@@ -416,7 +417,7 @@ def test_v2_resolve_copy_route_for_contiguous_case(tmp_path: Path) -> None:
             "permute_src": [0, 0, 0, 0],
             "permute_dst": [0, 0, 0, 0],
         },
-        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_path="tests/kernels/data/llamacpp_test.v2.yaml",
         source_group_index=0,
         source_case_index=0,
     )
@@ -446,7 +447,7 @@ def test_v2_resolve_copy_route_for_transposed_f32_case(tmp_path: Path) -> None:
             "permute_src": [0, 0, 0, 0],
             "permute_dst": [0, 0, 0, 0],
         },
-        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_path="tests/kernels/data/llamacpp_test.v2.yaml",
         source_group_index=0,
         source_case_index=0,
     )
@@ -487,7 +488,7 @@ def test_v2_resolve_copy_route_for_chained_source_and_destination_permutations(t
             "permute_src": [0, 2, 1, 3],
             "permute_dst": [0, 3, 1, 2],
         },
-        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_path="tests/kernels/data/llamacpp_test.v2.yaml",
         source_group_index=0,
         source_case_index=0,
     )
@@ -547,7 +548,7 @@ def test_v2_resolve_cont_route_for_contiguous_f32_case() -> None:
             "ne": [2, 3, 5, 7],
             "use_view_slice": 0,
         },
-        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_path="tests/kernels/data/llamacpp_test.v2.yaml",
         source_group_index=0,
         source_case_index=0,
     )
@@ -568,7 +569,7 @@ def test_v2_resolve_cont_route_for_rank2_f32_case() -> None:
             "ne": [7, 5],
             "use_view_slice": 0,
         },
-        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_path="tests/kernels/data/llamacpp_test.v2.yaml",
         source_group_index=0,
         source_case_index=0,
     )
@@ -589,7 +590,7 @@ def test_v2_resolve_cont_route_for_rank3_f32_case() -> None:
             "ne": [4, 3, 2],
             "use_view_slice": 0,
         },
-        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_path="tests/kernels/data/llamacpp_test.v2.yaml",
         source_group_index=0,
         source_case_index=0,
     )
@@ -641,7 +642,7 @@ def test_v2_resolve_ne_a_unary_route_for_contiguous_case(op: str, dtype: str, ro
             "ne_a": [4, 3, 2, 5],
             "v": 0,
         },
-        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_path="tests/kernels/data/llamacpp_test.v2.yaml",
         source_group_index=0,
         source_case_index=0,
     )
@@ -661,8 +662,11 @@ def test_v2_unary_view_case_maps_to_non_contiguous_route(op: str) -> None:
         op=op,
         dtype={"type": "f32"},
         raw_case={},
-        normalized_params={"ne_a": [4, 3, 2, 5], "v": 1},
-        source_path="tests/kernels/data/llamacpp_test.yaml",
+        normalized_params={
+            "ne_a": [4, 3, 2, 5],
+            "v": 1,
+        },
+        source_path="tests/kernels/data/llamacpp_test.v2.yaml",
         source_group_index=0,
         source_case_index=0,
     )
@@ -691,7 +695,7 @@ def test_v2_resolve_abs_contiguous_case(dtype: str, route_id: str) -> None:
         dtype={"type": dtype},
         raw_case={},
         normalized_params={"ne_a": [5, 7, 11, 13], "v": 0},
-        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_path="tests/kernels/data/llamacpp_test.v2.yaml",
         source_group_index=0,
         source_case_index=0,
     )
@@ -718,7 +722,7 @@ def test_v2_resolve_abs_view_case_encodes_strided_src0(dtype: str, route_id: str
         dtype={"type": dtype},
         raw_case={},
         normalized_params={"ne_a": [5, 7, 11, 13], "v": 1},
-        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_path="tests/kernels/data/llamacpp_test.v2.yaml",
         source_group_index=0,
         source_case_index=0,
     )
@@ -743,7 +747,7 @@ def test_v2_abs_view_shape_round_trips_through_materialize() -> None:
         dtype={"type": "f16"},
         raw_case={},
         normalized_params={"ne_a": [5, 7, 11, 13], "v": 1},
-        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_path="tests/kernels/data/llamacpp_test.v2.yaml",
         source_group_index=0,
         source_case_index=0,
     )
@@ -773,7 +777,7 @@ def test_v2_resolve_scale_route_for_f32_case() -> None:
             "bias": 1.0,
             "inplace": 0,
         },
-        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_path="tests/kernels/data/llamacpp_test.v2.yaml",
         source_group_index=0,
         source_case_index=0,
     )
@@ -802,7 +806,7 @@ def test_v2_resolve_scale_route_for_rank2_f32_case() -> None:
             "bias": 1.0,
             "inplace": 0,
         },
-        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_path="tests/kernels/data/llamacpp_test.v2.yaml",
         source_group_index=0,
         source_case_index=0,
     )
@@ -825,7 +829,7 @@ def test_v2_resolve_scale_route_for_rank3_f32_case() -> None:
             "bias": 1.0,
             "inplace": 0,
         },
-        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_path="tests/kernels/data/llamacpp_test.v2.yaml",
         source_group_index=0,
         source_case_index=0,
     )
@@ -854,7 +858,7 @@ def test_v2_resolve_ne_unary_route_for_rank3_case(op: str, dtype: str, route_id:
         normalized_params={
             "ne": [4, 3, 2],
         },
-        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_path="tests/kernels/data/llamacpp_test.v2.yaml",
         source_group_index=0,
         source_case_index=0,
     )
@@ -876,7 +880,7 @@ def test_v2_resolve_clamp_route_for_f32_case() -> None:
             "min": -0.5,
             "max": 0.5,
         },
-        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_path="tests/kernels/data/llamacpp_test.v2.yaml",
         source_group_index=0,
         source_case_index=0,
     )
@@ -898,7 +902,7 @@ def test_v2_resolve_clamp_route_for_rank2_f32_case() -> None:
             "min": -0.5,
             "max": 0.5,
         },
-        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_path="tests/kernels/data/llamacpp_test.v2.yaml",
         source_group_index=0,
         source_case_index=0,
     )
@@ -920,7 +924,7 @@ def test_v2_resolve_clamp_route_for_rank3_f32_case() -> None:
             "min": -0.5,
             "max": 0.5,
         },
-        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_path="tests/kernels/data/llamacpp_test.v2.yaml",
         source_group_index=0,
         source_case_index=0,
     )
@@ -943,7 +947,7 @@ def test_v2_resolve_set_rows_route_for_f32_i64_case() -> None:
             "r": 1,
             "v": 0,
         },
-        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_path="tests/kernels/data/llamacpp_test.v2.yaml",
         source_group_index=0,
         source_case_index=0,
     )
@@ -976,7 +980,7 @@ def test_v2_set_rows_i32_indices_remain_unmapped_without_dtype_route() -> None:
             "r": 2,
             "v": 0,
         },
-        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_path="tests/kernels/data/llamacpp_test.v2.yaml",
         source_group_index=0,
         source_case_index=0,
     )
@@ -1030,7 +1034,7 @@ def test_v2_resolve_set_rows_route_preserves_non_contiguous_idx_stride() -> None
             "r": 2,
             "v": 0,
         },
-        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_path="tests/kernels/data/llamacpp_test.v2.yaml",
         source_group_index=0,
         source_case_index=0,
     )
@@ -1301,7 +1305,7 @@ def test_v2_mul_route_resolves_rms_norm_mul_f32_fused_case() -> None:
             "nr": [1, 1, 1, 1],
             "perm1": [0, 1, 2, 3],
         },
-        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_path="tests/kernels/data/llamacpp_test.v2.yaml",
         source_group_index=1,
         source_case_index=42,
     )
@@ -1334,7 +1338,7 @@ def test_v2_model_style_add_resolves_to_generic_2d_route() -> None:
             "ne": [4096, 512, 1, 1],
             "sources": "f32[4096,512,1,1],f32[4096,512,1,1]",
         },
-        source_path="tests/models/data/Llama-3.3-8B-Instruct.Q8_0.yaml",
+        source_path="tests/models/data/Llama-3.3-8B-Instruct.Q8_0.v2.yaml",
         source_group_index=0,
         source_case_index=1,
     )
@@ -1366,7 +1370,7 @@ def test_v2_model_style_mul_broadcast_resolves_to_generic_2d_route() -> None:
             "ne": [4096, 512, 1, 1],
             "sources": "f32[4096,512,1,1],f32[4096,1,1,1]",
         },
-        source_path="tests/models/data/Llama-3.3-8B-Instruct.Q8_0.yaml",
+        source_path="tests/models/data/Llama-3.3-8B-Instruct.Q8_0.v2.yaml",
         source_group_index=0,
         source_case_index=1,
     )
@@ -1394,7 +1398,7 @@ def test_v2_add_rms_norm_route_resolves_fused_mul_case() -> None:
             "eps": 0.0,
             "ne": [64, 5, 4, 3],
         },
-        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_path="tests/kernels/data/llamacpp_test.v2.yaml",
         source_group_index=0,
         source_case_index=1,
     )
@@ -1422,7 +1426,7 @@ def test_v2_add_rms_norm_nonzero_eps_case_stays_unmapped() -> None:
             "eps": 1.0e-4,
             "ne": [64, 5, 4, 3],
         },
-        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_path="tests/kernels/data/llamacpp_test.v2.yaml",
         source_group_index=0,
         source_case_index=3,
     )
@@ -1705,7 +1709,7 @@ def test_v1_oversized_contiguous_add_case_falls_back_to_generic_route() -> None:
             "nf": 1,
             "perm1": [0, 1, 2, 3],
         },
-        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_path="tests/kernels/data/llamacpp_test.v2.yaml",
         source_group_index=0,
         source_case_index=0,
     )
@@ -1738,7 +1742,7 @@ def test_v1_copy_route_uses_role_specific_dtypes() -> None:
             "permute_dst": [0, 0, 0, 0],
             "permute_src": [0, 0, 0, 0],
         },
-        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_path="tests/kernels/data/llamacpp_test.v2.yaml",
         source_group_index=0,
         source_case_index=0,
     )
@@ -1771,7 +1775,7 @@ def test_v2_oversized_contiguous_pointwise_case_becomes_unmapped() -> None:
             "nf": 1,
             "perm1": [0, 1, 2, 3],
         },
-        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_path="tests/kernels/data/llamacpp_test.v2.yaml",
         source_group_index=0,
         source_case_index=0,
     )
@@ -1796,7 +1800,7 @@ def test_v2_sum_rows_route_resolves_for_contiguous_case() -> None:
             "permute": 0,
             "slice": 0,
         },
-        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_path="tests/kernels/data/llamacpp_test.v2.yaml",
         source_group_index=0,
         source_case_index=0,
     )
@@ -1823,7 +1827,7 @@ def test_v2_sum_rows_permuted_case_stays_unmapped() -> None:
             "permute": 1,
             "slice": 0,
         },
-        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_path="tests/kernels/data/llamacpp_test.v2.yaml",
         source_group_index=0,
         source_case_index=0,
     )
@@ -1845,7 +1849,7 @@ def test_v2_rms_norm_route_resolves_for_contiguous_eps0_case() -> None:
             "ne": [1025, 5, 4, 3],
             "v": 0,
         },
-        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_path="tests/kernels/data/llamacpp_test.v2.yaml",
         source_group_index=0,
         source_case_index=0,
     )
@@ -1867,7 +1871,7 @@ def test_v2_rms_norm_nonzero_eps_case_stays_unmapped() -> None:
             "ne": [64, 5, 4, 3],
             "v": 0,
         },
-        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_path="tests/kernels/data/llamacpp_test.v2.yaml",
         source_group_index=0,
         source_case_index=0,
     )
@@ -1888,7 +1892,7 @@ def test_v2_swiglu_route_resolves_for_packed_contiguous_case() -> None:
             "swapped": 0,
             "v": 0,
         },
-        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_path="tests/kernels/data/llamacpp_test.v2.yaml",
         source_group_index=0,
         source_case_index=0,
     )
@@ -1916,7 +1920,7 @@ def test_v2_model_style_swiglu_split_sources_pack_into_existing_route(rows: int)
             "op_params": ["0:2"],
             "sources": f"f32[14336,{rows},1,1],f32[14336,{rows},1,1]",
         },
-        source_path="tests/models/data/Llama-3.3-8B-Instruct.Q8_0.yaml",
+        source_path="tests/models/data/Llama-3.3-8B-Instruct.Q8_0.v2.yaml",
         source_group_index=0,
         source_case_index=0,
     )
@@ -1949,7 +1953,7 @@ def test_v2_model_style_swiglu_unknown_op_params_stays_unmapped() -> None:
             "op_params": ["1:2"],
             "sources": "f32[14336,1,1,1],f32[14336,1,1,1]",
         },
-        source_path="tests/models/data/Llama-3.3-8B-Instruct.Q8_0.yaml",
+        source_path="tests/models/data/Llama-3.3-8B-Instruct.Q8_0.v2.yaml",
         source_group_index=0,
         source_case_index=0,
     )
@@ -1970,7 +1974,7 @@ def test_v2_swiglu_split_case_stays_unmapped_without_split_route() -> None:
             "split": True,
             "v": 0,
         },
-        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_path="tests/kernels/data/llamacpp_test.v2.yaml",
         source_group_index=0,
         source_case_index=0,
     )
@@ -1991,7 +1995,7 @@ def test_v2_swiglu_swapped_case_stays_unmapped() -> None:
             "swapped": 1,
             "v": 0,
         },
-        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_path="tests/kernels/data/llamacpp_test.v2.yaml",
         source_group_index=0,
         source_case_index=0,
     )
@@ -2015,7 +2019,7 @@ def test_v2_get_rows_route_resolves_for_base_f32_case() -> None:
             "r": 4,
             "v": 0,
         },
-        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_path="tests/kernels/data/llamacpp_test.v2.yaml",
         source_group_index=0,
         source_case_index=0,
     )
@@ -2051,7 +2055,7 @@ def test_v2_get_rows_route_resolves_for_q8_0_case() -> None:
             "r": 4,
             "v": 0,
         },
-        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_path="tests/kernels/data/llamacpp_test.v2.yaml",
         source_group_index=0,
         source_case_index=0,
     )
@@ -2085,7 +2089,7 @@ def test_v2_model_style_get_rows_f32_uses_source_table_row_count() -> None:
             "ne": [4096, 512, 1, 1],
             "sources": "f32[4096,512,1,1],i32[512,1,1,1]",
         },
-        source_path="tests/models/data/Llama-3.3-8B-Instruct.Q8_0.yaml",
+        source_path="tests/models/data/Llama-3.3-8B-Instruct.Q8_0.v2.yaml",
         source_group_index=0,
         source_case_index=1,
     )
@@ -2119,7 +2123,7 @@ def test_v2_model_style_get_rows_q8_0_preserves_embedding_table_rows() -> None:
             "ne": [4096, 512, 1, 1],
             "sources": "q8_0[4096,128256,1,1],i32[512,1,1,1]",
         },
-        source_path="tests/models/data/Llama-3.3-8B-Instruct.Q8_0.yaml",
+        source_path="tests/models/data/Llama-3.3-8B-Instruct.Q8_0.v2.yaml",
         source_group_index=1,
         source_case_index=1,
     )
@@ -2151,7 +2155,7 @@ def test_v2_get_rows_route_resolves_for_q4_k_case() -> None:
             "r": 4,
             "v": 0,
         },
-        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_path="tests/kernels/data/llamacpp_test.v2.yaml",
         source_group_index=0,
         source_case_index=0,
     )
@@ -2182,7 +2186,7 @@ def test_v2_get_rows_route_resolves_for_q5_k_case() -> None:
             "r": 4,
             "v": 0,
         },
-        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_path="tests/kernels/data/llamacpp_test.v2.yaml",
         source_group_index=0,
         source_case_index=0,
     )
@@ -2213,7 +2217,7 @@ def test_v2_get_rows_route_resolves_for_q6_k_case() -> None:
             "r": 4,
             "v": 0,
         },
-        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_path="tests/kernels/data/llamacpp_test.v2.yaml",
         source_group_index=0,
         source_case_index=0,
     )
@@ -2279,7 +2283,7 @@ def test_v2_get_rows_view_case_stays_unmapped() -> None:
             "r": 4,
             "v": 1,
         },
-        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_path="tests/kernels/data/llamacpp_test.v2.yaml",
         source_group_index=0,
         source_case_index=0,
     )
@@ -2303,7 +2307,7 @@ def test_v2_get_rows_non_unit_be1_case_stays_unmapped() -> None:
             "r": 4,
             "v": 0,
         },
-        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_path="tests/kernels/data/llamacpp_test.v2.yaml",
         source_group_index=0,
         source_case_index=0,
     )
@@ -2323,7 +2327,7 @@ def test_v2_argsort_route_resolves_for_base_f32_case() -> None:
             "ne": [128, 1, 1, 1],
             "order": 0,
         },
-        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_path="tests/kernels/data/llamacpp_test.v2.yaml",
         source_group_index=0,
         source_case_index=0,
     )
@@ -2343,7 +2347,7 @@ def test_v2_argsort_ascending_case_stays_unmapped() -> None:
             "ne": [128, 1, 1, 1],
             "order": 1,
         },
-        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_path="tests/kernels/data/llamacpp_test.v2.yaml",
         source_group_index=0,
         source_case_index=0,
     )
@@ -2363,7 +2367,7 @@ def test_v2_argsort_non_route_shape_case_stays_unmapped() -> None:
             "ne": [127, 1, 1, 1],
             "order": 0,
         },
-        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_path="tests/kernels/data/llamacpp_test.v2.yaml",
         source_group_index=0,
         source_case_index=0,
     )
@@ -2389,7 +2393,7 @@ def test_v2_mul_mat_route_resolves_for_small_contiguous_f32_case() -> None:
             "o": 1,
             "per": [0, 1, 2, 3],
         },
-        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_path="tests/kernels/data/llamacpp_test.v2.yaml",
         source_group_index=0,
         source_case_index=0,
     )
@@ -2425,7 +2429,7 @@ def test_v2_mul_mat_route_resolves_for_logits_cols1_f32_case() -> None:
             "o": 1,
             "per": [0, 1, 2, 3],
         },
-        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_path="tests/kernels/data/llamacpp_test.v2.yaml",
         source_group_index=4,
         source_case_index=6,
     )
@@ -2462,7 +2466,7 @@ def test_v2_mul_mat_route_resolves_for_logits_cols1_f16_batched_case() -> None:
             "o": 1,
             "per": [0, 1, 2, 3],
         },
-        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_path="tests/kernels/data/llamacpp_test.v2.yaml",
         source_group_index=2,
         source_case_index=6,
     )
@@ -2513,7 +2517,7 @@ def test_v2_mul_mat_route_resolves_for_batched_logits_cols1_f16_case() -> None:
             "o": 1,
             "per": [0, 1, 2, 3],
         },
-        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_path="tests/kernels/data/llamacpp_test.v2.yaml",
         source_group_index=2,
         source_case_index=40,
     )
@@ -2572,7 +2576,7 @@ def test_v2_mul_mat_route_resolves_for_q8_0_case() -> None:
             "o": 1,
             "per": [0, 1, 2, 3],
         },
-        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_path="tests/kernels/data/llamacpp_test.v2.yaml",
         source_group_index=0,
         source_case_index=0,
     )
@@ -2652,7 +2656,7 @@ def test_v2_model_style_mul_mat_q8_0_resolves_to_contiguous_2d_route(
             "op_params": [],
             "sources": sources,
         },
-        source_path="tests/models/data/Llama-3.3-8B-Instruct.Q8_0.yaml",
+        source_path="tests/models/data/Llama-3.3-8B-Instruct.Q8_0.v2.yaml",
         source_group_index=0,
         source_case_index=0,
     )
@@ -2662,6 +2666,315 @@ def test_v2_model_style_mul_mat_q8_0_resolves_to_contiguous_2d_route(
     assert isinstance(result, ResolvedBenchmarkCase)
     assert result.route_id == "mul_mat_q8_0_f32_contiguous_2d"
     assert _resolved_shape(result) == expected_shape
+
+
+@pytest.mark.parametrize(
+    ("src0_dtype", "src0_shape", "src1_shape", "dst_shape", "expected_route_id", "expected_shape"),
+    (
+        (
+            "Q8_0",
+            [4096, 1024, 1, 1],
+            [4096, 1, 1, 1],
+            [1024, 1, 1, 1],
+            "mul_mat_q8_0_f32_contiguous_4d",
+            {"k": 4096, "rows": 1024, "cols": 1},
+        ),
+        (
+            "Q4_K",
+            [256, 16, 1, 1],
+            [256, 8, 1, 1],
+            [16, 8, 1, 1],
+            "mul_mat_q4_k_f32_direct_contiguous_4d",
+            {"k": 256, "rows": 16, "cols": 8},
+        ),
+        (
+            "Q6_K",
+            [256, 16, 1, 1],
+            [256, 8, 1, 1],
+            [16, 8, 1, 1],
+            "mul_mat_q6_k_f32_direct_contiguous_4d",
+            {"k": 256, "rows": 16, "cols": 8},
+        ),
+    ),
+)
+def test_yaml_route_import_matches_rank4_quantized_mul_mat_descriptor(
+    tmp_path: Path,
+    src0_dtype: str,
+    src0_shape: list[int],
+    src1_shape: list[int],
+    dst_shape: list[int],
+    expected_route_id: str,
+    expected_shape: dict[str, int],
+) -> None:
+    yaml_path = tmp_path / "mul_mat.yaml"
+    yaml_path.write_text(
+        json.dumps(
+            {
+                "ops": {
+                    "MUL_MAT": [
+                        {
+                            "inputs": [
+                                {"dtype": src0_dtype, "shape": src0_shape},
+                                {"dtype": "F32", "shape": src1_shape},
+                            ],
+                            "destinations": [
+                                {"dtype": "F32", "shape": dst_shape},
+                            ],
+                        }
+                    ]
+                }
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    output_dir = tmp_path / "route-import"
+    summary = materialize_yaml_route_import(
+        [yaml_path],
+        output_dir=output_dir,
+        routing_dir=ACTUAL_V2_ROUTING_DIR,
+    )
+
+    op_summary = next(row for row in summary["operations"] if row["op"] == "MUL_MAT")
+    assert op_summary["matched_case_count"] == 1
+    route_matches = json.loads((output_dir / "ops" / "MUL_MAT" / "route-matches.json").read_text())
+    assert route_matches["rows"][0]["matched_route_ids"] == [expected_route_id]
+    assert summary["generated_config_count"] == 1
+    config_path = Path(summary["generated_config_paths"][0])
+    config = json.loads(config_path.read_text())
+    assert config["route_id"] == expected_route_id
+    shape = dict(zip(config["params"], config["cases"][0], strict=True))
+    assert shape["k"] == expected_shape["k"]
+    assert shape["rows"] == expected_shape["rows"]
+    assert shape["cols"] == expected_shape["cols"]
+
+
+def test_yaml_route_import_matches_unmasked_rank4_soft_max_descriptor(tmp_path: Path) -> None:
+    yaml_path = tmp_path / "soft_max.yaml"
+    yaml_path.write_text(
+        json.dumps(
+            {
+                "ops": {
+                    "SOFT_MAX": [
+                        {
+                            "inputs": [{"dtype": "F32", "shape": [16, 2, 32, 1]}],
+                            "destinations": [{"dtype": "F32", "shape": [16, 2, 32, 1]}],
+                            "attributes": {
+                                "m_prec": "f16",
+                                "mask": 0,
+                                "max_bias": 0.0,
+                                "nr23": [1, 1],
+                                "scale": 0.1,
+                                "sinks": 0,
+                            },
+                        },
+                        {
+                            "inputs": [{"dtype": "F32", "shape": [16, 2, 32, 1]}],
+                            "destinations": [{"dtype": "F32", "shape": [16, 2, 32, 1]}],
+                            "attributes": {
+                                "m_prec": "f16",
+                                "mask": 0,
+                                "max_bias": 0.0,
+                                "nr23": [1, 1],
+                                "scale": 0.1,
+                                "sinks": 1,
+                            },
+                        },
+                        {
+                            "inputs": [{"dtype": "F32", "shape": [16, 2, 32, 1]}],
+                            "destinations": [{"dtype": "F32", "shape": [16, 2, 32, 1]}],
+                            "attributes": {
+                                "m_prec": "f16",
+                                "mask": 1,
+                                "max_bias": 0.0,
+                                "nr23": [1, 1],
+                                "scale": 0.1,
+                                "sinks": 0,
+                            },
+                        },
+                    ]
+                }
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    output_dir = tmp_path / "route-import"
+    summary = materialize_yaml_route_import(
+        [yaml_path],
+        output_dir=output_dir,
+        routing_dir=ACTUAL_V2_ROUTING_DIR,
+    )
+
+    op_summary = next(row for row in summary["operations"] if row["op"] == "SOFT_MAX")
+    assert op_summary["matched_case_count"] == 2
+    assert op_summary["unmatched_case_count"] == 1
+    route_matches = json.loads((output_dir / "ops" / "SOFT_MAX" / "route-matches.json").read_text())
+    assert route_matches["rows"][0]["matched_route_ids"] == ["soft_max_f32_contiguous_4d"]
+    assert route_matches["rows"][1]["matched_route_ids"] == ["soft_max_f32_mask_contiguous_4d"]
+    route_unmatched = json.loads((output_dir / "ops" / "SOFT_MAX" / "route-unmatched.json").read_text())
+    assert route_unmatched["rows"][0]["case"]["attributes"]["sinks"] == 1
+    configs = {
+        json.loads(Path(raw_path).read_text())["route_id"]: json.loads(Path(raw_path).read_text())
+        for raw_path in summary["generated_config_paths"]
+    }
+    plain_shape = dict(
+        zip(
+            configs["soft_max_f32_contiguous_4d"]["params"],
+            configs["soft_max_f32_contiguous_4d"]["cases"][0],
+            strict=True,
+        )
+    )
+    masked_shape = dict(
+        zip(
+            configs["soft_max_f32_mask_contiguous_4d"]["params"],
+            configs["soft_max_f32_mask_contiguous_4d"]["cases"][0],
+            strict=True,
+        )
+    )
+    assert plain_shape["ncols"] == 16
+    assert plain_shape["nrows"] == 64
+    assert masked_shape["ncols"] == 16
+    assert masked_shape["nrows"] == 64
+
+
+def test_yaml_route_import_matches_default_rank4_rope_descriptor(tmp_path: Path) -> None:
+    yaml_path = tmp_path / "rope.yaml"
+    yaml_path.write_text(
+        json.dumps(
+            {
+                "ops": {
+                    "ROPE": [
+                        {
+                            "inputs": [{"dtype": "F32", "shape": [128, 32, 2, 1]}],
+                            "destinations": [{"dtype": "F32", "shape": [128, 32, 2, 1]}],
+                            "attributes": {
+                                "af": 1.0,
+                                "ef": 0.0,
+                                "ff": 0,
+                                "fs": 1.0,
+                                "mode": 0,
+                                "n_ctx": 512,
+                                "n_dims": 128,
+                            },
+                        },
+                        {
+                            "inputs": [
+                                {
+                                    "dtype": "F32",
+                                    "shape": [128, 32, 2, 1],
+                                    "storage_shape": [256, 128, 6, 1],
+                                }
+                            ],
+                            "destinations": [{"dtype": "F32", "shape": [128, 32, 2, 1]}],
+                            "attributes": {
+                                "af": 1.0,
+                                "ef": 0.0,
+                                "ff": 0,
+                                "fs": 1.0,
+                                "mode": 0,
+                                "n_ctx": 512,
+                                "n_dims": 128,
+                            },
+                        },
+                        {
+                            "inputs": [{"dtype": "F32", "shape": [64, 128, 2, 1]}],
+                            "destinations": [{"dtype": "F32", "shape": [64, 128, 2, 1]}],
+                            "attributes": {
+                                "af": 1.0,
+                                "ef": 0.0,
+                                "ff": 0,
+                                "fs": 1.0,
+                                "mode": 2,
+                                "n_ctx": 512,
+                                "n_dims": 64,
+                            },
+                        },
+                        {
+                            "inputs": [
+                                {
+                                    "dtype": "F32",
+                                    "shape": [64, 128, 2, 1],
+                                    "storage_shape": [128, 512, 6, 1],
+                                }
+                            ],
+                            "destinations": [{"dtype": "F32", "shape": [64, 128, 2, 1]}],
+                            "attributes": {
+                                "af": 1.0,
+                                "ef": 0.0,
+                                "ff": 0,
+                                "fs": 1.0,
+                                "mode": 2,
+                                "n_ctx": 512,
+                                "n_dims": 64,
+                            },
+                        },
+                    ]
+                }
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    output_dir = tmp_path / "route-import"
+    summary = materialize_yaml_route_import(
+        [yaml_path],
+        output_dir=output_dir,
+        routing_dir=ACTUAL_V2_ROUTING_DIR,
+    )
+
+    op_summary = next(row for row in summary["operations"] if row["op"] == "ROPE")
+    assert op_summary["matched_case_count"] == 4
+    assert op_summary["unmatched_case_count"] == 0
+    route_matches = json.loads((output_dir / "ops" / "ROPE" / "route-matches.json").read_text())
+    assert route_matches["rows"][0]["matched_route_ids"] == ["rope_f32_normal_n128_h32_t2_contiguous_4d"]
+    assert route_matches["rows"][1]["matched_route_ids"] == ["rope_f32_normal_n128_h32_t2_contiguous_4d"]
+    assert route_matches["rows"][2]["matched_route_ids"] == ["rope_neox_f32_n64_h128_t2_contiguous_4d"]
+    assert route_matches["rows"][3]["matched_route_ids"] == ["rope_neox_f32_n64_h128_t2_contiguous_4d"]
+    route_shapes: dict[str, list[dict[str, int]]] = {}
+    for raw_path in summary["generated_config_paths"]:
+        config = json.loads(Path(raw_path).read_text())
+        route_shapes.setdefault(config["route_id"], []).extend(
+            dict(zip(config["params"], case_values, strict=True)) for case_values in config["cases"]
+        )
+    normal_shapes = route_shapes["rope_f32_normal_n128_h32_t2_contiguous_4d"]
+    neox_shapes = route_shapes["rope_neox_f32_n64_h128_t2_contiguous_4d"]
+    normal_shape = next(shape for shape in normal_shapes if "src0_d1_stride" not in shape)
+    normal_padded_shape = next(shape for shape in normal_shapes if "src0_d1_stride" in shape)
+    neox_shape = next(shape for shape in neox_shapes if "src0_d1_stride" not in shape)
+    neox_padded_shape = next(shape for shape in neox_shapes if "src0_d1_stride" in shape)
+    assert normal_shape["rope.ncols"] == 128
+    assert normal_shape["rope.n_dims"] == 128
+    assert normal_shape["rope.nheads"] == 32
+    assert normal_shape["rope.ntokens"] == 2
+    assert normal_shape["rope.src0_head_stride"] == 128
+    assert normal_shape["rope.src0_token_stride"] == 4096
+    assert normal_shape["rope.dst_head_stride"] == 128
+    assert normal_shape["rope.dst_token_stride"] == 4096
+    assert normal_shape["rope.pos_token_stride"] == 1
+    assert normal_padded_shape["rope.src0_head_stride"] == 256
+    assert normal_padded_shape["rope.src0_token_stride"] == 32768
+    assert normal_padded_shape["rope.dst_head_stride"] == 128
+    assert normal_padded_shape["rope.dst_token_stride"] == 4096
+    assert neox_shape["rope.ncols"] == 64
+    assert "rope.n_dims" not in neox_shape
+    assert neox_shape["rope.nheads"] == 128
+    assert neox_shape["rope.ntokens"] == 2
+    assert neox_shape["rope.src0_head_stride"] == 64
+    assert neox_shape["rope.src0_token_stride"] == 8192
+    assert neox_shape["rope.dst_head_stride"] == 64
+    assert neox_shape["rope.dst_token_stride"] == 8192
+    assert neox_shape["rope.pos_token_stride"] == 1
+    assert neox_padded_shape["rope.src0_head_stride"] == 128
+    assert neox_padded_shape["rope.src0_token_stride"] == 65536
+    assert neox_padded_shape["rope.dst_head_stride"] == 64
+    assert neox_padded_shape["rope.dst_token_stride"] == 8192
 
 
 def test_v2_mul_mat_route_resolves_for_q4_k_direct_case() -> None:
@@ -2679,7 +2992,7 @@ def test_v2_mul_mat_route_resolves_for_q4_k_direct_case() -> None:
             "o": 1,
             "per": [0, 1, 2, 3],
         },
-        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_path="tests/kernels/data/llamacpp_test.v2.yaml",
         source_group_index=0,
         source_case_index=0,
     )
@@ -2713,7 +3026,7 @@ def test_v2_mul_mat_id_route_resolves_for_q4_k_case() -> None:
             "n_mats": 4,
             "n_used": 2,
         },
-        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_path="tests/kernels/data/llamacpp_test.v2.yaml",
         source_group_index=0,
         source_case_index=0,
     )
@@ -2757,7 +3070,7 @@ def test_v2_mul_mat_id_route_resolves_for_q5_k_case() -> None:
             "n_mats": 4,
             "n_used": 2,
         },
-        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_path="tests/kernels/data/llamacpp_test.v2.yaml",
         source_group_index=0,
         source_case_index=0,
     )
@@ -2801,7 +3114,7 @@ def test_v2_mul_mat_id_route_resolves_for_q6_k_case() -> None:
             "n_mats": 4,
             "n_used": 2,
         },
-        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_path="tests/kernels/data/llamacpp_test.v2.yaml",
         source_group_index=0,
         source_case_index=0,
     )
@@ -2847,7 +3160,7 @@ def test_v2_mul_mat_route_resolves_for_q5_dot16_case() -> None:
             "o": 1,
             "per": [0, 1, 2, 3],
         },
-        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_path="tests/kernels/data/llamacpp_test.v2.yaml",
         source_group_index=0,
         source_case_index=0,
     )
@@ -2883,7 +3196,7 @@ def test_v2_mul_mat_route_prefers_q6_rows2_for_cols1_case() -> None:
             "o": 1,
             "per": [0, 1, 2, 3],
         },
-        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_path="tests/kernels/data/llamacpp_test.v2.yaml",
         source_group_index=0,
         source_case_index=0,
     )
@@ -2919,7 +3232,7 @@ def test_v2_mul_mat_route_resolves_for_q6_direct_case() -> None:
             "o": 1,
             "per": [0, 1, 2, 3],
         },
-        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_path="tests/kernels/data/llamacpp_test.v2.yaml",
         source_group_index=0,
         source_case_index=0,
     )
@@ -3045,7 +3358,7 @@ def test_v2_flash_attn_ext_route_leaves_maskless_grouped_yaml_case_unmapped() ->
             "mask": 0,
             "sinks": 0,
         },
-        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_path="tests/kernels/data/llamacpp_test.v2.yaml",
         source_group_index=1,
         source_case_index=3,
     )
@@ -3077,7 +3390,7 @@ def test_v2_flash_attn_ext_masked_identity_route_resolves_grouped_yaml_family(kv
             "prec": "f32",
             "sinks": 0,
         },
-        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_path="tests/kernels/data/llamacpp_test.v2.yaml",
         source_group_index=1,
         source_case_index=0,
     )
@@ -3143,7 +3456,7 @@ def test_v2_mul_mat_broadcast_case_stays_unmapped() -> None:
             "o": 1,
             "per": [0, 1, 2, 3],
         },
-        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_path="tests/kernels/data/llamacpp_test.v2.yaml",
         source_group_index=0,
         source_case_index=0,
     )
@@ -3170,7 +3483,7 @@ def test_v2_mul_mat_permuted_case_stays_unmapped() -> None:
             "o": 1,
             "per": [0, 2, 1, 3],
         },
-        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_path="tests/kernels/data/llamacpp_test.v2.yaml",
         source_group_index=0,
         source_case_index=0,
     )
@@ -3199,7 +3512,7 @@ def test_v2_rope_route_resolves_for_plain_f32_case() -> None:
             "ne_a": [128, 32, 2, 1],
             "v": 0,
         },
-        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_path="tests/kernels/data/llamacpp_test.v2.yaml",
         source_group_index=0,
         source_case_index=0,
     )
@@ -3244,7 +3557,7 @@ def test_v2_rope_route_resolves_for_scaled_plain_f32_case() -> None:
             "ne_a": [128, 32, 2, 1],
             "v": 0,
         },
-        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_path="tests/kernels/data/llamacpp_test.v2.yaml",
         source_group_index=0,
         source_case_index=152,
     )
@@ -3289,7 +3602,7 @@ def test_v2_rope_view_case_stays_unmapped() -> None:
             "ne_a": [128, 32, 2, 1],
             "v": 1,
         },
-        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_path="tests/kernels/data/llamacpp_test.v2.yaml",
         source_group_index=0,
         source_case_index=0,
     )
@@ -3318,7 +3631,7 @@ def test_v2_rope_neox_route_resolves_for_plain_f32_case() -> None:
             "ne_a": [64, 128, 2, 1],
             "v": 0,
         },
-        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_path="tests/kernels/data/llamacpp_test.v2.yaml",
         source_group_index=0,
         source_case_index=0,
     )
@@ -3364,7 +3677,7 @@ def test_v2_rope_neox_partial_dims_case_stays_unmapped() -> None:
             "ne_a": [80, 32, 2, 1],
             "v": 0,
         },
-        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_path="tests/kernels/data/llamacpp_test.v2.yaml",
         source_group_index=0,
         source_case_index=20,
     )
@@ -3473,7 +3786,7 @@ def test_v2_rope_set_rows_route_resolves_for_f16_mode0_case() -> None:
             "mode": 0,
             "ne_a": [128, 32, 1, 1],
         },
-        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_path="tests/kernels/data/llamacpp_test.v2.yaml",
         source_group_index=0,
         source_case_index=0,
     )
@@ -3505,7 +3818,7 @@ def test_v2_rope_set_rows_f32_case_stays_unmapped() -> None:
             "mode": 0,
             "ne_a": [128, 32, 8, 1],
         },
-        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_path="tests/kernels/data/llamacpp_test.v2.yaml",
         source_group_index=1,
         source_case_index=4,
     )
@@ -3526,7 +3839,7 @@ def test_v2_rope_set_rows_batch_case_stays_unmapped() -> None:
             "mode": 0,
             "ne_a": [128, 32, 8, 3],
         },
-        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_path="tests/kernels/data/llamacpp_test.v2.yaml",
         source_group_index=0,
         source_case_index=5,
     )
@@ -3547,7 +3860,7 @@ def test_v2_rope_set_rows_multi_token_case_stays_unmapped() -> None:
             "mode": 0,
             "ne_a": [128, 32, 8, 1],
         },
-        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_path="tests/kernels/data/llamacpp_test.v2.yaml",
         source_group_index=0,
         source_case_index=4,
     )
@@ -3573,7 +3886,7 @@ def test_v2_soft_max_route_resolves_for_plain_f32_case() -> None:
             "scale": 1.0,
             "sinks": 0,
         },
-        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_path="tests/kernels/data/llamacpp_test.v2.yaml",
         source_group_index=0,
         source_case_index=0,
     )
@@ -3600,7 +3913,7 @@ def test_v2_soft_max_masked_case_stays_unmapped() -> None:
             "scale": 1.0,
             "sinks": 0,
         },
-        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_path="tests/kernels/data/llamacpp_test.v2.yaml",
         source_group_index=0,
         source_case_index=0,
     )
@@ -3627,7 +3940,7 @@ def test_v2_soft_max_masked_broadcast_case_stays_unmapped() -> None:
             "scale": 1.0,
             "sinks": 0,
         },
-        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_path="tests/kernels/data/llamacpp_test.v2.yaml",
         source_group_index=0,
         source_case_index=0,
     )
@@ -3654,7 +3967,7 @@ def test_v2_soft_max_large_ncols_case_stays_unmapped() -> None:
             "scale": 1.0,
             "sinks": 0,
         },
-        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_path="tests/kernels/data/llamacpp_test.v2.yaml",
         source_group_index=0,
         source_case_index=0,
     )
