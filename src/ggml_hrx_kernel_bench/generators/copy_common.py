@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from string import Template
 
+from .utils import load_template, repo_root  # noqa: F401  (repo_root re-exported for copy.py)
+
 
 WORKGROUP_SIZE = 256
 LOAD_WRITE_TEMPLATE = Template(
@@ -170,13 +172,9 @@ def render_compute_block(
     raise AssertionError(f"unexpected conversion kind: {conversion}")
 
 
-def repo_root() -> Path:
-    return Path(__file__).resolve().parents[3]
-
-
 def load_kernel_template(name: str) -> Template:
-    return Template((repo_root() / "kernels" / "v2" / "copy" / name).read_text(encoding="utf-8"))
+    return load_template("kernels", "v2", "copy", name)
 
 
 def load_route_template(name: str) -> Template:
-    return Template((repo_root() / "catalog" / "v2" / "copy" / name).read_text(encoding="utf-8"))
+    return load_template("catalog", "v2", "copy", name)

@@ -1,20 +1,20 @@
 {
-  "id": "relu_f32_contiguous_4d",
-  "family": "relu_f32",
+  "id": "$route_id",
+  "family": "$family",
   "kernel": {
-    "source_id": "pointwise_f32",
-    "path": "relu/contiguous_4d.loom",
-    "root_symbol": "@relu_f32",
-    "export_name": "relu_f32"
+    "source_id": "$source_id",
+    "path": "$kernel_path",
+    "root_symbol": "$root_symbol",
+    "export_name": "$export_name"
   },
   "tensors": {
     "src0": {
-      "dtype": "F32",
+      "dtype": "$dtype",
       "dimensions": "src0_dimensions",
       "strides": "src0_strides"
     },
     "dst": {
-      "dtype": "F32",
+      "dtype": "$dtype",
       "dimensions": "dst_dimensions",
       "strides": "dst_strides"
     }

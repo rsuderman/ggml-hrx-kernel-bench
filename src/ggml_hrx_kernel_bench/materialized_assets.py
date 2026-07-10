@@ -11,6 +11,12 @@ from .generators.copy import (
     render_catalog_artifacts,
     render_kernel_artifacts,
 )
+from .generators.unary import (
+    generator_input_paths as unary_generator_input_paths,
+    render_catalog_artifacts as unary_render_catalog_artifacts,
+    render_kernel_artifacts as unary_render_kernel_artifacts,
+    router_route_lists as unary_router_route_lists,
+)
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -109,11 +115,17 @@ def _copied_catalog_paths() -> tuple[Path, ...]:
 
 
 def _generated_kernel_paths() -> tuple[Path, ...]:
-    return tuple(Path("kernels") / "v2" / relative_path for relative_path in render_kernel_artifacts())
+    return tuple(
+        Path("kernels") / "v2" / relative_path
+        for relative_path in (*render_kernel_artifacts(), *unary_render_kernel_artifacts())
+    )
 
 
 def _generated_catalog_paths() -> tuple[Path, ...]:
-    return tuple(Path("catalog") / "v2" / relative_path for relative_path in render_catalog_artifacts())
+    return tuple(
+        Path("catalog") / "v2" / relative_path
+        for relative_path in (*render_catalog_artifacts(), *unary_render_catalog_artifacts())
+    )
 
 
 def _v2_router_path(output_root: Path) -> Path:
@@ -130,6 +142,11 @@ def _validate_materialized_v2_router(output_root: Path) -> None:
         raise FileNotFoundError(
             f"materialized v2 router is missing generated CPY routes at {router_path}"
         )
+    for op_key, route_paths in unary_router_route_lists().items():
+        if routes.get(op_key) != route_paths:
+            raise FileNotFoundError(
+                f"materialized v2 router is missing generated {op_key} routes at {router_path}"
+            )
 
 
 def _validate_materialized_asset_root(output_root: Path) -> None:
@@ -158,6 +175,7 @@ def _materialization_inputs() -> list[Path]:
         inputs.extend(sorted(SOURCE_ROUTING_DIRS[version].rglob("*.json")))
     inputs.append(Path(__file__))
     inputs.extend(generator_input_paths())
+    inputs.extend(unary_generator_input_paths())
     return inputs
 
 
@@ -234,6 +252,16 @@ def materialize_asset_root(output_root: Path, *, force: bool = False) -> Path:
         destination_path.parent.mkdir(parents=True, exist_ok=True)
         destination_path.write_text(contents, encoding="utf-8")
 
+    for relative_path, contents in unary_render_kernel_artifacts().items():
+        destination_path = destination_root / "kernels" / "v2" / relative_path
+        destination_path.parent.mkdir(parents=True, exist_ok=True)
+        destination_path.write_text(contents, encoding="utf-8")
+
+    for relative_path, contents in unary_render_catalog_artifacts().items():
+        destination_path = destination_root / "catalog" / "v2" / relative_path
+        destination_path.parent.mkdir(parents=True, exist_ok=True)
+        destination_path.write_text(contents, encoding="utf-8")
+
     _write_materialized_v2_router(destination_root)
     _asset_stamp_path(destination_root).write_text("materialized\n", encoding="utf-8")
     return destination_root
@@ -246,6 +274,8 @@ def _write_materialized_v2_router(destination_root: Path) -> None:
     if not isinstance(routes, dict):
         raise RuntimeError(f"invalid v2 router payload at {router_path}")
     routes["CPY"] = list(generated_catalog_route_paths())
+    for op_key, route_paths in unary_router_route_lists().items():
+        routes[op_key] = route_paths
     router_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 
 

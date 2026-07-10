@@ -1391,8 +1391,10 @@ def _strided_unary_arrays(
 def _unary_arrays(np: Any, candidate: Candidate, seed: int) -> dict[str, Any]:
     common_dims = _pointwise_common_dims(candidate)
     # V2 encodes shape as ranked dims "d0","d1",... (plus per-tensor deltas like
-    # "src0_d1_stride" when a view is non-contiguous). Legacy V1 families instead use
-    # "ncols"/"nrows"/"k", for which _ranked_shape returns None.
+    # "src0_d1_stride" when a view is non-contiguous). Legacy V1 families
+    # instead use "ncols"/"nrows"/"k", for which _ranked_shape returns None.
+    # Strided views are only supported on V2 path; the stride check below (not
+    # this guard) is what selects the strided branch.
     if common_dims is not None:
         src0_dims = _copy_tensor_dims(candidate, "src0", common_dims)
         src0_strides = _copy_tensor_strides(candidate, "src0", src0_dims)
@@ -1419,10 +1421,6 @@ def _unary_arrays(np: Any, candidate: Candidate, seed: int) -> dict[str, Any]:
             "expected": _unary_apply(np, candidate.family, src0).astype(np.float32).reshape(elems),
         },
     }
-
-
-def _abs_arrays(np: Any, candidate: Candidate, seed: int) -> dict[str, Any]:
-    return _unary_arrays(np, candidate, seed)
 
 
 def _rms_norm_mul_arrays(np: Any, candidate: Candidate, seed: int) -> dict[str, Any]:
@@ -2525,7 +2523,7 @@ check.benchmark<{case_name}> {bench_name}
     return bench_name, {"status": "ok", "workbench_path": str(workbench_path)}
 
 
-def _write_abs_workbench(candidate: Candidate, linked_source: Path, workbench_path: Path, fixture_dir: Path) -> tuple[str, dict[str, Any]]:
+def _write_unary_workbench(candidate: Candidate, linked_source: Path, workbench_path: Path, fixture_dir: Path) -> tuple[str, dict[str, Any]]:
     _, _, elems = _dims(candidate)
     src0_elems, dst_elems = elems, elems
     common_dims = _pointwise_common_dims(candidate)
@@ -2537,7 +2535,7 @@ def _write_abs_workbench(candidate: Candidate, linked_source: Path, workbench_pa
             src0_elems = _buffer_length(src0_dims, src0_strides)
             dst_elems = _product(common_dims)
     case_name, bench_name = _case_names(candidate)
-    if candidate.family == "abs_f16":
+    if candidate.family.endswith("_f16"):
         body = "\n".join(
             [
                 _read_i16(workbench_path, fixture_dir, "src0", src0_elems),
@@ -2545,32 +2543,6 @@ def _write_abs_workbench(candidate: Candidate, linked_source: Path, workbench_pa
                 _read_i16(workbench_path, fixture_dir, "expected", dst_elems),
                 f"  func.call {candidate.root_symbol}(%src0, %dst) : (tensor<{src0_elems}xi16>, tensor<{dst_elems}xi16>)",
                 f"  check.expect.equal actual(%dst) expected(%expected) : tensor<{dst_elems}xi16>",
-            ]
-        )
-    else:
-        body = "\n".join(
-            [
-                _read_f32(workbench_path, fixture_dir, "src0", src0_elems),
-                _read_f32(workbench_path, fixture_dir, "dst_init", dst_elems).replace("%dst_init", "%dst"),
-                _read_f32(workbench_path, fixture_dir, "expected", dst_elems),
-                f"  func.call {candidate.root_symbol}(%src0, %dst) : (tensor<{src0_elems}xf32>, tensor<{dst_elems}xf32>)",
-                f"  check.expect.close actual(%dst) expected(%expected) atol(0.0) rtol(0.0) nan(same) : tensor<{dst_elems}xf32>",
-            ]
-        )
-    return _emit_case(linked_source, workbench_path, case_name, bench_name, body)
-
-
-def _write_unary_workbench(candidate: Candidate, linked_source: Path, workbench_path: Path, fixture_dir: Path) -> tuple[str, dict[str, Any]]:
-    _, _, elems = _dims(candidate)
-    case_name, bench_name = _case_names(candidate)
-    if candidate.family.endswith("_f16"):
-        body = "\n".join(
-            [
-                _read_i16(workbench_path, fixture_dir, "src0", elems),
-                _read_i16(workbench_path, fixture_dir, "dst_init", elems).replace("%dst_init", "%dst"),
-                _read_i16(workbench_path, fixture_dir, "expected", elems),
-                f"  func.call {candidate.root_symbol}(%src0, %dst) : (tensor<{elems}xi16>, tensor<{elems}xi16>)",
-                f"  check.expect.equal actual(%dst) expected(%expected) : tensor<{elems}xi16>",
             ]
         )
         return _emit_case(linked_source, workbench_path, case_name, bench_name, body)
@@ -2581,11 +2553,11 @@ def _write_unary_workbench(candidate: Candidate, linked_source: Path, workbench_
     }.get(candidate.family, ("0.0", "0.0"))
     body = "\n".join(
         [
-            _read_f32(workbench_path, fixture_dir, "src0", elems),
-            _read_f32(workbench_path, fixture_dir, "dst_init", elems).replace("%dst_init", "%dst"),
-            _read_f32(workbench_path, fixture_dir, "expected", elems),
-            f"  func.call {candidate.root_symbol}(%src0, %dst) : (tensor<{elems}xf32>, tensor<{elems}xf32>)",
-            f"  check.expect.close actual(%dst) expected(%expected) atol({atol}) rtol({rtol}) nan(same) : tensor<{elems}xf32>",
+            _read_f32(workbench_path, fixture_dir, "src0", src0_elems),
+            _read_f32(workbench_path, fixture_dir, "dst_init", dst_elems).replace("%dst_init", "%dst"),
+            _read_f32(workbench_path, fixture_dir, "expected", dst_elems),
+            f"  func.call {candidate.root_symbol}(%src0, %dst) : (tensor<{src0_elems}xf32>, tensor<{dst_elems}xf32>)",
+            f"  check.expect.close actual(%dst) expected(%expected) atol({atol}) rtol({rtol}) nan(same) : tensor<{dst_elems}xf32>",
         ]
     )
     return _emit_case(linked_source, workbench_path, case_name, bench_name, body)
@@ -3263,15 +3235,10 @@ ORACLE_SPECS: tuple[OracleSpec, ...] = (
         write_workbench=_write_rope_workbench,
     ),
     OracleSpec(
-        family_ids=("abs_f32", "abs_f16"),
-        generate=_logical_generate(LogicalOracleSpec(("abs_f32", "abs_f16"), "abs_numpy", {"atol": 0.0, "rtol": 0.0}, _abs_arrays, exact_kernel_abi=True)),
-        write_workbench=_write_abs_workbench,
-    ),
-    OracleSpec(
-        family_ids=("exp_f32", "exp_f16", "neg_f32", "neg_f16", "relu_f32", "relu_f16", "sqr_f32", "sqr_f16", "sqrt_f32", "sqrt_f16"),
+        family_ids=("abs_f32", "abs_f16", "exp_f32", "exp_f16", "neg_f32", "neg_f16", "relu_f32", "relu_f16", "sqr_f32", "sqr_f16", "sqrt_f32", "sqrt_f16"),
         generate=_logical_generate(
             LogicalOracleSpec(
-                ("exp_f32", "exp_f16", "neg_f32", "neg_f16", "relu_f32", "relu_f16", "sqr_f32", "sqr_f16", "sqrt_f32", "sqrt_f16"),
+                ("abs_f32", "abs_f16", "exp_f32", "exp_f16", "neg_f32", "neg_f16", "relu_f32", "relu_f16", "sqr_f32", "sqr_f16", "sqrt_f32", "sqrt_f16"),
                 "unary_numpy",
                 {"atol": 1e-5, "rtol": 1e-5},
                 _unary_arrays,

@@ -1,12 +1,6 @@
 {
   "schema": "ggml_hrx_kernel_bench.routing_descriptors.v2",
   "routes": {
-    "ABS": [
-      "abs/abs_f16.json",
-      "abs/abs_f32.json",
-      "abs/abs_f16_non_contiguous_4d.json",
-      "abs/abs_f32_non_contiguous_4d.json"
-    ],
     "CLAMP": [
       "clamp/clamp_f32.json"
     ],
@@ -42,10 +36,6 @@
       "div/div_f32_rhs_row_broadcast_2d.json",
       "div/div_f32_contiguous_1d.json",
       "div/div_f32_generic_4d.json"
-    ],
-    "EXP": [
-      "exp/exp_f16.json",
-      "exp/exp_f32.json"
     ],
     "FLASH_ATTN_EXT": [
       "softmax_kqv/softmax_kqv_f32_f16_masked_identity_kv512_4096_d128_h8_wg256_row1.json",
@@ -90,10 +80,6 @@
       "mul/mul_f32_generic_4d.json",
       "mul/rms_norm_mul_f32_n16_r60_vector_tail.json"
     ],
-    "NEG": [
-      "neg/neg_f16.json",
-      "neg/neg_f32.json"
-    ],
     "QUANTIZE": [
       "quantize/quantize_q8_1_f32_contiguous_n256_r1.json",
       "quantize/rms_norm_mul_quantize_q8_1_f32_n3072_r1_x4_recompute.json"
@@ -111,10 +97,6 @@
     "RMS_NORM": [
       "rms_norm/rms_norm_f32_contiguous_4d.json"
     ],
-    "RELU": [
-      "relu/relu_f16.json",
-      "relu/relu_f32.json"
-    ],
     "SCALE": [
       "scale/scale_f32.json"
     ],
@@ -128,14 +110,6 @@
     ],
     "SUM_ROWS": [
       "sum_rows/sum_rows_f32_contiguous_4d.json"
-    ],
-    "SQR": [
-      "sqr/sqr_f16.json",
-      "sqr/sqr_f32.json"
-    ],
-    "SQRT": [
-      "sqrt/sqrt_f16.json",
-      "sqrt/sqrt_f32.json"
     ],
     "SUB": [
       "sub/sub_f16_generic_2d.json",
