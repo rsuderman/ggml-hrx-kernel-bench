@@ -20,15 +20,11 @@ ops:
     - inputs:
         - dtype: f32
           shape: [8192, 1, 1, 1]
-        - dtype: f16
-          shape: [8192, 1, 1, 1]
       destinations:
         - dtype: f16
           shape: [8192, 1, 1, 1]
     - inputs:
         - dtype: f32
-          shape: [8192, 512, 1, 1]
-        - dtype: f16
           shape: [8192, 512, 1, 1]
       destinations:
         - dtype: f16
@@ -365,8 +361,6 @@ ops:
           shape: [1024, 1, 1, 1]
         - dtype: i64
           shape: [1, 1, 1, 1]
-        - dtype: f16
-          shape: [1024, 8192, 1, 1]
       destinations:
         - dtype: f16
           shape: [1024, 8192, 1, 1]
@@ -375,8 +369,6 @@ ops:
           shape: [1024, 512, 1, 1]
         - dtype: i64
           shape: [512, 1, 1, 1]
-        - dtype: f16
-          shape: [1024, 8192, 1, 1]
       destinations:
         - dtype: f16
           shape: [1024, 8192, 1, 1]
