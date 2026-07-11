@@ -44,6 +44,7 @@
       "softmax_kqv/softmax_kqv_f32_f16_decode_kv768_d128_h24_hkv8_wg256_rows128.json"
     ],
     "GET_ROWS": [
+      "get_rows/get_rows_f32_embedding_rows_descriptor_4d.json",
       "get_rows/get_rows_f32_embedding_rows_2d.json",
       "get_rows/get_rows_moe_weights_f32_topk_view_2d.json",
       "get_rows/get_rows_q4_k_f32_embedding_rows_2d.json",
