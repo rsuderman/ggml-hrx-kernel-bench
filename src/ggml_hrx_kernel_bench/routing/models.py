@@ -4,7 +4,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from ..import_models import ImportedSuite
 from ..observed_shapes import ObservedShapeCatalog
 from .v1.routes import Candidate
 
@@ -86,7 +85,6 @@ __all__ = [
     "CandidateQuery",
     "ExecutedCase",
     "ExportRequest",
-    "ImportedSuite",
     "RoutingExportResult",
     "RoutingContext",
     "RuntimeCaseRequest",

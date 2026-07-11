@@ -1,7 +1,5 @@
 set(GGML_HRX_MODEL_LLAMA_3_3_8B_Q8_0_GROUPED_YAML ${CMAKE_CURRENT_SOURCE_DIR}/data/Llama-3.3-8B-Instruct.Q8_0.v2.yaml)
-set(GGML_HRX_MODEL_LLAMA_3_3_8B_Q8_0_EXPECTED_IMPORT_COVERAGE_V2 ${CMAKE_CURRENT_SOURCE_DIR}/data/Llama-3.3-8B-Instruct.Q8_0.v2.import-coverage.json)
 set(GGML_HRX_MODEL_LLAMA_3_3_8B_Q8_0_EXPECTED_YAML_ROUTE_IMPORT_COVERAGE_V2 ${CMAKE_CURRENT_SOURCE_DIR}/data/Llama-3.3-8B-Instruct.Q8_0.v2.yaml-route-import-v2.import-coverage.json)
-set(GGML_HRX_MODEL_LLAMA_3_3_8B_Q8_0_GENERATED_IMPORT_DIR_V2 ${CMAKE_CURRENT_BINARY_DIR}/artifacts/Llama-3.3-8B-Instruct.Q8_0-import-v2)
 set(GGML_HRX_MODEL_LLAMA_3_3_8B_Q8_0_ROUTE_IMPORT_DIR_V2 ${CMAKE_CURRENT_BINARY_DIR}/artifacts/Llama-3.3-8B-Instruct.Q8_0-route-import-v2)
 set(GGML_HRX_KERNEL_DIR_V2 ${GGML_HRX_ASSET_ROOT}/kernels/v2)
 set(GGML_HRX_ROUTING_DIR_V2 ${GGML_HRX_ASSET_ROOT}/catalog/v2)
@@ -27,30 +25,3 @@ add_yaml_route_import_runtime_tests(
     MUL_MAT
     SET_ROWS
 )
-
-if(GGML_HRX_ENABLE_LEGACY_GROUPED_YAML_IMPORTS)
-  add_grouped_yaml_import_validation_target(
-    NAME kernel-model-llama-3-3-8b-q8-0-import-coverage-v2
-    YAML_PATH ${GGML_HRX_MODEL_LLAMA_3_3_8B_Q8_0_GROUPED_YAML}
-    OUTPUT_DIR ${GGML_HRX_MODEL_LLAMA_3_3_8B_Q8_0_GENERATED_IMPORT_DIR_V2}
-    EXPECTED_COVERAGE ${GGML_HRX_MODEL_LLAMA_3_3_8B_Q8_0_EXPECTED_IMPORT_COVERAGE_V2}
-    COMMAND_ARGS
-      --routing-version v2
-      --routing-dir ${GGML_HRX_ROUTING_DIR_V2}
-      --split-by-op
-    DEPENDS
-      ${GGML_HRX_RUNTIME_ASSET_TARGET}
-  )
-
-  add_generated_kernel_runtime_tests(
-    NAME model-llama-3-3-8b-q8-0-v2
-    GENERATED_IMPORT_DIR ${GGML_HRX_MODEL_LLAMA_3_3_8B_Q8_0_GENERATED_IMPORT_DIR_V2}
-    GROUPED_YAML ${GGML_HRX_MODEL_LLAMA_3_3_8B_Q8_0_GROUPED_YAML}
-    ROUTING_VERSION v2
-    ROUTING_DIR ${GGML_HRX_ROUTING_DIR_V2}
-    KERNEL_DIR ${GGML_HRX_KERNEL_DIR_V2}
-    EXCLUDE_OPS
-      GET_ROWS
-      MUL_MAT
-  )
-endif()

@@ -1,211 +1,73 @@
-# Grouped YAML Import Plan
+# Grouped YAML Route Import Workflow
 
-This document turns the grouped YAML importer sketch into concrete repo
-components for future implementation.
+Grouped YAML import now means descriptor route import. The importer should read
+grouped YAML cases, materialize tensor descriptors and scalar values, and ask
+the v2 route catalog whether a route matches. It must not lower cases through
+custom Python mapping registries or op-specific route-resolution code.
 
-## Goal
+## Current Path
 
-Import grouped llama.cpp workload YAML such as:
+- Entry point: `src/ggml_hrx_kernel_bench/yaml_route_import.py`
+- Build-time checker: `tests/infra/check_yaml_route_import.py`
+- Runtime test materializer: `tests/infra/generate_kernel_runtime_tests_cmake.py`
+- Llama.cpp input: `tests/kernels/data/llamacpp_test.v2.yaml`
+- Model input: `tests/models/data/Llama-3.3-8B-Instruct.Q8_0.v2.yaml`
+- Llama.cpp expected coverage:
+  `tests/kernels/data/llamacpp_test.v2.yaml-route-import-v2.import-coverage.json`
+- Model expected coverage:
+  `tests/models/data/Llama-3.3-8B-Instruct.Q8_0.v2.yaml-route-import-v2.import-coverage.json`
 
-`results/test-backend-ops-materialization/.../build-hrx.grouped.short.yaml`
+The build-time import targets are:
 
-into the current benchmark system while keeping unsupported or unmapped cases
-visible as explicit backlog items instead of silently dropping them.
+- `kernel-llama-cpp-yaml-route-import-v2`
+- `kernel-model-llama-3-3-8b-q8-0-yaml-route-import-v2`
+- `kernel-yaml-route-import-v2`
+
+The generated runtime CTest suites are named with
+`kernel-run-*-yaml-route-import-v2-<OP>-generated`.
+
+## Expected Outputs
+
+The importer should keep every YAML case visible in the generated status
+artifacts. Supported cases become route matches; unsupported cases remain in
+unmatched reports with enough detail to explain why no descriptor route matched.
+
+Per-op artifacts are written under:
+
+`build/tests/kernels/artifacts/grouped-yaml-import/ops/<OP>/`
+
+or the corresponding build output directory for the selected CMake target.
+
+Do not reintroduce the old generated `imported-workload.json` /
+`unmapped.json` model. Current status is tracked by the route-import coverage
+JSON and route match/unmatch artifacts.
+
+## Iteration Process
+
+1. Pick one op family and one narrow dtype/layout slice.
+2. Inspect the YAML cases and generated per-op route-import artifacts.
+3. Report the operation surface area before changing code:
+   - dtype combinations
+   - ranks and layouts
+   - scalar/config fields used by the YAML
+   - which cases already match routes
+   - representative missing or unsupported cases
+4. Implement the smallest descriptor, route predicate, or kernel-surface change
+   needed for that slice.
+5. Validate generated configs structurally before updating expected coverage.
+6. Run the targeted build-time route-import target.
+7. If the change widens executing kernel coverage, run the generated runtime
+   tests for that op unless the environment blocks runtime execution.
+8. Report what changed, what issues were found, and the next step.
+
+Do not update expected coverage until the intended slice is validated and the
+build-time coverage target passes.
 
 ## Kernel Source Layout
 
-When grouped-YAML support work requires a v2 kernel port or a new routed kernel
-surface, keep the source layout one routed variant per `.loom` file.
+When route support needs a new or ported kernel variant, keep one routed variant
+per `.loom` file. If two catalog routes target different exported kernels, split
+them into separate `.loom` files and update each route's `kernel.path`.
 
-Required process:
-
-- if two catalog routes target different exported kernels, split them into
-  separate `.loom` files instead of keeping multiple independently routed
-  kernels in one shared file
-- update each catalog route's `kernel.path` to the specific file that contains
-  its exported symbol
-- update any oracle or routing tests that reference kernel source paths
-- rerun generated asset materialization so `build/generated/assets/kernels/v2/`
-  picks up the split files before runtime validation
-
-This avoids a recurring failure mode where routing is widened but the generated
-kernel asset set does not contain the file path expected by the catalog.
-
-## Required Components
-
-### 1. YAML Loader
-
-Purpose:
-- read grouped YAML under top-level `ops`
-- preserve op group order and case order
-- produce raw imported records before any kernel assumptions
-
-Suggested file:
-- `tests/infra/import_grouped_yaml.py`
-
-Expected output:
-- `ImportedSuite`
-- `ImportedOpGroup`
-- `ImportedCase`
-
-### 2. Case Normalizer
-
-Purpose:
-- convert op-specific keys like `ne_a`, `ne_b`, `nr`, `perm1`, `stride_dim`
-  into a stable normalized parameter object
-- preserve original raw case data for debugging and import reports
-
-Suggested file:
-- `tests/infra/import_shape_lowering.py`
-
-Expected behavior:
-- op-specific normalizers
-- no route selection yet
-- no kernel family assumption yet
-
-### 3. Mapping Registry
-
-Purpose:
-- map `(op, dtype, normalized constraints)` to a current kernel family
-- remain declarative and searchable
-- allow ambiguous matches to be reported instead of guessed
-
-Suggested file:
-- `src/ggml_hrx_kernel_bench/import_mapping_registry.py`
-
-Bootstrap policy:
-- only a small number of rules should exist at first
-- everything else should become `UnmappedCase`
-
-### 4. Shape Lowering
-
-Purpose:
-- convert normalized imported params into benchmark config params and values
-- example:
-  - llama tensor extents -> `nrows`, `ncols`
-  - or matmul extents -> `k`, `rows`, `cols`
-
-Suggested file:
-- `tests/infra/import_shape_lowering.py`
-
-This layer is kernel-family specific and will be the main growth area.
-
-### 5. Route Resolver
-
-Purpose:
-- resolve a mapped kernel family to a concrete route
-- return:
-  - mapped route
-  - no route
-  - ambiguous route
-  - mapped but not runnable
-
-Suggested file:
-- `tests/infra/import_route_resolution.py`
-
-Important:
-- ambiguous route resolution must produce `UnmappedCase` rows with reason
-  `ambiguous_route_match`
-
-### 6. Config Emitter
-
-Purpose:
-- emit compact benchmark configs using current format:
-  - `kernel`
-  - `params`
-  - `cases`
-
-Suggested file:
-- `tests/infra/import_emit_configs.py`
-
-Output location:
-- `generated-import-configs/<kernel>.json`
-
-### 7. Benchmark Driver
-
-Purpose:
-- run emitted configs through the existing benchmark service
-- write:
-  - heavy outputs to `benchmark-artifacts/`
-  - performance summaries to `benchmark-results/`
-
-Existing files reused:
-- `tests/infra/benchmark_kernel_test_config.py`
-
-### 8. Import Report Generator
-
-Purpose:
-- summarize the importer outcome even when coverage is incomplete
-- make unmapped tests highly visible
-
-Suggested files:
-- `tests/infra/import_report.py`
-- `schemas/imported-workload.schema.json`
-- `schemas/import-unmapped-cases.schema.json`
-
-Suggested output files:
-- `imported-workload.json`
-- `unmapped.json`
-- `import-summary.md`
-
-## Unmapped Cases Are Required Output
-
-This is non-negotiable: if an imported test has no current kernel mapping, it
-must still appear in output.
-
-An imported case must end in exactly one bucket:
-
-1. `mapped`
-2. `unmapped`
-3. `ambiguous`
-
-### Unmapped Reasons
-
-The initial enums are:
-
-- `no_kernel_family_mapping`
-- `no_dtype_mapping`
-- `shape_lowering_not_implemented`
-- `no_route_match`
-- `ambiguous_route_match`
-
-## Concrete Model Files
-
-Implemented skeletons:
-
-- `src/ggml_hrx_kernel_bench/import_models.py`
-- `src/ggml_hrx_kernel_bench/import_mapping_registry.py`
-- `schemas/imported-workload.schema.json`
-- `schemas/import-unmapped-cases.schema.json`
-
-These files define:
-- normalized imported cases
-- resolved benchmark cases
-- unmapped case records
-- mapping status and reason enums
-
-## First Implementation Cut
-
-The first working importer should intentionally be narrow:
-
-- parse YAML
-- normalize all cases
-- map only a tiny bootstrap subset
-- emit configs for mapped cases
-- emit unmapped backlog for everything else
-
-This is better than pretending broad coverage exists.
-
-## Recommended First Milestone
-
-1. Implement loader for grouped YAML.
-2. Normalize all imported cases into `ImportedSuite`.
-3. Emit `unmapped.json` for every case by default.
-4. Add one or two real mapping rules.
-5. Emit benchmark configs only for those mapped cases.
-6. Run existing benchmark service on emitted configs.
-
-That gives:
-- immediate visibility into unsupported workloads
-- a stable schema for backlog tracking
-- a safe path to expand coverage incrementally
+Before runtime validation, rerun generated asset materialization so
+`build/generated/assets/kernels/v2/` contains the route's referenced file.

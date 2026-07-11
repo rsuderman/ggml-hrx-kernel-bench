@@ -5,7 +5,6 @@ from dataclasses import dataclass
 from functools import cached_property
 from pathlib import Path
 
-from ...import_models import ImportedSuite
 from ..case_selection import select_case as shared_select_case
 from ..case_selection import select_cases as shared_select_cases
 from ..models import (
@@ -18,7 +17,6 @@ from ..models import (
     RuntimeCaseRequest,
 )
 from .candidates import list_candidates
-from .import_resolution import resolve_imported_suite
 from .manifest import build_manifest
 from .query import RouteCatalog, load_route_catalog
 from .runtime import case_result as runtime_case_result
@@ -80,9 +78,6 @@ class V2RoutingBackend:
                 "source_count": payload["source_count"],
             },
         )
-
-    def resolve_imported_suite(self, suite: ImportedSuite) -> ImportedSuite:
-        return resolve_imported_suite(suite, catalog=self.catalog, selector=self.selector)
 
     def select_case(self, config: dict[str, object], selector: str) -> tuple[str, list[int]]:
         return shared_select_case(config, selector)

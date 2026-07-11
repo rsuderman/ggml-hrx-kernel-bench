@@ -9,7 +9,6 @@ from ..models import (
     CandidateQuery,
     ExecutedCase,
     ExportRequest,
-    ImportedSuite,
     RoutingContext,
     RoutingExportResult,
     RuntimeCaseRequest,
@@ -17,7 +16,6 @@ from ..models import (
 from ..case_selection import select_case as shared_select_case
 from ..case_selection import select_cases as shared_select_cases
 from .export import export_llama_catalog
-from .importer import resolve_imported_suite
 from .routes import all_candidates, build_manifest
 from .runtime import case_result as runtime_case_result
 from .runtime import execute_case as runtime_execute_case
@@ -69,9 +67,6 @@ class V1RoutingBackend:
                 "test_case_count": result.test_case_count,
             },
         )
-
-    def resolve_imported_suite(self, suite: ImportedSuite) -> ImportedSuite:
-        return resolve_imported_suite(suite, catalog_dir=self.context.routing_dir)
 
     def select_case(
         self, config: dict[str, Any], selector: str

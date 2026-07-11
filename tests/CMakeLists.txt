@@ -25,17 +25,6 @@ endif()
 
 include(GgmlHrxTests)
 
-option(
-  GGML_HRX_ENABLE_LEGACY_GROUPED_YAML_IMPORTS
-  "Enable legacy grouped YAML import coverage and generated runtime targets"
-  OFF
-)
-option(
-  GGML_HRX_ENABLE_ADDITIONAL_YAML_IMPORT_TESTS
-  "Enable additional grouped YAML import tests"
-  OFF
-)
-
 add_subdirectory(infra)
 add_subdirectory(kernels)
 add_subdirectory(models)

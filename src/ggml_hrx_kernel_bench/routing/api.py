@@ -9,7 +9,6 @@ from .models import (
     CandidateQuery,
     ExecutedCase,
     ExportRequest,
-    ImportedSuite,
     RoutingContext,
     RoutingExportResult,
     RuntimeCaseRequest,
@@ -24,8 +23,6 @@ class RoutingBackend(Protocol):
     def candidates(self, query: CandidateQuery) -> list[Candidate]: ...
 
     def export(self, request: ExportRequest) -> RoutingExportResult: ...
-
-    def resolve_imported_suite(self, suite: ImportedSuite) -> ImportedSuite: ...
 
     def select_case(
         self, config: dict[str, Any], selector: str
