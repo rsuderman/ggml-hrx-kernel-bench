@@ -8,8 +8,8 @@ the deleted custom importer.
 
 Coverage status is versioned in:
 
-- `tests/kernels/data/llamacpp_test.v2.yaml-route-import-v2.import-coverage.json`
-- `tests/models/data/Llama-3.3-8B-Instruct.Q8_0.v2.yaml-route-import-v2.import-coverage.json`
+- `tests/kernels/data/llamacpp.import-coverage.json`
+- `tests/models/data/llama-8b-q8.import-coverage.json`
 
 Generated drilldown artifacts come from the build-time route-import targets:
 

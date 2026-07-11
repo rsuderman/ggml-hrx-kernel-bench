@@ -1,5 +1,5 @@
 set(GGML_HRX_GROUPED_YAML ${CMAKE_CURRENT_SOURCE_DIR}/data/llamacpp_test.v2.yaml)
-set(GGML_HRX_EXPECTED_YAML_ROUTE_IMPORT_COVERAGE_V2 ${CMAKE_CURRENT_SOURCE_DIR}/data/llamacpp_test.v2.yaml-route-import-v2.import-coverage.json)
+set(GGML_HRX_EXPECTED_YAML_ROUTE_IMPORT_COVERAGE_V2 ${CMAKE_CURRENT_SOURCE_DIR}/data/llamacpp.import-coverage.json)
 set(GGML_HRX_KERNEL_DIR_V2 ${GGML_HRX_ASSET_ROOT}/kernels/v2)
 set(GGML_HRX_ROUTING_DIR_V2 ${GGML_HRX_ASSET_ROOT}/catalog/v2)
 set(GGML_HRX_LLAMA_CPP_YAML_ROUTE_IMPORT_DIR_V2 ${CMAKE_CURRENT_BINARY_DIR}/artifacts/llama-cpp-yaml-route-import-v2)

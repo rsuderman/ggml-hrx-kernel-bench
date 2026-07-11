@@ -13,9 +13,9 @@ custom Python mapping registries or op-specific route-resolution code.
 - Llama.cpp input: `tests/kernels/data/llamacpp_test.v2.yaml`
 - Model input: `tests/models/data/Llama-3.3-8B-Instruct.Q8_0.v2.yaml`
 - Llama.cpp expected coverage:
-  `tests/kernels/data/llamacpp_test.v2.yaml-route-import-v2.import-coverage.json`
+  `tests/kernels/data/llamacpp.import-coverage.json`
 - Model expected coverage:
-  `tests/models/data/Llama-3.3-8B-Instruct.Q8_0.v2.yaml-route-import-v2.import-coverage.json`
+  `tests/models/data/llama-8b-q8.import-coverage.json`
 
 The build-time import targets are:
 
