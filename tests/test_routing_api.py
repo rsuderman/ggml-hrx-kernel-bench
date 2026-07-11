@@ -1047,6 +1047,59 @@ def test_v2_resolve_set_rows_route_preserves_non_contiguous_idx_stride() -> None
     assert shape["src1_d2_stride"] == 2
 
 
+def test_yaml_route_import_matches_descriptor_set_rows_f32_case(tmp_path: Path) -> None:
+    yaml_path = tmp_path / "set_rows.v2.yaml"
+    yaml_path.write_text(
+        json.dumps(
+            {
+                "ops": {
+                    "SET_ROWS": [
+                        {
+                            "inputs": [
+                                {"dtype": "F32", "shape": [3, 3, 14, 3]},
+                                {"dtype": "F32", "shape": [3, 2, 14, 3]},
+                                {"dtype": "I64", "shape": [2, 7, 1, 1]},
+                            ],
+                            "destinations": [{"dtype": "F32", "shape": [3, 3, 14, 3]}],
+                        }
+                    ]
+                }
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    output_dir = tmp_path / "route-import"
+    summary = materialize_yaml_route_import(
+        [yaml_path],
+        output_dir=output_dir,
+        routing_dir=ACTUAL_V2_ROUTING_DIR,
+    )
+
+    op_summary = next(row for row in summary["operations"] if row["op"] == "SET_ROWS")
+    assert op_summary["matched_case_count"] == 1
+    assert op_summary["unmatched_case_count"] == 0
+    route_matches = json.loads((output_dir / "ops" / "SET_ROWS" / "route-matches.json").read_text())
+    assert route_matches["rows"][0]["matched_route_ids"] == ["set_rows_f32_f32_descriptor_4d"]
+    config = json.loads(Path(summary["generated_config_paths"][0]).read_text())
+    assert config["kernel"] == "set_rows_f32"
+    assert config["route_id"] == "set_rows_f32_f32_descriptor_4d"
+    shape = dict(zip(config["params"], config["cases"][0], strict=True))
+    assert shape == {
+        "d0": 3,
+        "d1": 3,
+        "d2": 14,
+        "d3": 3,
+        "src1_d1": 2,
+        "src2_d0": 2,
+        "src2_d1": 7,
+        "src2_d2": 1,
+        "src2_d3": 1,
+    }
+
+
 def test_v2_catalog_rejects_binding_with_source_and_value(tmp_path: Path) -> None:
     routing_dir = tmp_path / "routing"
     routing_dir.mkdir(parents=True, exist_ok=True)

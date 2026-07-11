@@ -1,0 +1,182 @@
+{
+  "id": "set_rows_f32_f32_descriptor_4d",
+  "family": "set_rows_f32",
+  "kernel": {
+    "source_id": "set_rows_f32",
+    "path": "set_rows/contiguous_4d.loom",
+    "root_symbol": "@set_rows_f32_f32",
+    "export_name": "set_rows_f32_f32"
+  },
+  "tensors": {
+    "src0": {
+      "dtype": "F32",
+      "dimensions": "src0_dimensions",
+      "strides": "src0_strides"
+    },
+    "src1": {
+      "dtype": "F32",
+      "dimensions": "src1_dimensions",
+      "strides": "src1_strides"
+    },
+    "src2": {
+      "dtype": "I64",
+      "dimensions": "src2_dimensions",
+      "strides": "src2_strides"
+    },
+    "dst": {
+      "dtype": "F32",
+      "dimensions": "dst_dimensions",
+      "strides": "dst_strides"
+    }
+  },
+  "values": [
+    {
+      "name": "total_size",
+      "product": "src1_dimensions"
+    },
+    {
+      "name": "src0_contiguous_strides",
+      "contiguous_strides": "src0_dimensions"
+    },
+    {
+      "name": "src1_contiguous_strides",
+      "contiguous_strides": "src1_dimensions"
+    },
+    {
+      "name": "dst_contiguous_strides",
+      "contiguous_strides": "dst_dimensions"
+    }
+  ],
+  "constraints": [
+    {
+      "name": "total_size",
+      "min": 1,
+      "max": 1073741824
+    },
+    {
+      "name": "src0_dimensions",
+      "length": 4
+    },
+    {
+      "name": "src1_dimensions",
+      "length": 4
+    },
+    {
+      "name": "src2_dimensions",
+      "length": 4
+    },
+    {
+      "name": "src2_dimensions",
+      "index": 3,
+      "min": 1,
+      "max": 1
+    },
+    {
+      "name": "dst_dimensions",
+      "length": 4
+    },
+    {
+      "equals": [
+        "src0_dimensions",
+        "dst_dimensions"
+      ]
+    },
+    {
+      "equals": [
+        "src0_contiguous_strides",
+        "src0_strides"
+      ]
+    },
+    {
+      "equals": [
+        "src1_contiguous_strides",
+        "src1_strides"
+      ]
+    },
+    {
+      "equals": [
+        "dst_contiguous_strides",
+        "dst_strides"
+      ]
+    }
+  ],
+  "launch": {
+    "workgroup_size": [
+      256,
+      1,
+      1
+    ]
+  },
+  "config": {
+    "bindings": [
+      {
+        "key": "@hrx2.shape.set_rows.nc",
+        "source": "tensor.src1.dimensions.d0.size"
+      },
+      {
+        "key": "@hrx2.shape.set_rows.nr",
+        "source": "tensor.src1.dimensions.d1.size"
+      },
+      {
+        "key": "@hrx2.shape.set_rows.ne02",
+        "source": "tensor.dst.dimensions.d2.size"
+      },
+      {
+        "key": "@hrx2.shape.set_rows.ne03",
+        "source": "tensor.dst.dimensions.d3.size"
+      },
+      {
+        "key": "@hrx2.shape.set_rows.ne1",
+        "source": "tensor.dst.dimensions.d1.size"
+      },
+      {
+        "key": "@hrx2.shape.set_rows.ne11",
+        "source": "tensor.src2.dimensions.d1.size"
+      },
+      {
+        "key": "@hrx2.shape.set_rows.ne12",
+        "source": "tensor.src2.dimensions.d2.size"
+      },
+      {
+        "key": "@hrx2.stride.set_rows.src0_nb1",
+        "source": "tensor.src1.dimensions.d1.stride"
+      },
+      {
+        "key": "@hrx2.stride.set_rows.src0_nb2",
+        "source": "tensor.src1.dimensions.d2.stride"
+      },
+      {
+        "key": "@hrx2.stride.set_rows.src0_nb3",
+        "source": "tensor.src1.dimensions.d3.stride"
+      },
+      {
+        "key": "@hrx2.stride.set_rows.idx_nb0",
+        "source": "tensor.src2.dimensions.d0.stride"
+      },
+      {
+        "key": "@hrx2.stride.set_rows.idx_nb1",
+        "source": "tensor.src2.dimensions.d1.stride"
+      },
+      {
+        "key": "@hrx2.stride.set_rows.idx_nb2",
+        "source": "tensor.src2.dimensions.d2.stride"
+      },
+      {
+        "key": "@hrx2.stride.set_rows.dst_nb1",
+        "source": "tensor.dst.dimensions.d1.stride"
+      },
+      {
+        "key": "@hrx2.stride.set_rows.dst_nb2",
+        "source": "tensor.dst.dimensions.d2.stride"
+      },
+      {
+        "key": "@hrx2.stride.set_rows.dst_nb3",
+        "source": "tensor.dst.dimensions.d3.stride"
+      },
+      {
+        "key": "@hrx2.tuning.set_rows.workgroup_size",
+        "value": "256"
+      }
+    ]
+  }
+}

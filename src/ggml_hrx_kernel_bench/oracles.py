@@ -856,6 +856,14 @@ def _copy_tensor_strides(
     )
 
 
+def _set_rows_tensor_roles(candidate: Candidate) -> tuple[str, str]:
+    route = candidate.route if isinstance(candidate.route, dict) else {}
+    tensors = route.get("tensors")
+    if isinstance(tensors, dict) and "src2" in tensors:
+        return "src1", "src2"
+    return "src0", "src1"
+
+
 def _pointwise_tensor_dims(
     candidate: Candidate,
     tensor_name: str,
@@ -1619,11 +1627,12 @@ def _get_rows_moe_weights_arrays(np: Any, candidate: Candidate, seed: int) -> di
 def _set_rows_arrays(np: Any, candidate: Candidate, seed: int) -> dict[str, Any]:
     common_dims = _ranked_shape(candidate)
     if common_dims is not None:
-        src0_dims = _copy_tensor_dims(candidate, "src0", common_dims)
-        src1_dims = _copy_tensor_dims(candidate, "src1", common_dims)
+        update_tensor, index_tensor = _set_rows_tensor_roles(candidate)
+        src0_dims = _copy_tensor_dims(candidate, update_tensor, common_dims)
+        src1_dims = _copy_tensor_dims(candidate, index_tensor, common_dims)
         dst_dims = _copy_tensor_dims(candidate, "dst", common_dims)
-        src0_strides = _copy_tensor_strides(candidate, "src0", src0_dims)
-        src1_strides = _copy_tensor_strides(candidate, "src1", src1_dims)
+        src0_strides = _copy_tensor_strides(candidate, update_tensor, src0_dims)
+        src1_strides = _copy_tensor_strides(candidate, index_tensor, src1_dims)
         dst_strides = _copy_tensor_strides(candidate, "dst", dst_dims)
         src0_buffer_len = _buffer_length(src0_dims, src0_strides)
         src1_buffer_len = _buffer_length(src1_dims, src1_strides)
@@ -2755,12 +2764,13 @@ def _write_softmax_workbench(candidate: Candidate, linked_source: Path, workbenc
 def _write_set_rows_workbench(candidate: Candidate, linked_source: Path, workbench_path: Path, fixture_dir: Path) -> tuple[str, dict[str, Any]]:
     common_dims = _ranked_shape(candidate)
     if common_dims is not None:
-        src0_dims = _copy_tensor_dims(candidate, "src0", common_dims)
-        src1_dims = _copy_tensor_dims(candidate, "src1", common_dims)
+        update_tensor, index_tensor = _set_rows_tensor_roles(candidate)
+        src0_dims = _copy_tensor_dims(candidate, update_tensor, common_dims)
+        src1_dims = _copy_tensor_dims(candidate, index_tensor, common_dims)
         dst_dims = _copy_tensor_dims(candidate, "dst", common_dims)
         elems = _buffer_length(dst_dims, _copy_tensor_strides(candidate, "dst", dst_dims))
-        src0_elems = _buffer_length(src0_dims, _copy_tensor_strides(candidate, "src0", src0_dims))
-        idx_elems = _buffer_length(src1_dims, _copy_tensor_strides(candidate, "src1", src1_dims)) * 2
+        src0_elems = _buffer_length(src0_dims, _copy_tensor_strides(candidate, update_tensor, src0_dims))
+        idx_elems = _buffer_length(src1_dims, _copy_tensor_strides(candidate, index_tensor, src1_dims)) * 2
     else:
         _, nrows, elems = _dims(candidate)
         src0_elems = elems
