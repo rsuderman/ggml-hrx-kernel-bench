@@ -1,8 +1,8 @@
 {
   "schema": "ggml_hrx_kernel_bench.import_test_coverage.v1",
   "operation_count": 115,
-  "total_pass_case_count": 624,
-  "total_fail_case_count": 10573,
+  "total_pass_case_count": 805,
+  "total_fail_case_count": 10392,
   "operations": [
     {
       "op": "ABS",
@@ -281,8 +281,8 @@
     },
     {
       "op": "MUL_MAT",
-      "pass_case_count": 68,
-      "fail_case_count": 1232
+      "pass_case_count": 249,
+      "fail_case_count": 1051
     },
     {
       "op": "MUL_MAT_ID",
