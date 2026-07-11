@@ -41,7 +41,7 @@ def build_manifest(
                 "original_path": original_path,
                 "original_sha256": original_sha256,
                 "mechanical_rewrites": (
-                    ["content differs from original HRX2 source"]
+                    ["content differs from original source"]
                     if original_sha256 and original_sha256 != imported_sha256
                     else []
                 ),

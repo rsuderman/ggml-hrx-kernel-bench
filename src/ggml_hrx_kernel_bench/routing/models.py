@@ -5,7 +5,51 @@ from pathlib import Path
 from typing import Any
 
 from ..observed_shapes import ObservedShapeCatalog
-from .v1.routes import Candidate
+from ..specs import file_sha256
+
+
+@dataclass(frozen=True)
+class Candidate:
+    id: str
+    family: str
+    op: str
+    source_id: str
+    source_path: Path
+    root_symbol: str
+    export_name: str | None
+    route_id: str | None
+    route: dict[str, Any] | None
+    shape: dict[str, int]
+    values: dict[str, int | str]
+    config: dict[str, str]
+    dispatch: dict[str, Any]
+    supports: dict[str, Any]
+    coverage: str
+    schedule: dict[str, Any] | None = None
+    status: str = "planned"
+    message: str | None = None
+
+    def to_ledger(self) -> dict[str, Any]:
+        return {
+            "candidate_id": self.id,
+            "family": self.family,
+            "op": self.op,
+            "source_id": self.source_id,
+            "source_path": str(self.source_path),
+            "source_sha256": file_sha256(self.source_path),
+            "root_symbol": self.root_symbol,
+            "export_name": self.export_name,
+            "route_id": self.route_id,
+            "shape": self.shape,
+            "values": self.values,
+            "config_bindings": self.config,
+            "dispatch": self.dispatch,
+            "supports": self.supports,
+            "schedule": self.schedule,
+            "coverage": self.coverage,
+            "status": self.status,
+            "message": self.message,
+        }
 
 
 @dataclass(frozen=True)

@@ -44,17 +44,6 @@ def create_router(
     routing_dir: Path | None = None,
     observed_shapes=None,
 ) -> RoutingBackend:
-    if version == "v1":
-        from .v1.backend import V1RoutingBackend
-
-        return V1RoutingBackend(
-            build_routing_context(
-                version=version,
-                kernel_dir=kernel_dir,
-                routing_dir=routing_dir,
-                observed_shapes=observed_shapes,
-            )
-        )
     if version == "v2":
         from .v2.backend import V2RoutingBackend
 

@@ -401,7 +401,7 @@ def test_set_rows_oracle_and_workbench_support_ranked_v2_shape(tmp_path: Path) -
         root_symbol="@set_rows_f32_f32",
         export_name="set_rows_f32_f32",
         op="SET_ROWS",
-        source_path="kernels/hrx2/set_rows_f32.loom",
+        source_path="kernels/v2/set_rows/contiguous_4d.loom",
     )
 
     result = generate_oracle(candidate, tmp_path / "fixtures", force=True)

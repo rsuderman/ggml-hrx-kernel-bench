@@ -74,12 +74,9 @@ def build_parser() -> argparse.ArgumentParser:
         default=DEFAULT_ROUTING_VERSION,
     )
     parser.add_argument("--kernel-dir", type=Path)
-    parser.add_argument("--hrx2-kernel-dir", type=Path, dest="kernel_dir", help=argparse.SUPPRESS)
     parser.add_argument("--routing-dir", type=Path)
-    parser.add_argument("--hrx2-catalog-dir", type=Path, dest="routing_dir", help=argparse.SUPPRESS)
     parser.add_argument("--observed-shapes", type=Path, help="observed shape metadata JSON; defaults to <routing-dir>/observed_shapes.json")
     parser.add_argument("--shape-trace", type=Path, action="append", default=[], help="JSONL observed-shape trace to merge with accumulate-shapes")
-    parser.add_argument("--original-hrx2-root", type=Path, help="optional original HRX2 root for import hash comparison")
     parser.add_argument("--family", action="append", default=[], help="family/source/route filter; may be repeated or comma separated")
     parser.add_argument("--limit", type=int, help="limit corpus candidates")
     parser.add_argument("--sweep", choices=["minimal", "edge", "observed"], default="minimal")
@@ -96,7 +93,6 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--llama-catalog-id", help="catalog id to write when exporting llama.cpp catalog metadata")
 
     subparsers = parser.add_subparsers(dest="command", required=True)
-    subparsers.add_parser("import-hrx2")
     subparsers.add_parser("accumulate-shapes")
     subparsers.add_parser("plan")
     subparsers.add_parser("fixtures")
@@ -129,8 +125,6 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     try:
-        if args.command == "import-hrx2":
-            return command_import(args, ledger)
         if args.command == "accumulate-shapes":
             return command_accumulate_shapes(args, ledger)
         if args.command == "sweep-supported":
@@ -154,38 +148,6 @@ def main(argv: list[str] | None = None) -> int:
             }
         )
         raise
-
-
-def command_import(args: argparse.Namespace, ledger: LedgerWriter) -> int:
-    router = create_router(
-        version=args.routing_version,
-        kernel_dir=args.kernel_dir,
-        routing_dir=args.routing_dir,
-    )
-    manifest = router.manifest(original_root=args.original_hrx2_root)
-    manifest_path = args.output_dir / "hrx2_manifest.json"
-    manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    row = {
-        "schema": "ggml_hrx_kernel_bench.ledger.v1",
-        "run_id": utc_run_id(),
-        "action": "import-hrx2",
-        "status": "ok",
-        "manifest_path": str(manifest_path),
-        "routing_version": args.routing_version,
-        "kernel_dir": str(router.context.kernel_dir),
-        "routing_dir": str(router.context.routing_dir),
-        "summary": {
-            "kernel_count": manifest["kernel_count"],
-            "catalog_source_count": manifest["catalog_source_count"],
-            "route_count": manifest["route_count"],
-            "source_ids_without_routes": manifest["source_ids_without_routes"],
-            "route_source_ids_without_source_entry": manifest["route_source_ids_without_source_entry"],
-            "kernel_files_without_source_entry": manifest["kernel_files_without_source_entry"],
-            "source_entries_without_kernel_file": manifest["source_entries_without_kernel_file"],
-        },
-    }
-    ledger.append(row)
-    return 0
 
 
 def command_accumulate_shapes(args: argparse.Namespace, ledger: LedgerWriter) -> int:
@@ -1014,7 +976,7 @@ def command_legacy_spec(args: argparse.Namespace, config: BenchConfig, ledger: L
         return 0
     row = base_spec_row(args, spec, values, config, action=args.command)
     row["status"] = "unsupported_for_spec_mode"
-    row["message"] = f"{args.command} is implemented for HRX2 corpus mode; omit --spec"
+    row["message"] = f"{args.command} is implemented for routed corpus mode; omit --spec"
     ledger.append(row)
     return 2
 

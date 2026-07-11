@@ -1,4 +1,4 @@
-# HRX2 Operation Coverage Plan
+# V2 Operation Coverage Plan
 
 This document tracks the remaining grouped-YAML descriptor route-import work.
 Use it as the task list for returning to coverage parity without reintroducing
@@ -24,6 +24,7 @@ test manifests under the target's artifact directory.
 ## Active Task List
 
 - [x] Retire the legacy grouped YAML importer and its v1/v2 coverage fixtures.
+- [x] Retire the legacy v1/hrx2 routing catalog and kernel tree.
 - [x] Keep llama.cpp and model YAML route-import coverage validated at build
   time.
 - [x] Keep generated runtime CTest suites materialized from descriptor

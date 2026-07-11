@@ -11,7 +11,7 @@ from ..materialized_assets import (
 from .models import RoutingContext
 
 
-DEFAULT_ROUTING_VERSION = "v1"
+DEFAULT_ROUTING_VERSION = "v2"
 
 
 def supported_routing_versions() -> tuple[str, ...]:

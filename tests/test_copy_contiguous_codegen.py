@@ -80,7 +80,7 @@ def test_materialized_v2_kernels_include_generated_contiguous_copy(tmp_path: Pat
 
 def test_materialize_asset_root_refreshes_missing_copied_runtime_asset(tmp_path: Path) -> None:
     asset_root = materialize_asset_root(tmp_path / "assets", force=True)
-    copied_kernel_path = asset_root / "kernels" / "hrx2" / "cont_f32.loom"
+    copied_kernel_path = asset_root / "kernels" / "v2" / "cont" / "contiguous_4d.loom"
     copied_kernel_path.unlink()
 
     materialize_asset_root(asset_root, force=False)

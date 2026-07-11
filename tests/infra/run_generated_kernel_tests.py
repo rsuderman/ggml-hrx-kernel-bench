@@ -144,7 +144,7 @@ def main() -> int:
     parser.add_argument(
         "--routing-version",
         choices=supported_routing_versions(),
-        default="v1",
+        default="v2",
     )
     parser.add_argument("--routing-dir", type=Path)
     parser.add_argument("--kernel-dir", type=Path)

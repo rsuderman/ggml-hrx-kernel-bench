@@ -25,18 +25,15 @@ ACTIVE_ASSET_ROOT_METADATA_PATH = (
     PROJECT_ROOT / "build" / "generated" / "active-asset-root.json"
 )
 ASSET_ROOT_ENV_VAR = "GGML_HRX_ASSET_ROOT"
-SUPPORTED_VERSIONS = ("v1", "v2")
+SUPPORTED_VERSIONS = ("v2",)
 ASSET_DIR_NAMES: dict[str, str] = {
-    "v1": "hrx2",
     "v2": "v2",
 }
 
 SOURCE_KERNEL_DIRS: dict[str, Path] = {
-    "v1": PROJECT_ROOT / "kernels" / "hrx2",
     "v2": PROJECT_ROOT / "kernels" / "v2",
 }
 SOURCE_ROUTING_DIRS: dict[str, Path] = {
-    "v1": PROJECT_ROOT / "catalog" / "hrx2",
     "v2": PROJECT_ROOT / "catalog" / "v2",
 }
 
