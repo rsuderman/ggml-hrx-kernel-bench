@@ -1,0 +1,202 @@
+{
+  "id": "get_rows_q8_0_f32_embedding_rows_descriptor_4d",
+  "family": "get_rows_q8_0_f32",
+  "kernel": {
+    "source_id": "get_rows_q8_0_f32",
+    "path": "get_rows/q8_0_f32_embedding_rows_2d.loom",
+    "root_symbol": "@get_rows_q8_0_f32",
+    "export_name": "get_rows_q8_0_f32"
+  },
+  "tensors": {
+    "src0": {
+      "dtype": "Q8_0",
+      "dimensions": "src0_dimensions",
+      "strides": "src0_strides"
+    },
+    "src1": {
+      "dtype": "I32",
+      "dimensions": "src1_dimensions",
+      "strides": "src1_strides"
+    },
+    "dst": {
+      "dtype": "F32",
+      "dimensions": "dst_dimensions",
+      "strides": "dst_strides"
+    }
+  },
+  "values": [
+    {
+      "name": "src0_d0",
+      "element": {
+        "source": "src0_dimensions",
+        "index": 0
+      }
+    },
+    {
+      "name": "src1_d0",
+      "element": {
+        "source": "src1_dimensions",
+        "index": 0
+      }
+    },
+    {
+      "name": "dst_d0",
+      "element": {
+        "source": "dst_dimensions",
+        "index": 0
+      }
+    },
+    {
+      "name": "dst_d1",
+      "element": {
+        "source": "dst_dimensions",
+        "index": 1
+      }
+    },
+    {
+      "name": "src0_contiguous_strides",
+      "contiguous_strides": "src0_dimensions"
+    },
+    {
+      "name": "src1_contiguous_strides",
+      "contiguous_strides": "src1_dimensions"
+    },
+    {
+      "name": "dst_contiguous_strides",
+      "contiguous_strides": "dst_dimensions"
+    },
+    {
+      "name": "total_size",
+      "product": "dst_dimensions"
+    }
+  ],
+  "constraints": [
+    {
+      "name": "total_size",
+      "min": 1,
+      "max": 1073741824
+    },
+    {
+      "name": "src0_dimensions",
+      "length": 4
+    },
+    {
+      "name": "src0_dimensions",
+      "index": 0,
+      "min": 32,
+      "max": 65536,
+      "multiple_of": 32
+    },
+    {
+      "name": "src1_dimensions",
+      "length": 4
+    },
+    {
+      "name": "dst_dimensions",
+      "length": 4
+    },
+    {
+      "name": "src0_dimensions",
+      "index": 2,
+      "min": 1,
+      "max": 1
+    },
+    {
+      "name": "src0_dimensions",
+      "index": 3,
+      "min": 1,
+      "max": 1
+    },
+    {
+      "name": "src1_dimensions",
+      "index": 1,
+      "min": 1,
+      "max": 1
+    },
+    {
+      "name": "src1_dimensions",
+      "index": 2,
+      "min": 1,
+      "max": 1
+    },
+    {
+      "name": "src1_dimensions",
+      "index": 3,
+      "min": 1,
+      "max": 1
+    },
+    {
+      "name": "dst_dimensions",
+      "index": 2,
+      "min": 1,
+      "max": 1
+    },
+    {
+      "name": "dst_dimensions",
+      "index": 3,
+      "min": 1,
+      "max": 1
+    },
+    {
+      "equals": [
+        "src0_d0",
+        "dst_d0"
+      ]
+    },
+    {
+      "equals": [
+        "src1_d0",
+        "dst_d1"
+      ]
+    },
+    {
+      "equals": [
+        "src0_contiguous_strides",
+        "src0_strides"
+      ]
+    },
+    {
+      "equals": [
+        "src1_contiguous_strides",
+        "src1_strides"
+      ]
+    },
+    {
+      "equals": [
+        "dst_contiguous_strides",
+        "dst_strides"
+      ]
+    }
+  ],
+  "launch": {
+    "workgroup_size": [
+      256,
+      1,
+      1
+    ]
+  },
+  "config": {
+    "bindings": [
+      {
+        "key": "@hrx2.shape.get_rows.ncols",
+        "source": "tensor.dst.dimensions.d0.size"
+      },
+      {
+        "key": "@hrx2.shape.get_rows.nrows",
+        "source": "tensor.dst.dimensions.d1.size"
+      },
+      {
+        "key": "@hrx2.shape.get_rows.src0_nrows",
+        "source": "tensor.src0.dimensions.d1.size"
+      },
+      {
+        "key": "@hrx2.shape.get_rows.idx_row_stride",
+        "source": "tensor.src1.dimensions.d0.stride"
+      },
+      {
+        "key": "@hrx2.tuning.get_rows.workgroup_size",
+        "value": "256"
+      }
+    ]
+  }
+}

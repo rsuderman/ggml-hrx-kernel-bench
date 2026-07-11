@@ -1,8 +1,8 @@
 {
   "schema": "ggml_hrx_kernel_bench.import_test_coverage.v1",
   "operation_count": 10,
-  "total_pass_case_count": 20,
-  "total_fail_case_count": 12,
+  "total_pass_case_count": 22,
+  "total_fail_case_count": 10,
   "operations": [
     {
       "op": "ADD",
@@ -21,8 +21,8 @@
     },
     {
       "op": "GET_ROWS",
-      "pass_case_count": 2,
-      "fail_case_count": 2
+      "pass_case_count": 4,
+      "fail_case_count": 0
     },
     {
       "op": "MUL",

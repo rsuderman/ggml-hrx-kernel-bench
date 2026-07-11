@@ -1198,6 +1198,56 @@ def test_yaml_route_import_matches_descriptor_get_rows_f32_case(tmp_path: Path) 
     }
 
 
+def test_yaml_route_import_matches_descriptor_get_rows_q8_0_case(tmp_path: Path) -> None:
+    yaml_path = tmp_path / "get_rows_q8_0.v2.yaml"
+    yaml_path.write_text(
+        json.dumps(
+            {
+                "ops": {
+                    "GET_ROWS": [
+                        {
+                            "inputs": [
+                                {"dtype": "Q8_0", "shape": [4096, 128256, 1, 1]},
+                                {"dtype": "I32", "shape": [512, 1, 1, 1]},
+                            ],
+                            "destinations": [{"dtype": "F32", "shape": [4096, 512, 1, 1]}],
+                        }
+                    ]
+                }
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    output_dir = tmp_path / "route-import"
+    summary = materialize_yaml_route_import(
+        [yaml_path],
+        output_dir=output_dir,
+        routing_dir=ACTUAL_V2_ROUTING_DIR,
+    )
+
+    op_summary = next(row for row in summary["operations"] if row["op"] == "GET_ROWS")
+    assert op_summary["matched_case_count"] == 1
+    assert op_summary["unmatched_case_count"] == 0
+    route_matches = json.loads((output_dir / "ops" / "GET_ROWS" / "route-matches.json").read_text())
+    assert route_matches["rows"][0]["matched_route_ids"] == ["get_rows_q8_0_f32_embedding_rows_descriptor_4d"]
+    config = json.loads(Path(summary["generated_config_paths"][0]).read_text())
+    assert config["kernel"] == "get_rows_q8_0_f32"
+    assert config["route_id"] == "get_rows_q8_0_f32_embedding_rows_descriptor_4d"
+    shape = dict(zip(config["params"], config["cases"][0], strict=True))
+    assert shape == {
+        "d0": 4096,
+        "d1": 512,
+        "d2": 1,
+        "d3": 1,
+        "src0_d1": 128256,
+        "src1_d0": 512,
+        "src1_d1": 1,
+    }
+
+
 def test_v2_catalog_rejects_binding_with_source_and_value(tmp_path: Path) -> None:
     routing_dir = tmp_path / "routing"
     routing_dir.mkdir(parents=True, exist_ok=True)
