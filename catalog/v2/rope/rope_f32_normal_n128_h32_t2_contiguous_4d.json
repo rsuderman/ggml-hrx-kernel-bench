@@ -156,7 +156,7 @@
       "name": "dst_dimensions",
       "index": 1,
       "min": 32,
-      "max": 32
+      "max": 64
     },
     {
       "name": "dst_dimensions",

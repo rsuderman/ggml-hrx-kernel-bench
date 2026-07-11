@@ -2906,8 +2906,34 @@ def test_yaml_route_import_matches_default_rank4_rope_descriptor(tmp_path: Path)
                             },
                         },
                         {
+                            "inputs": [{"dtype": "F32", "shape": [128, 64, 2, 1]}],
+                            "destinations": [{"dtype": "F32", "shape": [128, 64, 2, 1]}],
+                            "attributes": {
+                                "af": 1.0,
+                                "ef": 0.0,
+                                "ff": 0,
+                                "fs": 1.0,
+                                "mode": 0,
+                                "n_ctx": 512,
+                                "n_dims": 128,
+                            },
+                        },
+                        {
                             "inputs": [{"dtype": "F32", "shape": [64, 128, 2, 1]}],
                             "destinations": [{"dtype": "F32", "shape": [64, 128, 2, 1]}],
+                            "attributes": {
+                                "af": 1.0,
+                                "ef": 0.0,
+                                "ff": 0,
+                                "fs": 1.0,
+                                "mode": 2,
+                                "n_ctx": 512,
+                                "n_dims": 64,
+                            },
+                        },
+                        {
+                            "inputs": [{"dtype": "F32", "shape": [64, 8, 2, 1]}],
+                            "destinations": [{"dtype": "F32", "shape": [64, 8, 2, 1]}],
                             "attributes": {
                                 "af": 1.0,
                                 "ef": 0.0,
@@ -2954,13 +2980,15 @@ def test_yaml_route_import_matches_default_rank4_rope_descriptor(tmp_path: Path)
     )
 
     op_summary = next(row for row in summary["operations"] if row["op"] == "ROPE")
-    assert op_summary["matched_case_count"] == 4
+    assert op_summary["matched_case_count"] == 6
     assert op_summary["unmatched_case_count"] == 0
     route_matches = json.loads((output_dir / "ops" / "ROPE" / "route-matches.json").read_text())
     assert route_matches["rows"][0]["matched_route_ids"] == ["rope_f32_normal_n128_h32_t2_contiguous_4d"]
     assert route_matches["rows"][1]["matched_route_ids"] == ["rope_f32_normal_n128_h32_t2_contiguous_4d"]
-    assert route_matches["rows"][2]["matched_route_ids"] == ["rope_neox_f32_n64_h128_t2_contiguous_4d"]
+    assert route_matches["rows"][2]["matched_route_ids"] == ["rope_f32_normal_n128_h32_t2_contiguous_4d"]
     assert route_matches["rows"][3]["matched_route_ids"] == ["rope_neox_f32_n64_h128_t2_contiguous_4d"]
+    assert route_matches["rows"][4]["matched_route_ids"] == ["rope_neox_f32_n64_h128_t2_contiguous_4d"]
+    assert route_matches["rows"][5]["matched_route_ids"] == ["rope_neox_f32_n64_h128_t2_contiguous_4d"]
     route_shapes: dict[str, list[dict[str, int]]] = {}
     for raw_path in summary["generated_config_paths"]:
         config = json.loads(Path(raw_path).read_text())
@@ -2986,6 +3014,14 @@ def test_yaml_route_import_matches_default_rank4_rope_descriptor(tmp_path: Path)
     assert normal_padded_shape["rope.src0_token_stride"] == 32768
     assert normal_padded_shape["rope.dst_head_stride"] == 128
     assert normal_padded_shape["rope.dst_token_stride"] == 4096
+    normal_h64_shape = next(shape for shape in normal_shapes if shape["rope.nheads"] == 64)
+    assert normal_h64_shape["rope.ncols"] == 128
+    assert normal_h64_shape["rope.n_dims"] == 128
+    assert normal_h64_shape["rope.ntokens"] == 2
+    assert normal_h64_shape["rope.src0_head_stride"] == 128
+    assert normal_h64_shape["rope.src0_token_stride"] == 8192
+    assert normal_h64_shape["rope.dst_head_stride"] == 128
+    assert normal_h64_shape["rope.dst_token_stride"] == 8192
     assert neox_shape["rope.ncols"] == 64
     assert "rope.n_dims" not in neox_shape
     assert neox_shape["rope.nheads"] == 128
@@ -2995,6 +3031,14 @@ def test_yaml_route_import_matches_default_rank4_rope_descriptor(tmp_path: Path)
     assert neox_shape["rope.dst_head_stride"] == 64
     assert neox_shape["rope.dst_token_stride"] == 8192
     assert neox_shape["rope.pos_token_stride"] == 1
+    neox_h8_shape = next(shape for shape in neox_shapes if shape["rope.nheads"] == 8)
+    assert neox_h8_shape["rope.ncols"] == 64
+    assert "rope.n_dims" not in neox_h8_shape
+    assert neox_h8_shape["rope.ntokens"] == 2
+    assert neox_h8_shape["rope.src0_head_stride"] == 64
+    assert neox_h8_shape["rope.src0_token_stride"] == 512
+    assert neox_h8_shape["rope.dst_head_stride"] == 64
+    assert neox_h8_shape["rope.dst_token_stride"] == 512
     assert neox_padded_shape["rope.src0_head_stride"] == 128
     assert neox_padded_shape["rope.src0_token_stride"] == 65536
     assert neox_padded_shape["rope.dst_head_stride"] == 64
