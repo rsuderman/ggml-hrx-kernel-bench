@@ -80,7 +80,7 @@ class YamlTensor:
     dtype: str
     shape: tuple[int, ...]
     storage_shape: tuple[int, ...] | None
-    offset: str | None
+    offset: str | int | None
     permutation: tuple[int, ...] | None
     raw: dict[str, Any]
 
@@ -184,8 +184,12 @@ def _parse_tensor(raw: Any, *, role: str) -> YamlTensor:
         if len(storage_shape) < len(shape):
             raise ValueError(f"{role}.storage_shape rank must be >= shape rank")
     offset = raw.get("offset")
-    if offset is not None and not isinstance(offset, str):
-        raise ValueError(f"{role}.offset must be a string")
+    if (
+        offset is not None
+        and not isinstance(offset, str)
+        and (isinstance(offset, bool) or not isinstance(offset, int))
+    ):
+        raise ValueError(f"{role}.offset must be a string or integer")
     permutation = _optional_permutation(raw)
     if permutation is not None and len(permutation) != len(shape):
         raise ValueError(f"{role}.permutation rank must match shape rank")
@@ -353,7 +357,7 @@ def _surface_for_op(
             if tensor.storage_shape is not None:
                 storage_families[_shape_family(tensor.storage_shape)] += 1
             if tensor.offset is not None:
-                offset_classes[tensor.offset] += 1
+                offset_classes[str(tensor.offset)] += 1
             if tensor.permutation is not None:
                 permutation_families[_json_key(tensor.permutation)] += 1
         for key in _attribute_key_paths(case.attributes):

@@ -602,6 +602,55 @@ def test_v2_resolve_cont_route_for_rank3_f32_case() -> None:
     assert _resolved_shape(result) == {"d0": 4, "d1": 3, "d2": 2, "cont.d1": 6}
 
 
+def test_yaml_route_import_accepts_numeric_cont_offsets(tmp_path: Path) -> None:
+    yaml_path = tmp_path / "cont.v2.yaml"
+    yaml_path.write_text(
+        json.dumps(
+            {
+                "ops": {
+                    "CONT": [
+                        {
+                            "inputs": [{"dtype": "F32", "shape": [2, 1, 3, 5], "offset": 0}],
+                            "destinations": [{"dtype": "F32", "shape": [2, 1, 3, 5]}],
+                        },
+                        {
+                            "inputs": [
+                                {
+                                    "dtype": "F32",
+                                    "shape": [1, 1, 4, 1],
+                                    "storage_shape": [1, 4, 4, 1],
+                                    "offset": 12,
+                                }
+                            ],
+                            "destinations": [{"dtype": "F32", "shape": [1, 4, 4, 1]}],
+                        },
+                    ]
+                }
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    output_dir = tmp_path / "route-import"
+    summary = materialize_yaml_route_import(
+        [yaml_path],
+        output_dir=output_dir,
+        routing_dir=ACTUAL_V2_ROUTING_DIR,
+    )
+
+    op_summary = next(row for row in summary["operations"] if row["op"] == "CONT")
+    assert op_summary["invalid_case_count"] == 0
+    assert op_summary["matched_case_count"] == 1
+    assert op_summary["unmatched_case_count"] == 1
+    route_matches = json.loads((output_dir / "ops" / "CONT" / "route-matches.json").read_text())
+    assert route_matches["rows"][0]["case_index"] == 0
+    assert route_matches["rows"][0]["matched_route_ids"] == ["cont_f32_contiguous_4d"]
+    route_unmatched = json.loads((output_dir / "ops" / "CONT" / "route-unmatched.json").read_text())
+    assert route_unmatched["rows"][0]["case_index"] == 1
+
+
 def test_v2_default_cont_candidate_derives_rank_polymorphic_shape_bindings() -> None:
     router = create_router(version="v2", kernel_dir=ACTUAL_V2_KERNEL_DIR, routing_dir=ACTUAL_V2_ROUTING_DIR)
 
