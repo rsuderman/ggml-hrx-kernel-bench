@@ -49,7 +49,7 @@ ops:
         ggml_op_parameters:
           - index: 0
             name: scale
-            value: 1035273459
+            value: 0.0883883461356163
           - index: 3
             name: precision
             value: 10
@@ -72,7 +72,7 @@ ops:
         ggml_op_parameters:
           - index: 0
             name: scale
-            value: 1035273459
+            value: 0.0883883461356163
           - index: 3
             name: precision
             value: 10
@@ -218,7 +218,7 @@ ops:
         ggml_op_parameters:
           - index: 0
             name: eps
-            value: 925353388
+            value: 9.999999747378752e-06
     - inputs:
         - dtype: f32
           shape: [4096, 512, 1, 1]
@@ -229,7 +229,7 @@ ops:
         ggml_op_parameters:
           - index: 0
             name: eps
-            value: 925353388
+            value: 9.999999747378752e-06
   ROPE:
     - inputs:
         - dtype: f32
@@ -249,19 +249,19 @@ ops:
             value: 8192
           - index: 5
             name: freq_base
-            value: 1223959552
+            value: 500000.0
           - index: 6
             name: freq_scale
-            value: 1065353216
+            value: 1.0
           - index: 8
             name: attn_factor
-            value: 1065353216
+            value: 1.0
           - index: 9
             name: beta_fast
-            value: 1107296256
+            value: 32.0
           - index: 10
             name: beta_slow
-            value: 1065353216
+            value: 1.0
     - inputs:
         - dtype: f32
           shape: [128, 32, 512, 1]
@@ -280,19 +280,19 @@ ops:
             value: 8192
           - index: 5
             name: freq_base
-            value: 1223959552
+            value: 500000.0
           - index: 6
             name: freq_scale
-            value: 1065353216
+            value: 1.0
           - index: 8
             name: attn_factor
-            value: 1065353216
+            value: 1.0
           - index: 9
             name: beta_fast
-            value: 1107296256
+            value: 32.0
           - index: 10
             name: beta_slow
-            value: 1065353216
+            value: 1.0
     - inputs:
         - dtype: f32
           shape: [128, 8, 1, 1]
@@ -311,19 +311,19 @@ ops:
             value: 8192
           - index: 5
             name: freq_base
-            value: 1223959552
+            value: 500000.0
           - index: 6
             name: freq_scale
-            value: 1065353216
+            value: 1.0
           - index: 8
             name: attn_factor
-            value: 1065353216
+            value: 1.0
           - index: 9
             name: beta_fast
-            value: 1107296256
+            value: 32.0
           - index: 10
             name: beta_slow
-            value: 1065353216
+            value: 1.0
     - inputs:
         - dtype: f32
           shape: [128, 8, 512, 1]
@@ -342,19 +342,19 @@ ops:
             value: 8192
           - index: 5
             name: freq_base
-            value: 1223959552
+            value: 500000.0
           - index: 6
             name: freq_scale
-            value: 1065353216
+            value: 1.0
           - index: 8
             name: attn_factor
-            value: 1065353216
+            value: 1.0
           - index: 9
             name: beta_fast
-            value: 1107296256
+            value: 32.0
           - index: 10
             name: beta_slow
-            value: 1065353216
+            value: 1.0
   SET_ROWS:
     - inputs:
         - dtype: f32
