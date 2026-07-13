@@ -11,8 +11,9 @@ from ...reporting import correctness_ok
 from ..models import ExecutedCase, RuntimeCaseRequest
 from .candidates import candidate_from_shape
 from .layout import decode_shape
-from .matching import materialize_route_tensors, route_accepts_tensors
+from .matching import materialize_route_tensors
 from .query import RouteCatalog, select_route
+from .selection import RouteMatch, RouteMatchQuery, RouteSelector
 
 
 def shape_for_case(config: dict[str, Any], values: list[int]) -> dict[str, int]:
@@ -57,7 +58,13 @@ def build_run_args(
     )
 
 
-def execute_case(request: RuntimeCaseRequest, *, catalog: RouteCatalog, kernel_dir: Path) -> ExecutedCase:
+def execute_case(
+    request: RuntimeCaseRequest,
+    *,
+    catalog: RouteCatalog,
+    kernel_dir: Path,
+    selector: RouteSelector,
+) -> ExecutedCase:
     route = select_route(
         catalog,
         family=str(request.config_data["kernel"]),
@@ -65,7 +72,8 @@ def execute_case(request: RuntimeCaseRequest, *, catalog: RouteCatalog, kernel_d
     )
     shape = shape_for_case(request.config_data, request.current_case_values)
     tensors = materialize_route_tensors(route, shape)
-    if not route_accepts_tensors(route, tensors):
+    query = RouteMatchQuery(tensors=tensors, allowed_route_ids=(route.id,))
+    if selector.select(route.op, query) != RouteMatch(route.id):
         raise RuntimeError(
             f"v2 route {route.id!r} does not accept shape {json.dumps(shape, sort_keys=True)}"
         )

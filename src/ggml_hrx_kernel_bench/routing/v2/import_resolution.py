@@ -19,13 +19,14 @@ from .layout import (
     inverse_permutation,
     permuted_contiguous_strides,
 )
-from .matching import route_accepts_dtype, route_accepts_tensors
+from .matching import route_accepts_dtype
 from .models import (
     ConcreteTensor,
     ConcreteTensorDimension,
     V2Route,
 )
 from .query import RouteCatalog, require_route_catalog, routes_for_op
+from .selection import RouteMatchQuery, RouteSelector
 
 POINTWISE_BASE_PERMUTATION = (0, 1, 2, 3)
 POINTWISE_SRC1_PERMUTATION = (1, 2, 0, 3)
@@ -1723,15 +1724,11 @@ def _resolve_shape_binding_default(
     return None
 
 
-def route_accepts_import_query(route: V2Route, query: ImportedRouteQuery) -> bool:
-    if query.route_ids is not None and route.id not in query.route_ids:
-        return False
-    return set(route.tensors) == set(query.tensors) and route_accepts_tensors(route, query.tensors)
-
-
 def resolve_route_for_case(
     case: ImportedCase,
     routes: list[V2Route],
+    *,
+    selector: RouteSelector,
 ) -> tuple[V2Route | None, dict[str, int] | None, UnmappedReason | None, str | None]:
     yaml_query_errors: list[str] = []
     try:
@@ -1740,12 +1737,29 @@ def resolve_route_for_case(
         yaml_queries = ()
         yaml_query_errors.append(str(exc))
     if yaml_queries:
-        for route in routes:
-            for query in yaml_queries:
-                if not route_accepts_import_query(route, query):
-                    continue
-                encoded_shape = shape_for_resolved_route(route, query.tensors, query.fallback_shape)
-                return route, encoded_shape.as_dict(), None, None
+        route_order = {route.id: index for index, route in enumerate(routes)}
+        matched_queries: list[tuple[int, int, str]] = []
+        for query_index, query in enumerate(yaml_queries):
+            match = selector.select(
+                case.op,
+                RouteMatchQuery(
+                    tensors=query.tensors,
+                    allowed_route_ids=query.route_ids,
+                ),
+            )
+            if match is None:
+                continue
+            matched_queries.append(
+                (route_order[match.route_id], query_index, match.route_id)
+            )
+        if matched_queries:
+            # Preserve the original route-major, query-minor selection order
+            # while presenting one query at a time to the selector.
+            _, query_index, route_id = min(matched_queries)
+            route = {route.id: route for route in routes}[route_id]
+            query = yaml_queries[query_index]
+            encoded_shape = shape_for_resolved_route(route, query.tensors, query.fallback_shape)
+            return route, encoded_shape.as_dict(), None, None
         yaml_query_errors.append("YAML import tensor query did not satisfy any v2 route")
 
     dtype_matching = [route for route in routes if route_accepts_dtype(route, case.dtype)]
@@ -1793,6 +1807,7 @@ def resolve_imported_suite(
     *,
     routing_dir=None,
     catalog: RouteCatalog | None = None,
+    selector: RouteSelector,
 ) -> ImportedSuite:
     resolved_catalog = require_route_catalog(routing_dir=routing_dir, catalog=catalog)
     suite.resolved = []
@@ -1810,7 +1825,11 @@ def resolve_imported_suite(
                     )
                 )
                 continue
-            route, shape, reason, detail = resolve_route_for_case(case, op_routes)
+            route, shape, reason, detail = resolve_route_for_case(
+                case,
+                op_routes,
+                selector=selector,
+            )
             if reason is not None:
                 status = (
                     MappingStatus.AMBIGUOUS
