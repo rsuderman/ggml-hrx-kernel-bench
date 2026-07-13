@@ -771,6 +771,11 @@ def _cont_f32(np: Any, candidate: Candidate, fixture_dir: Path, seed: int) -> Or
     np.save(fixture_dir / "dst_init.npy", dst_init, allow_pickle=False)
     np.save(fixture_dir / "expected.npy", src.copy(), allow_pickle=False)
     meta = _metadata(candidate, seed, "cont_f32_numpy_copy", {"atol": 0.0, "rtol": 0.0})
+    meta["arrays"] = {
+        "src0": str(fixture_dir / "src0.npy"),
+        "dst_init": str(fixture_dir / "dst_init.npy"),
+        "expected": str(fixture_dir / "expected.npy"),
+    }
     meta_path = fixture_dir / "oracle.json"
     write_json(meta_path, meta)
     return OracleResult("fixtures_ready", meta["oracle"], fixture_dir, meta_path, fixture_dir / "expected.npy", meta["tolerance"])

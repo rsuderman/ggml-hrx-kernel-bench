@@ -372,6 +372,17 @@ def _generated_scale_config() -> dict[str, object]:
     }
 
 
+def _generated_cont_config() -> dict[str, object]:
+    route_id = "cont_f32_contiguous_4d"
+    return {
+        "kernel": "cont_f32",
+        "params": ["d0", "d1", "d2", "d3"],
+        "cases": [[2, 3, 5, 1]],
+        "route_id": route_id,
+        "execution_abi": _unary_f32_execution_abi(route_id),
+    }
+
+
 def _generated_unary_config(kernel: str) -> dict[str, object]:
     route_id = f"{kernel}_contiguous_4d"
     return {
@@ -708,6 +719,45 @@ def test_descriptor_from_generated_scale_f32_case_uses_scalar_abi(tmp_path: Path
     src0 = np.load(tmp_path / descriptor["bindings"][0]["path"])
     expected = np.load(tmp_path / descriptor["bindings"][1]["expect"]["path"])
     assert expected.tolist() == (src0 * np.float32(0.625) + np.float32(-0.125)).astype(np.float32).tolist()
+
+
+def test_descriptor_from_generated_cont_f32_case_uses_unary_buffer_abi(tmp_path: Path) -> None:
+    assets = materialize_asset_root(tmp_path / "assets", force=True)
+    result = descriptor_from_generated_case(
+        config_data=_generated_cont_config(),
+        case_id="d0-2-d1-3-d2-5-d3-1",
+        case_values=[2, 3, 5, 1],
+        kernel_dir=assets / "kernels" / "v2",
+        routing_dir=assets / "catalog" / "v2",
+        target="gfx1100",
+        max_elements=64,
+        oracle_fixture_dir=tmp_path / "oracle-fixtures",
+        descriptor_dir=tmp_path,
+    )
+
+    assert result.status == "emitted", result.reason
+    assert result.descriptor is not None
+    descriptor = result.descriptor
+    assert descriptor["root"] == "@cont_f32"
+    assert [binding["name"] for binding in descriptor["bindings"]] == ["src0", "dst"]
+    assert [binding["dtype"] for binding in descriptor["bindings"]] == ["f32", "f32"]
+    src0 = np.load(tmp_path / descriptor["bindings"][0]["path"])
+    expected = np.load(tmp_path / descriptor["bindings"][1]["expect"]["path"])
+    assert expected.tolist() == src0.tolist()
+
+    descriptor_path = _write_descriptor(tmp_path, descriptor)
+    prepared = prepare_execution(
+        descriptor_path=descriptor_path,
+        fixture_dir=tmp_path / "fixtures",
+        output_path=tmp_path / "result.json",
+        runner="runner",
+        loom_link=None,
+        iree_run_loom=None,
+        repo_root=tmp_path,
+    )
+    command = prepared.command
+    assert f"0:input:f32:30:{tmp_path / descriptor['bindings'][0]['path']}" in command
+    assert f"1:output:f32:30:{tmp_path / descriptor['bindings'][1]['path']}" in command
 
 
 def test_descriptor_from_generated_add_f16_case_uses_int16_storage(tmp_path: Path) -> None:
