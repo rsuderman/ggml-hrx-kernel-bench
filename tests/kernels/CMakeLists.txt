@@ -38,6 +38,7 @@ add_yaml_route_import_runtime_tests(
     SQR
     SQRT
     SUB
+    SWIGLU
 )
 
 if(GGML_HRX_ENABLE_HSA_DESCRIPTOR_TESTS)

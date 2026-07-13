@@ -465,6 +465,17 @@ def _generated_cont_config() -> dict[str, object]:
     }
 
 
+def _generated_swiglu_config() -> dict[str, object]:
+    route_id = "swiglu_f32_packed_contiguous_4d"
+    return {
+        "kernel": "swiglu_f32",
+        "params": ["d0", "d1", "d2", "d3", "src0_d0"],
+        "cases": [[4, 2, 1, 1, 8]],
+        "route_id": route_id,
+        "execution_abi": _unary_f32_execution_abi(route_id),
+    }
+
+
 def _generated_unary_config(kernel: str) -> dict[str, object]:
     route_id = f"{kernel}_contiguous_4d"
     return {
@@ -885,6 +896,32 @@ def test_descriptor_from_generated_cont_f32_case_uses_unary_buffer_abi(tmp_path:
     command = prepared.command
     assert f"0:input:f32:30:{tmp_path / descriptor['bindings'][0]['path']}" in command
     assert f"1:output:f32:30:{tmp_path / descriptor['bindings'][1]['path']}" in command
+
+
+def test_descriptor_from_generated_swiglu_f32_case_uses_packed_input(tmp_path: Path) -> None:
+    assets = materialize_asset_root(tmp_path / "assets", force=True)
+    result = descriptor_from_generated_case(
+        config_data=_generated_swiglu_config(),
+        case_id="d0-4-d1-2-d2-1-d3-1-src0-d0-8",
+        case_values=[4, 2, 1, 1, 8],
+        kernel_dir=assets / "kernels" / "v2",
+        routing_dir=assets / "catalog" / "v2",
+        target="gfx1100",
+        max_elements=32,
+        oracle_fixture_dir=tmp_path / "oracle-fixtures",
+        descriptor_dir=tmp_path,
+    )
+
+    assert result.status == "emitted", result.reason
+    assert result.descriptor is not None
+    descriptor = result.descriptor
+    assert descriptor["root"] == "@hrx2_swiglu_f32"
+    assert descriptor["metadata"]["element_counts"] == {"dst": 8, "src0": 16}
+    assert [binding["name"] for binding in descriptor["bindings"]] == ["src0", "dst"]
+    src0 = np.load(tmp_path / descriptor["bindings"][0]["path"])
+    expected = np.load(tmp_path / descriptor["bindings"][1]["expect"]["path"])
+    assert src0.shape == (16,)
+    assert expected.shape == (8,)
 
 
 def test_descriptor_from_generated_add_f16_case_uses_int16_storage(tmp_path: Path) -> None:
