@@ -42,7 +42,8 @@ class GeneratedDescriptorResult:
 
 BINARY_F32_FAMILIES = {"add_f32", "mul_f32", "div_f32", "sub_f32"}
 UNARY_F32_FAMILIES = {"abs_f32", "exp_f32", "neg_f32", "relu_f32", "sqr_f32", "sqrt_f32"}
-SUPPORTED_F32_BUFFER_FAMILIES = BINARY_F32_FAMILIES | UNARY_F32_FAMILIES
+SCALAR_F32_FAMILIES = {"scale_f32", "clamp_f32"}
+SUPPORTED_F32_BUFFER_FAMILIES = BINARY_F32_FAMILIES | UNARY_F32_FAMILIES | SCALAR_F32_FAMILIES
 
 
 def _expect(condition: bool, message: str) -> None:
@@ -92,10 +93,25 @@ def validate_descriptor(data: object) -> None:
         _validate_workgroup_count(data["workgroup_count"])
     configs = data.get("configs", {})
     _expect(isinstance(configs, dict), "configs must be an object when present")
+    scalars = data.get("scalars", [])
+    _expect(isinstance(scalars, list), "scalars must be an array when present")
     bindings = data.get("bindings")
     _expect(isinstance(bindings, list) and bindings, "bindings must be a non-empty array")
 
     seen_positions: set[int] = set()
+    for index, scalar in enumerate(scalars):
+        _expect(isinstance(scalar, dict), f"scalars[{index}] must be an object")
+        position = scalar.get("position")
+        _expect(isinstance(position, int) and position >= 0, f"scalars[{index}].position must be a non-negative integer")
+        _expect(position not in seen_positions, f"scalars[{index}].position duplicates {position}")
+        seen_positions.add(position)
+        dtype = scalar.get("dtype")
+        _expect(dtype == "f32", f"scalars[{index}].dtype must be f32")
+        value = scalar.get("value")
+        _expect(
+            isinstance(value, (int, float, str)) and not isinstance(value, bool) and str(value),
+            f"scalars[{index}].value must be a scalar value",
+        )
     for index, binding in enumerate(bindings):
         _expect(isinstance(binding, dict), f"bindings[{index}] must be an object")
         position = binding.get("position")
@@ -208,17 +224,22 @@ def _execution_abi_entries(config_data: dict[str, Any]) -> tuple[list[dict[str, 
             return None, f"execution_abi position {position} is duplicated"
         seen_positions.add(position)
         kind = entry.get("kind")
-        if kind not in ("input", "output"):
-            return None, f"execution_abi.entries[{index}].kind must be input or output for descriptor v1"
+        if kind not in ("input", "output", "scalar"):
+            return None, f"execution_abi.entries[{index}].kind must be input, output, or scalar for descriptor v1"
         role = entry.get("role")
         if not isinstance(role, str) or not role:
             return None, f"execution_abi.entries[{index}].role must be a non-empty string"
         dtype = entry.get("dtype")
         if dtype != "f32":
             return None, f"execution_abi.entries[{index}].dtype must be f32 for descriptor v1"
-        fixture = entry.get("fixture")
-        if not isinstance(fixture, str) or not fixture:
-            return None, f"execution_abi.entries[{index}].fixture must be a non-empty string"
+        if kind == "scalar":
+            value = entry.get("value")
+            if not isinstance(value, (int, float, str)) or isinstance(value, bool) or not str(value):
+                return None, f"execution_abi.entries[{index}].value must be a scalar value"
+        else:
+            fixture = entry.get("fixture")
+            if not isinstance(fixture, str) or not fixture:
+                return None, f"execution_abi.entries[{index}].fixture must be a non-empty string"
         if kind == "output":
             expect = entry.get("expect")
             if not isinstance(expect, dict):
@@ -235,10 +256,28 @@ def _execution_abi_entries(config_data: dict[str, Any]) -> tuple[list[dict[str, 
 def _required_abi_fixtures(entries: list[dict[str, Any]]) -> set[str]:
     required: set[str] = set()
     for entry in entries:
+        if entry["kind"] == "scalar":
+            continue
         required.add(str(entry["fixture"]))
         if entry["kind"] == "output":
             required.add(str(entry["expect"]["fixture"]))
     return required
+
+
+def _descriptor_scalars_from_execution_abi(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    scalars: list[dict[str, Any]] = []
+    for entry in entries:
+        if entry["kind"] != "scalar":
+            continue
+        scalars.append(
+            {
+                "name": entry["role"],
+                "position": entry["position"],
+                "dtype": entry["dtype"],
+                "value": entry["value"],
+            }
+        )
+    return scalars
 
 
 def _descriptor_bindings_from_execution_abi(
@@ -250,6 +289,8 @@ def _descriptor_bindings_from_execution_abi(
 ) -> list[dict[str, Any]]:
     bindings: list[dict[str, Any]] = []
     for entry in entries:
+        if entry["kind"] == "scalar":
+            continue
         fixture = str(entry["fixture"])
         binding: dict[str, Any] = {
             "name": entry["role"],
@@ -298,7 +339,7 @@ def descriptor_from_generated_case(
         family=str(config_data["kernel"]),
         route_id=config_data.get("route_id"),
     )
-    abi_roles = {str(entry["role"]) for entry in abi_entries}
+    abi_roles = {str(entry["role"]) for entry in abi_entries if entry["kind"] != "scalar"}
     if not abi_roles.issubset(set(route.tensors)):
         return GeneratedDescriptorResult(
             status="unsupported",
@@ -349,16 +390,14 @@ def descriptor_from_generated_case(
             status="unsupported",
             reason=f"oracle did not produce required arrays: {missing_arrays}",
         )
-    array_element_counts = {
-        name: _load_f32_array_element_count(arrays[name])
-        for name in required_arrays
-    }
-    largest_array = max(array_element_counts.values())
-    if largest_array > max_elements:
-        return GeneratedDescriptorResult(
-            status="skipped",
-            reason=f"largest oracle fixture has {largest_array} elements, above max {max_elements}",
-        )
+    array_element_counts = {name: _load_f32_array_element_count(arrays[name]) for name in required_arrays}
+    if array_element_counts:
+        largest_array = max(array_element_counts.values())
+        if largest_array > max_elements:
+            return GeneratedDescriptorResult(
+                status="skipped",
+                reason=f"largest oracle fixture has {largest_array} elements, above max {max_elements}",
+            )
     tolerance = oracle.tolerance or {"atol": 1e-5, "rtol": 1e-5}
     descriptor = {
         "schema": SCHEMA,
@@ -367,6 +406,7 @@ def descriptor_from_generated_case(
         "target": target,
         "workgroup_count": list(candidate.dispatch["workgroup_count"]),
         "configs": dict(sorted(candidate.config.items())),
+        "scalars": _descriptor_scalars_from_execution_abi(abi_entries),
         "bindings": _descriptor_bindings_from_execution_abi(
             entries=abi_entries,
             arrays=arrays,
@@ -720,6 +760,14 @@ def prepare_execution(
 
     if iree_run_loom is not None:
         command.extend(["--iree-run-loom", str(iree_run_loom)])
+
+    for scalar in data.get("scalars", []):
+        command.extend(
+            [
+                "--scalar",
+                f"{scalar['position']}:{scalar['dtype']}:{_json_value_to_text(scalar['value'])}",
+            ]
+        )
 
     for index, binding in enumerate(data["bindings"]):
         binding_path = _materialize_binding_file(

@@ -137,6 +137,47 @@ def _unary_f32_execution_abi(route_id: str) -> dict[str, object]:
     }
 
 
+def _scale_f32_execution_abi(route_id: str) -> dict[str, object]:
+    return {
+        "schema": ROUTE_EXECUTION_ABI_SCHEMA,
+        "route_id": route_id,
+        "entries": [
+            {
+                "position": 0,
+                "role": "scale",
+                "kind": "scalar",
+                "dtype": "f32",
+                "value": 0.625,
+            },
+            {
+                "position": 1,
+                "role": "bias",
+                "kind": "scalar",
+                "dtype": "f32",
+                "value": -0.125,
+            },
+            {
+                "position": 2,
+                "role": "src0",
+                "kind": "input",
+                "dtype": "f32",
+                "fixture": "src0",
+            },
+            {
+                "position": 3,
+                "role": "dst",
+                "kind": "output",
+                "dtype": "f32",
+                "fixture": "dst_init",
+                "expect": {
+                    "fixture": "expected",
+                    "mode": "close",
+                },
+            },
+        ],
+    }
+
+
 def _generated_add_config() -> dict[str, object]:
     route_id = "add_f32_generic_4d"
     return {
@@ -145,6 +186,17 @@ def _generated_add_config() -> dict[str, object]:
         "cases": [[4, 1, 1, 1]],
         "route_id": route_id,
         "execution_abi": _binary_f32_execution_abi(route_id),
+    }
+
+
+def _generated_scale_config() -> dict[str, object]:
+    route_id = "scale_f32_contiguous_4d"
+    return {
+        "kernel": "scale_f32",
+        "params": ["d0", "d1", "d2", "d3"],
+        "cases": [[4, 1, 1, 1]],
+        "route_id": route_id,
+        "execution_abi": _scale_f32_execution_abi(route_id),
     }
 
 
@@ -246,6 +298,49 @@ def test_prepare_execution_uses_descriptor_relative_fixture_paths(tmp_path: Path
     assert f"0:input:f32:2:{tmp_path / 'src.npy'}" in command
     assert f"1:output:f32:2:{tmp_path / 'dst.npy'}" in command
     assert f"1:close:{tmp_path / 'expected.npy'}:0.0:0.0" in command
+
+
+def test_prepare_execution_emits_scalar_flags(tmp_path: Path) -> None:
+    np.save(tmp_path / "src.npy", np.asarray([1.0, 2.0], dtype=np.float32), allow_pickle=False)
+    np.save(tmp_path / "dst.npy", np.asarray([0.0, 0.0], dtype=np.float32), allow_pickle=False)
+    np.save(tmp_path / "expected.npy", np.asarray([0.5, 1.125], dtype=np.float32), allow_pickle=False)
+    data = {
+        "schema": SCHEMA,
+        "kernel": "kernels/v2/scale/contiguous_4d.loom",
+        "root": "@scale_f32",
+        "target": "gfx1100",
+        "scalars": [
+            {"position": 0, "name": "scale", "dtype": "f32", "value": 0.625},
+            {"position": 1, "name": "bias", "dtype": "f32", "value": -0.125},
+        ],
+        "bindings": [
+            {"position": 2, "kind": "input", "dtype": "f32", "path": "src.npy"},
+            {
+                "position": 3,
+                "kind": "output",
+                "dtype": "f32",
+                "path": "dst.npy",
+                "expect": {"mode": "close", "path": "expected.npy", "atol": 0.0, "rtol": 0.0},
+            },
+        ],
+    }
+    descriptor_path = _write_descriptor(tmp_path, data)
+
+    prepared = prepare_execution(
+        descriptor_path=descriptor_path,
+        fixture_dir=tmp_path / "fixtures",
+        output_path=tmp_path / "result.json",
+        runner="runner",
+        loom_link=None,
+        iree_run_loom=None,
+        repo_root=Path.cwd(),
+    )
+
+    command = " ".join(prepared.command)
+    assert "0:f32:0.625" in command
+    assert "1:f32:-0.125" in command
+    assert f"2:input:f32:2:{tmp_path / 'src.npy'}" in command
+    assert f"3:close:{tmp_path / 'expected.npy'}:0.0:0.0" in command
 
 
 def test_execute_prepared_invokes_runner(tmp_path: Path) -> None:
@@ -402,6 +497,34 @@ def test_descriptor_from_generated_unary_f32_case_uses_abi_bindings(tmp_path: Pa
     src0 = np.load(tmp_path / descriptor["bindings"][0]["path"])
     expected = np.load(tmp_path / descriptor["bindings"][1]["expect"]["path"])
     assert expected.tolist() == np.abs(src0).astype(np.float32).tolist()
+
+
+def test_descriptor_from_generated_scale_f32_case_uses_scalar_abi(tmp_path: Path) -> None:
+    assets = materialize_asset_root(tmp_path / "assets", force=True)
+    result = descriptor_from_generated_case(
+        config_data=_generated_scale_config(),
+        case_id="d0-4-d1-1-d2-1-d3-1",
+        case_values=[4, 1, 1, 1],
+        kernel_dir=assets / "kernels" / "v2",
+        routing_dir=assets / "catalog" / "v2",
+        target="gfx1100",
+        max_elements=32,
+        oracle_fixture_dir=tmp_path / "oracle-fixtures",
+        descriptor_dir=tmp_path,
+    )
+
+    assert result.status == "emitted"
+    assert result.descriptor is not None
+    descriptor = result.descriptor
+    assert descriptor["root"] == "@scale_f32"
+    assert descriptor["scalars"] == [
+        {"name": "scale", "position": 0, "dtype": "f32", "value": 0.625},
+        {"name": "bias", "position": 1, "dtype": "f32", "value": -0.125},
+    ]
+    assert [binding["position"] for binding in descriptor["bindings"]] == [2, 3]
+    src0 = np.load(tmp_path / descriptor["bindings"][0]["path"])
+    expected = np.load(tmp_path / descriptor["bindings"][1]["expect"]["path"])
+    assert expected.tolist() == (src0 * np.float32(0.625) + np.float32(-0.125)).astype(np.float32).tolist()
 
 
 def test_descriptor_from_generated_add_case_requires_execution_abi(tmp_path: Path) -> None:

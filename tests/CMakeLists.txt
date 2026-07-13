@@ -5,7 +5,7 @@ set(GGML_HRX_TESTS_ROOT ${CMAKE_CURRENT_SOURCE_DIR})
 option(
   GGML_HRX_ENABLE_HSA_DESCRIPTOR_TESTS
   "Register descriptor execution tests that require HSA/GPU runtime resources"
-  OFF
+  ON
 )
 
 if(NOT DEFINED GGML_HRX_TOOL_DIR)

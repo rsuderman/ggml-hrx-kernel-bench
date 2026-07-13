@@ -60,7 +60,7 @@ def test_generate_kernel_runtime_tests_cmake_omits_case_selector(
     assert "kernel-run-llama-cpp-tests-v2-ADD-generated" in generated
 
 
-def test_generate_loom_descriptor_tests_cmake_registers_prepare_only_by_default(
+def test_generate_loom_descriptor_tests_cmake_registers_prepare_only_without_execute_hsa_flag(
     tmp_path: Path, monkeypatch
 ) -> None:
     module = _load_script_module(

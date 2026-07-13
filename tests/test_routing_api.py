@@ -462,6 +462,79 @@ def test_yaml_route_import_emits_execution_abi_for_add_f32_case(tmp_path: Path) 
     }
 
 
+def test_yaml_route_import_emits_scalar_execution_abi_for_scale_f32_case(tmp_path: Path) -> None:
+    yaml_path = tmp_path / "scale.v2.yaml"
+    yaml_path.write_text(
+        json.dumps(
+            {
+                "ops": {
+                    "SCALE": [
+                        {
+                            "inputs": [{"dtype": "F32", "shape": [4, 1, 1, 1]}],
+                            "destinations": [{"dtype": "F32", "shape": [4, 1, 1, 1]}],
+                        }
+                    ]
+                }
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    output_dir = tmp_path / "route-import"
+    summary = materialize_yaml_route_import(
+        [yaml_path],
+        output_dir=output_dir,
+        routing_dir=ACTUAL_V2_ROUTING_DIR,
+    )
+
+    op_summary = next(row for row in summary["operations"] if row["op"] == "SCALE")
+    assert op_summary["matched_case_count"] == 1
+    assert op_summary["unmatched_case_count"] == 0
+    config = json.loads(Path(summary["generated_config_paths"][0]).read_text())
+    assert config["kernel"] == "scale_f32"
+    assert config["route_id"] == "scale_f32_contiguous_4d"
+    assert config["execution_abi"] == {
+        "schema": "ggml_hrx_kernel_bench.route_execution_abi.v1",
+        "route_id": "scale_f32_contiguous_4d",
+        "entries": [
+            {
+                "position": 0,
+                "role": "scale",
+                "kind": "scalar",
+                "dtype": "f32",
+                "value": 0.625,
+            },
+            {
+                "position": 1,
+                "role": "bias",
+                "kind": "scalar",
+                "dtype": "f32",
+                "value": -0.125,
+            },
+            {
+                "position": 2,
+                "role": "src0",
+                "kind": "input",
+                "dtype": "f32",
+                "fixture": "src0",
+            },
+            {
+                "position": 3,
+                "role": "dst",
+                "kind": "output",
+                "dtype": "f32",
+                "fixture": "dst_init",
+                "expect": {
+                    "fixture": "expected",
+                    "mode": "close",
+                },
+            },
+        ],
+    }
+
+
 def test_v2_default_cont_candidate_derives_rank_polymorphic_shape_bindings() -> None:
     router = create_router(version="v2", kernel_dir=ACTUAL_V2_KERNEL_DIR, routing_dir=ACTUAL_V2_ROUTING_DIR)
 

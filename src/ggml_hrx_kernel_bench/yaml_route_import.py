@@ -26,6 +26,16 @@ YAML_SURFACE_SCHEMA = "ggml_hrx_kernel_bench.yaml_surface.v1"
 IMPORT_TEST_COVERAGE_SCHEMA = "ggml_hrx_kernel_bench.import_test_coverage.v1"
 GENERATED_KERNEL_TESTS_SCHEMA = "ggml_hrx_kernel_bench.generated_kernel_tests.v1"
 ROUTE_EXECUTION_ABI_SCHEMA = "ggml_hrx_kernel_bench.route_execution_abi.v1"
+STATIC_SCALAR_ABI_BY_FAMILY: dict[str, tuple[dict[str, Any], ...]] = {
+    "scale_f32": (
+        {"role": "scale", "dtype": "f32", "value": 0.625},
+        {"role": "bias", "dtype": "f32", "value": -0.125},
+    ),
+    "clamp_f32": (
+        {"role": "min", "dtype": "f32", "value": -0.45},
+        {"role": "max", "dtype": "f32", "value": 0.55},
+    ),
+}
 
 
 def _normalize_value(value: Any) -> Any:
@@ -801,6 +811,17 @@ def _role_sort_key(role: str) -> tuple[int, int, str]:
 def _execution_abi_for_route(route: V2Route) -> dict[str, Any]:
     entries: list[dict[str, Any]] = []
     position = 0
+    for scalar in STATIC_SCALAR_ABI_BY_FAMILY.get(route.family, ()):
+        entries.append(
+            {
+                "position": position,
+                "role": scalar["role"],
+                "kind": "scalar",
+                "dtype": scalar["dtype"],
+                "value": scalar["value"],
+            }
+        )
+        position += 1
     for role in sorted(route.tensors, key=_role_sort_key):
         tensor = route.tensors[role]
         kind = "input" if role.startswith("src") else "output"

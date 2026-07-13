@@ -80,14 +80,21 @@ def validate_execution_abi(data: object) -> None:
         role = entry.get("role")
         expect(isinstance(role, str) and role, f"execution_abi.entries[{index}].role must be a non-empty string")
         kind = entry.get("kind")
-        expect(kind in ("input", "output"), f"execution_abi.entries[{index}].kind must be input or output")
+        expect(kind in ("input", "output", "scalar"), f"execution_abi.entries[{index}].kind must be input, output, or scalar")
         dtype = entry.get("dtype")
         expect(isinstance(dtype, str) and dtype, f"execution_abi.entries[{index}].dtype must be a non-empty string")
-        fixture = entry.get("fixture")
-        expect(
-            isinstance(fixture, str) and fixture,
-            f"execution_abi.entries[{index}].fixture must be a non-empty string",
-        )
+        if kind == "scalar":
+            value = entry.get("value")
+            expect(
+                isinstance(value, (int, float, str)) and not isinstance(value, bool) and str(value),
+                f"execution_abi.entries[{index}].value must be a scalar value",
+            )
+        else:
+            fixture = entry.get("fixture")
+            expect(
+                isinstance(fixture, str) and fixture,
+                f"execution_abi.entries[{index}].fixture must be a non-empty string",
+            )
         if kind == "output":
             expected = entry.get("expect")
             expect(isinstance(expected, dict), f"execution_abi.entries[{index}].expect must be an object")
