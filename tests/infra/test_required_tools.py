@@ -20,6 +20,9 @@ class RequiredToolAvailabilityTest(unittest.TestCase):
     def test_iree_test_loom_available(self) -> None:
         self.assertTrue(require_tool("iree-test-loom"))
 
+    def test_iree_run_loom_available(self) -> None:
+        self.assertTrue(require_tool("iree-run-loom"))
+
     def test_iree_benchmark_loom_available(self) -> None:
         self.assertTrue(require_tool("iree-benchmark-loom"))
 

@@ -37,6 +37,8 @@ add_materialized_asset_target(
 
 include(CTest)
 
+add_subdirectory(tools/run-loom-simple)
+
 if(BUILD_TESTING)
   add_subdirectory(tests)
 endif()

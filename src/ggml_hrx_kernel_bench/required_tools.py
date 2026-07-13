@@ -8,6 +8,7 @@ from pathlib import Path
 REQUIRED_TOOL_NAMES = (
     "loom-link",
     "loom-compile",
+    "iree-run-loom",
     "iree-test-loom",
     "iree-benchmark-loom",
 )
