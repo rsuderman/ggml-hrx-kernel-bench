@@ -63,6 +63,24 @@ The generated runtime CTest suites are named with
   descriptor execution. Start with ops already validated through descriptor
   execution, such as `EXP`, `SQRT`, and model `SET_ROWS`, then move through
   low-risk pointwise and indexed families.
+  - [x] Migrate kernel `EXP` and `SQRT` off legacy `kernel-run-*`
+    registration. Descriptor generate, prepare, and execute registrations
+    remain active for both ops.
+  - [x] Migrate the validated small unary pointwise kernel slice `ABS`, `NEG`,
+    `RELU`, and `SQR` off legacy `kernel-run-*` registration after targeted
+    descriptor HSA execution passed.
+  - [x] Migrate the validated scalar pointwise kernel slice `CLAMP` and
+    `SCALE` off legacy `kernel-run-*` registration after targeted descriptor
+    HSA execution passed.
+  - [x] Confirm model `SET_ROWS` is descriptor-only; it remains excluded from
+    legacy model runtime registration.
+  - [ ] Continue with the next low-risk pointwise/indexed descriptor-validated
+    slice.
+  Latest step-4 inventories:
+  `/home/rsuderman/codex/ggml-hrx-kernel-bench-harness-inventory-kernels-step4c-20260713.{json,md}`
+  and
+  `/home/rsuderman/codex/ggml-hrx-kernel-bench-harness-inventory-model-step4-20260713.{json,md}`.
+  The kernel suite now has 107 legacy runtime registrations remaining.
 - [ ] 5. Simplify or narrow legacy generated-runtime registration once the
   inventory shows descriptor coverage is sufficient for an op. Keep legacy
   runtime only for ops the descriptor harness cannot yet represent.
