@@ -12,7 +12,11 @@ from typing import Any, Sequence
 from .fixtures import require_numpy
 from .kernel_test_config import load_config
 from .oracles import generate_oracle
-from .required_tools import resolve_tool
+from .required_tools import (
+    require_iree_run_loom_expected_buffer_tolerance,
+    require_tool,
+    resolve_tool,
+)
 from .routing.case_selection import select_cases
 from .routing.v2.candidates import candidate_from_shape
 from .routing.v2.matching import materialize_route_tensors, route_accepts_tensors
@@ -841,6 +845,7 @@ def prepare_execution(
             )
 
     if execute_iree_run_loom:
+        _expect(iree_run_loom is not None, "execute requires an explicit iree-run-loom path")
         command.append("--execute-iree-run-loom-command")
 
     return PreparedLoomExecution(
@@ -901,8 +906,14 @@ def main(argv: list[str] | None = None) -> int:
         resolved = resolve_tool("loom-link", tool_dir=args.tool_dir)
         loom_link = Path(resolved) if resolved else None
     if iree_run_loom is None:
-        resolved = resolve_tool("iree-run-loom", tool_dir=args.tool_dir)
+        resolved = (
+            require_tool("iree-run-loom", tool_dir=args.tool_dir)
+            if args.execute
+            else resolve_tool("iree-run-loom", tool_dir=args.tool_dir)
+        )
         iree_run_loom = Path(resolved) if resolved else None
+    if iree_run_loom is not None:
+        require_iree_run_loom_expected_buffer_tolerance(tool_path=iree_run_loom)
 
     prepared = prepare_execution(
         descriptor_path=descriptor_path,

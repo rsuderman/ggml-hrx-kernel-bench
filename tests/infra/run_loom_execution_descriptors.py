@@ -7,7 +7,11 @@ from pathlib import Path
 import bootstrap  # noqa: F401
 
 from ggml_hrx_kernel_bench.loom_execution_descriptor import run_execution_descriptor_manifest
-from ggml_hrx_kernel_bench.required_tools import resolve_tool
+from ggml_hrx_kernel_bench.required_tools import (
+    require_iree_run_loom_expected_buffer_tolerance,
+    require_tool,
+    resolve_tool,
+)
 
 
 def main() -> int:
@@ -31,8 +35,14 @@ def main() -> int:
         resolved = resolve_tool("loom-link", tool_dir=args.tool_dir)
         loom_link = Path(resolved) if resolved else None
     if iree_run_loom is None:
-        resolved = resolve_tool("iree-run-loom", tool_dir=args.tool_dir)
+        resolved = (
+            require_tool("iree-run-loom", tool_dir=args.tool_dir)
+            if args.execute
+            else resolve_tool("iree-run-loom", tool_dir=args.tool_dir)
+        )
         iree_run_loom = Path(resolved) if resolved else None
+    if iree_run_loom is not None:
+        require_iree_run_loom_expected_buffer_tolerance(tool_path=iree_run_loom)
 
     manifest = run_execution_descriptor_manifest(
         manifest_path=args.manifest_path,

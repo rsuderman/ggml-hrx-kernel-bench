@@ -39,19 +39,40 @@ The generated runtime CTest suites are named with
   to `iree-run-loom` expected-buffer checks.
 - [x] Validate the new path with targeted `EXP` and `SQRT` descriptor execution
   smoke tests.
-- [ ] Land or otherwise carry the paired HRX `iree-run-loom` support for
-  `--expected-kernel-buffer-tolerance` in every environment that runs the new
-  harness.
-- [ ] Add HRX-side unit tests for tolerant HAL expected-buffer comparison.
-- [ ] Expand descriptor execution coverage beyond the current smoke-tested
-  cases, starting with narrow f32 approximate and model-level slices.
-- [ ] Re-triage current unmatched route-import artifacts before picking the
-  next operation slice.
-- [ ] Validate every widened executing kernel surface with targeted HSA runtime
-  tests outside the sandboxed harness path.
-- [ ] Simplify or retire redundant legacy generated-runtime execution paths once
-  descriptor execution has enough operation coverage to be the primary runtime
-  validation utility.
+- [ ] 1. Add HRX-side unit tests for tolerant HAL expected-buffer comparison.
+  Cover a floating-point expected buffer that passes within tolerance, a
+  floating-point expected buffer that fails outside tolerance, and the zero
+  tolerance path that remains exact. This is dependency-owned HRX work and
+  should not be implemented in this repository's checkout.
+- [x] 2. Verify the paired HRX `iree-run-loom`
+  `--expected-kernel-buffer-tolerance` support is present in every environment
+  that runs the new harness. Add a lightweight capability check if stale tools
+  can be selected accidentally.
+- [x] 3. Build a descriptor-vs-legacy harness inventory. For each op, report
+  route-import matched counts, descriptor emitted/skipped/unsupported counts,
+  descriptor CTest generate/prepare/execute registration, legacy
+  `kernel-run-*` registration, and whether HSA execution is gated or enabled.
+  Current reports:
+  `/home/rsuderman/codex/ggml-hrx-kernel-bench-harness-inventory-kernels-20260713.{json,md}`
+  and
+  `/home/rsuderman/codex/ggml-hrx-kernel-bench-harness-inventory-model-20260713.{json,md}`.
+  The kernel inventory covers 115 ops, with 115 descriptor execute tests and
+  115 legacy runtime tests registered. The model inventory covers 10 ops, with
+  9 descriptor execute tests and 8 legacy runtime tests registered.
+- [ ] 4. Migrate supported ops from legacy generated-runtime execution to
+  descriptor execution. Start with ops already validated through descriptor
+  execution, such as `EXP`, `SQRT`, and model `SET_ROWS`, then move through
+  low-risk pointwise and indexed families.
+- [ ] 5. Simplify or narrow legacy generated-runtime registration once the
+  inventory shows descriptor coverage is sufficient for an op. Keep legacy
+  runtime only for ops the descriptor harness cannot yet represent.
+- [ ] 6. Expand descriptor execution coverage beyond the current validated set.
+  Prefer small f32 approximate pointwise slices first, then compact model-level
+  cases. Every widened executing surface requires targeted HSA runtime
+  validation outside the sandboxed harness path.
+- [ ] 7. Update this TODO as migration items land. Replace broad coverage and
+  legacy-runtime tasks with concrete remaining op lists once the inventory
+  exists.
 
 ## Expected Outputs
 

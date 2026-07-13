@@ -497,6 +497,22 @@ def test_prepare_execution_materializes_inline_f32_fixtures(tmp_path: Path) -> N
     assert "2:close:" in " ".join(prepared.command)
 
 
+def test_prepare_execution_requires_iree_run_loom_for_execution(tmp_path: Path) -> None:
+    descriptor_path = _write_descriptor(tmp_path)
+
+    with pytest.raises(RuntimeError, match="execute requires an explicit iree-run-loom path"):
+        prepare_execution(
+            descriptor_path=descriptor_path,
+            fixture_dir=tmp_path / "fixtures",
+            output_path=tmp_path / "result.json",
+            runner=tmp_path / "runner",
+            loom_link=tmp_path / "loom-link",
+            iree_run_loom=None,
+            repo_root=Path.cwd(),
+            execute_iree_run_loom=True,
+        )
+
+
 def test_prepare_execution_uses_descriptor_relative_fixture_paths(tmp_path: Path) -> None:
     np.save(tmp_path / "src.npy", np.asarray([1.0, 2.0], dtype=np.float32), allow_pickle=False)
     np.save(tmp_path / "dst.npy", np.asarray([0.0, 0.0], dtype=np.float32), allow_pickle=False)
@@ -1232,13 +1248,14 @@ def test_run_execution_descriptor_manifest_executes_fake_runner(tmp_path: Path) 
         encoding="utf-8",
     )
     os.chmod(runner, 0o755)
+    iree_run_loom = tmp_path / "iree-run-loom"
 
     run_manifest = run_execution_descriptor_manifest(
         manifest_path=manifest_path,
         output_dir=tmp_path / "runs",
         runner=runner,
         loom_link=None,
-        iree_run_loom=None,
+        iree_run_loom=iree_run_loom,
         repo_root=Path.cwd(),
         execute=True,
     )

@@ -4,7 +4,11 @@ import argparse
 
 import bootstrap  # noqa: F401
 
-from ggml_hrx_kernel_bench.required_tools import REQUIRED_TOOL_NAMES, require_tool
+from ggml_hrx_kernel_bench.required_tools import (
+    REQUIRED_TOOL_NAMES,
+    require_iree_run_loom_expected_buffer_tolerance,
+    require_tool,
+)
 
 
 def main() -> int:
@@ -18,6 +22,8 @@ def main() -> int:
     )
     args = parser.parse_args()
     path = require_tool(args.tool_name, tool_dir=args.tool_dir)
+    if args.tool_name == "iree-run-loom":
+        require_iree_run_loom_expected_buffer_tolerance(tool_path=path)
     print(f"{args.tool_name}={path}")
     return 0
 

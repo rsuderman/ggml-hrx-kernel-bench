@@ -1,13 +1,17 @@
 from __future__ import annotations
 
 import os
+import subprocess
 import tempfile
 import unittest
 from unittest import mock
 
 import bootstrap  # noqa: F401
 
-from ggml_hrx_kernel_bench.required_tools import require_tool
+from ggml_hrx_kernel_bench.required_tools import (
+    require_iree_run_loom_expected_buffer_tolerance,
+    require_tool,
+)
 
 
 class RequiredToolAvailabilityTest(unittest.TestCase):
@@ -57,6 +61,47 @@ class RequiredToolAvailabilityTest(unittest.TestCase):
                     f"required tool is not available in {tmpdir}: loom-link",
                 ):
                     require_tool("loom-link")
+
+    def test_iree_run_loom_tolerance_capability_accepts_supported_tool(self) -> None:
+        completed = subprocess.CompletedProcess(
+            args=["/tmp/iree-run-loom", "--help"],
+            returncode=0,
+            stdout="usage\n  --expected-kernel-buffer-tolerance=atol,rtol\n",
+        )
+        with mock.patch("subprocess.run", return_value=completed) as run:
+            self.assertEqual(
+                require_iree_run_loom_expected_buffer_tolerance(tool_path="/tmp/iree-run-loom"),
+                "/tmp/iree-run-loom",
+            )
+        run.assert_called_once_with(
+            ["/tmp/iree-run-loom", "--help"],
+            check=False,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            timeout=10.0,
+        )
+
+    def test_iree_run_loom_tolerance_capability_rejects_stale_tool(self) -> None:
+        completed = subprocess.CompletedProcess(
+            args=["/tmp/iree-run-loom", "--help"],
+            returncode=0,
+            stdout="usage\n",
+        )
+        with mock.patch("subprocess.run", return_value=completed):
+            with self.assertRaisesRegex(
+                RuntimeError,
+                "does not support --expected-kernel-buffer-tolerance",
+            ):
+                require_iree_run_loom_expected_buffer_tolerance(tool_path="/tmp/iree-run-loom")
+
+    def test_iree_run_loom_tolerance_capability_reports_probe_failure(self) -> None:
+        with mock.patch("subprocess.run", side_effect=OSError("permission denied")):
+            with self.assertRaisesRegex(
+                RuntimeError,
+                "failed to query iree-run-loom capabilities",
+            ):
+                require_iree_run_loom_expected_buffer_tolerance(tool_path="/tmp/iree-run-loom")
 
 
 if __name__ == "__main__":
