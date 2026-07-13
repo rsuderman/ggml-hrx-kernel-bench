@@ -565,6 +565,18 @@ std::optional<std::string> BuildNpyStorageBindingSpec(const std::string &path,
   return "&@" + path;
 }
 
+std::optional<std::string> BuildNpyExpectedBindingSpec(const std::string &path,
+                                                       DType dtype,
+                                                       std::size_t elements,
+                                                       std::string *error) {
+  const NpyLoadResult loaded = ValidateNpyStorage1D(path, dtype, elements);
+  if (!loaded.loaded) {
+    *error = loaded.error;
+    return std::nullopt;
+  }
+  return "@" + path;
+}
+
 bool IsAmdGpuTargetKey(const std::string &target) {
   return target.rfind("gfx", 0) == 0;
 }
@@ -582,6 +594,12 @@ std::string TargetedKernelPath(const Invocation &invocation,
     return invocation.linked_kernel_output + ".target.loom";
   }
   return invocation.output_path + ".target.loom";
+}
+
+std::string FormatDouble(double value) {
+  std::ostringstream os;
+  os << value;
+  return os.str();
 }
 
 std::optional<std::size_t>
@@ -1049,7 +1067,9 @@ IreeRunLoomCommandResult BuildIreeRunLoomCommand(const Invocation &invocation) {
   }
 
   std::vector<std::string> expected_specs;
+  std::vector<std::string> expected_tolerances;
   expected_specs.reserve(invocation.bindings.size());
+  expected_tolerances.reserve(invocation.bindings.size());
   for (const Binding &binding : invocation.bindings) {
     std::string error;
     std::optional<std::string> binding_spec = BuildNpyStorageBindingSpec(
@@ -1060,19 +1080,28 @@ IreeRunLoomCommandResult BuildIreeRunLoomCommand(const Invocation &invocation) {
     args.push_back("--kernel-input-buffer=" + *binding_spec);
 
     std::string expected_path = binding.path;
+    double expected_atol = 0.0;
+    double expected_rtol = 0.0;
     const auto expectation = expectations_by_position.find(binding.position);
     if (expectation != expectations_by_position.end()) {
       expected_path = expectation->second->path;
+      expected_atol = expectation->second->atol;
+      expected_rtol = expectation->second->rtol;
     }
-    std::optional<std::string> expected_spec = BuildNpyStorageBindingSpec(
+    std::optional<std::string> expected_spec = BuildNpyExpectedBindingSpec(
         expected_path, binding.dtype, binding.elements, &error);
     if (!expected_spec.has_value()) {
       return IreeRunLoomCommandResult{std::nullopt, std::nullopt, error};
     }
     expected_specs.push_back(*expected_spec);
+    expected_tolerances.push_back(FormatDouble(expected_atol) + "," +
+                                  FormatDouble(expected_rtol));
   }
   for (const std::string &expected_spec : expected_specs) {
     args.push_back("--expected-kernel-buffer=" + expected_spec);
+  }
+  for (const std::string &expected_tolerance : expected_tolerances) {
+    args.push_back("--expected-kernel-buffer-tolerance=" + expected_tolerance);
   }
 
   return IreeRunLoomCommandResult{loom_link_args, args, ""};

@@ -777,9 +777,17 @@ void TestIreeRunLoomBridgeBuildsNpyBackedCommand() {
              command.args->end(),
          "bridge command input spec");
   Expect(std::find(command.args->begin(), command.args->end(),
-                   "--expected-kernel-buffer=&@" +
+                   "--expected-kernel-buffer=@" +
                        (dir / "expected.npy").string()) != command.args->end(),
          "bridge command expected spec");
+  Expect(std::find(command.args->begin(), command.args->end(),
+                   "--expected-kernel-buffer-tolerance=0,0") !=
+             command.args->end(),
+         "bridge command exact input tolerance");
+  Expect(std::find(command.args->begin(), command.args->end(),
+                   "--expected-kernel-buffer-tolerance=1e-05,1e-05") !=
+             command.args->end(),
+         "bridge command output tolerance");
 }
 
 void TestIreeRunLoomBridgeBuildsF16NpyBackedCommand() {
@@ -813,9 +821,13 @@ void TestIreeRunLoomBridgeBuildsF16NpyBackedCommand() {
              command.args->end(),
          "f16 bridge command input spec");
   Expect(std::find(command.args->begin(), command.args->end(),
-                   "--expected-kernel-buffer=&@" +
+                   "--expected-kernel-buffer=@" +
                        (dir / "expected.npy").string()) != command.args->end(),
          "f16 bridge command expected spec");
+  Expect(std::find(command.args->begin(), command.args->end(),
+                   "--expected-kernel-buffer-tolerance=0,0") !=
+             command.args->end(),
+         "f16 bridge command exact tolerance");
 }
 
 void TestIreeRunLoomBridgeBuildsI32NpyBackedCommand() {
