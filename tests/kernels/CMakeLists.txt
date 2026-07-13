@@ -23,13 +23,20 @@ add_yaml_route_import_runtime_tests(
   KERNEL_DIR ${GGML_HRX_KERNEL_DIR_V2}
   EXCLUDE_OPS
     ABS
+    ADD
     CLAMP
+    CONT
+    DIV
     EXP
+    GET_ROWS
+    MUL
     NEG
     RELU
     SCALE
+    SET_ROWS
     SQR
     SQRT
+    SUB
 )
 
 if(GGML_HRX_ENABLE_HSA_DESCRIPTOR_TESTS)

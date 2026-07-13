@@ -72,15 +72,24 @@ The generated runtime CTest suites are named with
   - [x] Migrate the validated scalar pointwise kernel slice `CLAMP` and
     `SCALE` off legacy `kernel-run-*` registration after targeted descriptor
     HSA execution passed.
+  - [x] Migrate the validated data movement/indexed kernel slice `CONT` and
+    `GET_ROWS` off legacy `kernel-run-*` registration after targeted descriptor
+    HSA execution passed.
+  - [x] Migrate the validated binary pointwise kernel slice `ADD`, `DIV`,
+    `MUL`, and `SUB` off legacy `kernel-run-*` registration after targeted
+    descriptor HSA execution passed.
   - [x] Confirm model `SET_ROWS` is descriptor-only; it remains excluded from
-    legacy model runtime registration.
+    legacy model runtime registration. Migrate the separately generated kernel
+    `SET_ROWS` suite off legacy `kernel-run-*` registration after targeted
+    descriptor HSA execution passed.
   - [ ] Continue with the next low-risk pointwise/indexed descriptor-validated
     slice.
   Latest step-4 inventories:
-  `/home/rsuderman/codex/ggml-hrx-kernel-bench-harness-inventory-kernels-step4c-20260713.{json,md}`
+  `/home/rsuderman/codex/ggml-hrx-kernel-bench-harness-inventory-kernels-step4f-20260713.{json,md}`
   and
   `/home/rsuderman/codex/ggml-hrx-kernel-bench-harness-inventory-model-step4-20260713.{json,md}`.
-  The kernel suite now has 107 legacy runtime registrations remaining.
+  The kernel suite now has 100 legacy runtime registrations remaining, and no
+  op with emitted descriptor cases still has legacy runtime registration.
 - [ ] 5. Simplify or narrow legacy generated-runtime registration once the
   inventory shows descriptor coverage is sufficient for an op. Keep legacy
   runtime only for ops the descriptor harness cannot yet represent.
