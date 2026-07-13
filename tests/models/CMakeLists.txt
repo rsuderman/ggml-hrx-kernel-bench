@@ -38,8 +38,8 @@ add_yaml_route_import_descriptor_tests(
   GROUPED_YAML ${GGML_HRX_MODEL_LLAMA_3_3_8B_Q8_0_GROUPED_YAML}
   ROUTING_DIR ${GGML_HRX_ROUTING_DIR_V2}
   KERNEL_DIR ${GGML_HRX_KERNEL_DIR_V2}
+  MAX_ELEMENTS 1073741824
   EXCLUDE_OPS
     MUL_MAT
-    SET_ROWS
   ${_ggml_hrx_model_descriptor_hsa_arg}
 )

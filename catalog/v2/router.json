@@ -112,6 +112,7 @@
     "SET_ROWS": [
       "set_rows/set_rows_f32_f32_descriptor_4d.json",
       "set_rows/cont_set_rows_f32_f16_n128_r2_dst4_contiguous_4d.json",
+      "set_rows/cont_set_rows_f32_f16_n1024_dst8192_contiguous_4d.json",
       "set_rows/set_rows_f32_f32_contiguous_4d.json"
     ],
     "SOFT_MAX": [

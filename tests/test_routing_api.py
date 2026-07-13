@@ -639,6 +639,85 @@ def test_yaml_route_import_matches_descriptor_set_rows_f32_case(tmp_path: Path) 
     }
 
 
+def test_yaml_route_import_matches_model_cont_set_rows_f32_f16_case(tmp_path: Path) -> None:
+    yaml_path = tmp_path / "set_rows_model.v2.yaml"
+    yaml_path.write_text(
+        json.dumps(
+            {
+                "ops": {
+                    "SET_ROWS": [
+                        {
+                            "inputs": [
+                                {"dtype": "F32", "shape": [1024, 512, 1, 1]},
+                                {"dtype": "I64", "shape": [512, 1, 1, 1]},
+                            ],
+                            "destinations": [{"dtype": "F16", "shape": [1024, 8192, 1, 1]}],
+                        }
+                    ]
+                }
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    output_dir = tmp_path / "route-import"
+    summary = materialize_yaml_route_import(
+        [yaml_path],
+        output_dir=output_dir,
+        routing_dir=ACTUAL_V2_ROUTING_DIR,
+    )
+
+    op_summary = next(row for row in summary["operations"] if row["op"] == "SET_ROWS")
+    assert op_summary["matched_case_count"] == 1
+    assert op_summary["unmatched_case_count"] == 0
+    route_matches = json.loads((output_dir / "ops" / "SET_ROWS" / "route-matches.json").read_text())
+    assert route_matches["rows"][0]["matched_route_ids"] == [
+        "cont_set_rows_f32_f16_n1024_dst8192_contiguous_4d"
+    ]
+    config = json.loads(Path(summary["generated_config_paths"][0]).read_text())
+    assert config["kernel"] == "cont_set_rows_f32"
+    assert config["route_id"] == "cont_set_rows_f32_f16_n1024_dst8192_contiguous_4d"
+    assert config["execution_abi"]["entries"] == [
+        {
+            "position": 0,
+            "role": "src0",
+            "kind": "input",
+            "dtype": "f32",
+            "fixture": "src0",
+        },
+        {
+            "position": 1,
+            "role": "src1",
+            "kind": "input",
+            "dtype": "i32",
+            "fixture": "indices",
+        },
+        {
+            "position": 2,
+            "role": "dst",
+            "kind": "output",
+            "dtype": "f16",
+            "fixture": "dst_init",
+            "expect": {
+                "fixture": "expected",
+                "mode": "close",
+            },
+        },
+    ]
+    shape = dict(zip(config["params"], config["cases"][0], strict=True))
+    assert shape == {
+        "d0": 1024,
+        "d1": 8192,
+        "d2": 1,
+        "d3": 1,
+        "src0_d1": 512,
+        "src1_d0": 512,
+        "src1_d1": 1,
+    }
+
+
 def test_yaml_route_import_matches_descriptor_get_rows_f32_case(tmp_path: Path) -> None:
     yaml_path = tmp_path / "get_rows.v2.yaml"
     yaml_path.write_text(

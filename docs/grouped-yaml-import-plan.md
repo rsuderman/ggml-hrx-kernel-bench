@@ -26,6 +26,33 @@ The build-time import targets are:
 The generated runtime CTest suites are named with
 `kernel-run-*-yaml-route-import-v2-<OP>-generated`.
 
+## Descriptor Harness Migration TODO
+
+- [x] Add a simple descriptor runner, `ggml-hrx-run-loom-simple`, that can load
+  compact execution descriptors and invoke Loom kernels.
+- [x] Generate compact descriptor manifests from route-import artifacts.
+- [x] Register descriptor generate, prepare, and execute tests from CMake.
+- [x] Enable descriptor execution through the default generated harness path.
+- [x] Gate descriptor execute tests that require HSA resources behind the HSA
+  descriptor-test option.
+- [x] Preserve descriptor `close` tolerances when bridging descriptor execution
+  to `iree-run-loom` expected-buffer checks.
+- [x] Validate the new path with targeted `EXP` and `SQRT` descriptor execution
+  smoke tests.
+- [ ] Land or otherwise carry the paired HRX `iree-run-loom` support for
+  `--expected-kernel-buffer-tolerance` in every environment that runs the new
+  harness.
+- [ ] Add HRX-side unit tests for tolerant HAL expected-buffer comparison.
+- [ ] Expand descriptor execution coverage beyond the current smoke-tested
+  cases, starting with narrow f32 approximate and model-level slices.
+- [ ] Re-triage current unmatched route-import artifacts before picking the
+  next operation slice.
+- [ ] Validate every widened executing kernel surface with targeted HSA runtime
+  tests outside the sandboxed harness path.
+- [ ] Simplify or retire redundant legacy generated-runtime execution paths once
+  descriptor execution has enough operation coverage to be the primary runtime
+  validation utility.
+
 ## Expected Outputs
 
 The importer should keep every YAML case visible in the generated status
