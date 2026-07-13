@@ -413,6 +413,47 @@ def _generated_scale_config() -> dict[str, object]:
     }
 
 
+def _generated_rms_norm_config(eps: float) -> dict[str, object]:
+    route_id = "rms_norm_f32_contiguous_4d"
+    return {
+        "kernel": "rms_norm_f32",
+        "params": ["d0", "d1", "d2", "d3"],
+        "cases": [[4, 2, 1, 1]],
+        "route_id": route_id,
+        "execution_abi": {
+            "schema": ROUTE_EXECUTION_ABI_SCHEMA,
+            "route_id": route_id,
+            "entries": [
+                {
+                    "position": 0,
+                    "role": "eps",
+                    "kind": "scalar",
+                    "dtype": "f32",
+                    "value": eps,
+                },
+                {
+                    "position": 1,
+                    "role": "src0",
+                    "kind": "input",
+                    "dtype": "f32",
+                    "fixture": "src",
+                },
+                {
+                    "position": 2,
+                    "role": "dst",
+                    "kind": "output",
+                    "dtype": "f32",
+                    "fixture": "dst_init",
+                    "expect": {
+                        "fixture": "expected",
+                        "mode": "close",
+                    },
+                },
+            ],
+        },
+    }
+
+
 def _generated_cont_config() -> dict[str, object]:
     route_id = "cont_f32_contiguous_4d"
     return {
@@ -776,6 +817,35 @@ def test_descriptor_from_generated_scale_f32_case_uses_scalar_abi(tmp_path: Path
     src0 = np.load(tmp_path / descriptor["bindings"][0]["path"])
     expected = np.load(tmp_path / descriptor["bindings"][1]["expect"]["path"])
     assert expected.tolist() == (src0 * np.float32(0.625) + np.float32(-0.125)).astype(np.float32).tolist()
+
+
+def test_descriptor_from_generated_rms_norm_f32_case_uses_eps_scalar_abi(tmp_path: Path) -> None:
+    assets = materialize_asset_root(tmp_path / "assets", force=True)
+    result = descriptor_from_generated_case(
+        config_data=_generated_rms_norm_config(0.0001),
+        case_id="d0-4-d1-2-d2-1-d3-1",
+        case_values=[4, 2, 1, 1],
+        kernel_dir=assets / "kernels" / "v2",
+        routing_dir=assets / "catalog" / "v2",
+        target="gfx1100",
+        max_elements=32,
+        oracle_fixture_dir=tmp_path / "oracle-fixtures",
+        descriptor_dir=tmp_path,
+    )
+
+    assert result.status == "emitted", result.reason
+    assert result.descriptor is not None
+    descriptor = result.descriptor
+    assert descriptor["root"] == "@hrx2_rms_norm_f32"
+    assert descriptor["scalars"] == [
+        {"name": "eps", "position": 0, "dtype": "f32", "value": 0.0001},
+    ]
+    assert [binding["name"] for binding in descriptor["bindings"]] == ["src0", "dst"]
+    assert [binding["position"] for binding in descriptor["bindings"]] == [1, 2]
+    src0 = np.load(tmp_path / descriptor["bindings"][0]["path"]).reshape(2, 4)
+    expected = np.load(tmp_path / descriptor["bindings"][1]["expect"]["path"]).reshape(2, 4)
+    scale = np.reciprocal(np.sqrt(np.mean(src0 * src0, axis=1, keepdims=True) + np.float32(0.0001)))
+    assert np.allclose(expected, (src0 * scale).astype(np.float32), atol=1e-4, rtol=1e-4)
 
 
 def test_descriptor_from_generated_cont_f32_case_uses_unary_buffer_abi(tmp_path: Path) -> None:

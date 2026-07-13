@@ -82,13 +82,17 @@ The generated runtime CTest suites are named with
     legacy model runtime registration. Migrate the separately generated kernel
     `SET_ROWS` suite off legacy `kernel-run-*` registration after targeted
     descriptor HSA execution passed.
+  - [x] Migrate the validated normalization kernel slice `RMS_NORM` off legacy
+    `kernel-run-*` registration after preserving per-case `eps` scalar ABI,
+    correcting row-based descriptor dispatch, and passing targeted descriptor
+    HSA execution.
   - [ ] Continue with the next low-risk pointwise/indexed descriptor-validated
     slice.
   Latest step-4 inventories:
-  `/home/rsuderman/codex/ggml-hrx-kernel-bench-harness-inventory-kernels-step4f-20260713.{json,md}`
+  `/home/rsuderman/codex/ggml-hrx-kernel-bench-harness-inventory-kernels-step4g-20260713.{json,md}`
   and
   `/home/rsuderman/codex/ggml-hrx-kernel-bench-harness-inventory-model-step4-20260713.{json,md}`.
-  The kernel suite now has 100 legacy runtime registrations remaining, and no
+  The kernel suite now has 99 legacy runtime registrations remaining, and no
   op with emitted descriptor cases still has legacy runtime registration.
 - [ ] 5. Simplify or narrow legacy generated-runtime registration once the
   inventory shows descriptor coverage is sufficient for an op. Keep legacy

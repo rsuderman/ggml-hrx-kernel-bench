@@ -32,6 +32,7 @@ add_yaml_route_import_runtime_tests(
     MUL
     NEG
     RELU
+    RMS_NORM
     SCALE
     SET_ROWS
     SQR

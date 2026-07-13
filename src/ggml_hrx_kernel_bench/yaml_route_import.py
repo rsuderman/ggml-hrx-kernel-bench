@@ -36,8 +36,14 @@ STATIC_SCALAR_ABI_BY_FAMILY: dict[str, tuple[dict[str, Any], ...]] = {
         {"role": "max", "dtype": "f32", "value": 0.55},
     ),
 }
+ATTRIBUTE_SCALAR_ABI_BY_FAMILY: dict[str, tuple[dict[str, Any], ...]] = {
+    "rms_norm_f32": (
+        {"role": "eps", "dtype": "f32", "attribute": "eps"},
+    ),
+}
 FIXTURE_BY_FAMILY_ROLE: dict[tuple[str, str], str] = {
     ("get_rows_f32", "src1"): "indices",
+    ("rms_norm_f32", "src0"): "src",
 }
 
 
@@ -801,6 +807,34 @@ def _runtime_dtype(dtype: str | None) -> str:
     return str(dtype or "").strip().lower()
 
 
+def _attribute_scalar_value(attributes: Mapping[str, Any], name: str) -> Any | None:
+    if name in attributes:
+        return attributes[name]
+    ggml_parameters = attributes.get("ggml_op_parameters")
+    if isinstance(ggml_parameters, list):
+        for parameter in ggml_parameters:
+            if not isinstance(parameter, Mapping):
+                continue
+            if parameter.get("name") == name and "value" in parameter:
+                return parameter["value"]
+    return None
+
+
+def _attribute_scalar_values_for_route(route: V2Route, attributes: Mapping[str, Any]) -> dict[str, Any]:
+    values: dict[str, Any] = {}
+    for scalar in ATTRIBUTE_SCALAR_ABI_BY_FAMILY.get(route.family, ()):
+        attribute_name = str(scalar["attribute"])
+        value = _attribute_scalar_value(attributes, attribute_name)
+        if value is None:
+            continue
+        values[attribute_name] = value
+    return values
+
+
+def _attribute_scalar_key(route: V2Route, attributes: Mapping[str, Any]) -> str:
+    return _json_key(_attribute_scalar_values_for_route(route, attributes))
+
+
 def _role_sort_key(role: str) -> tuple[int, int, str]:
     if role.startswith("src") and role[3:].isdigit():
         return (0, int(role[3:]), role)
@@ -811,7 +845,7 @@ def _role_sort_key(role: str) -> tuple[int, int, str]:
     return (2, 0, role)
 
 
-def _execution_abi_for_route(route: V2Route) -> dict[str, Any]:
+def _execution_abi_for_route(route: V2Route, attributes: Mapping[str, Any] | None = None) -> dict[str, Any]:
     if route.family in {"set_rows_f32", "cont_set_rows_f32"}:
         update_role, index_role = (
             ("src1", "src2") if "src2" in route.tensors else ("src0", "src1")
@@ -861,6 +895,21 @@ def _execution_abi_for_route(route: V2Route) -> dict[str, Any]:
             }
         )
         position += 1
+    attribute_values = _attribute_scalar_values_for_route(route, attributes or {})
+    for scalar in ATTRIBUTE_SCALAR_ABI_BY_FAMILY.get(route.family, ()):
+        attribute_name = str(scalar["attribute"])
+        if attribute_name not in attribute_values:
+            continue
+        entries.append(
+            {
+                "position": position,
+                "role": scalar["role"],
+                "kind": "scalar",
+                "dtype": scalar["dtype"],
+                "value": attribute_values[attribute_name],
+            }
+        )
+        position += 1
     for role in sorted(route.tensors, key=_role_sort_key):
         tensor = route.tensors[role]
         kind = "input" if role.startswith("src") else "output"
@@ -896,8 +945,9 @@ def _emit_compact_configs(
     output_dir: Path,
 ) -> list[Path]:
     output_dir.mkdir(parents=True, exist_ok=True)
-    grouped: dict[tuple[str, str, tuple[str, ...]], list[list[int]]] = defaultdict(list)
-    seen_cases: dict[tuple[str, str, tuple[str, ...]], set[tuple[int, ...]]] = defaultdict(set)
+    grouped: dict[tuple[str, str, tuple[str, ...], str], list[list[int]]] = defaultdict(list)
+    group_attributes: dict[tuple[str, str, tuple[str, ...], str], dict[str, Any]] = {}
+    seen_cases: dict[tuple[str, str, tuple[str, ...], str], set[tuple[int, ...]]] = defaultdict(set)
 
     for case, row in zip(cases, rows, strict=True):
         if row["status"] != "matched":
@@ -910,25 +960,31 @@ def _emit_compact_configs(
         shape = _shape_for_matched_route(route, route_tensors)
         params_key = tuple(shape.params)
         values_key = tuple(shape.values)
-        group_key = (route.family, route.id, params_key)
+        attribute_key = _attribute_scalar_key(route, case.attributes)
+        group_key = (route.family, route.id, params_key, attribute_key)
         if values_key in seen_cases[group_key]:
             continue
         seen_cases[group_key].add(values_key)
+        group_attributes[group_key] = _attribute_scalar_values_for_route(route, case.attributes)
         grouped[group_key].append(shape.values)
 
-    base_key_counts = Counter((kernel_family, route_id) for kernel_family, route_id, _ in grouped)
+    base_key_counts = Counter((kernel_family, route_id) for kernel_family, route_id, _, _ in grouped)
     emitted: list[Path] = []
     seen_paths: set[Path] = set()
-    for (kernel_family, route_id, params_key), cases_for_config in sorted(
+    for (kernel_family, route_id, params_key, attribute_key), cases_for_config in sorted(
         grouped.items(),
-        key=lambda item: (item[0][0], item[0][1], item[0][2]),
+        key=lambda item: (item[0][0], item[0][1], item[0][2], item[0][3]),
     ):
+        group_key = (kernel_family, route_id, params_key, attribute_key)
         payload: dict[str, Any] = {
             "kernel": kernel_family,
             "params": list(params_key),
             "cases": cases_for_config,
             "route_id": route_id,
-            "execution_abi": _execution_abi_for_route(routes_by_id[route_id]),
+            "execution_abi": _execution_abi_for_route(
+                routes_by_id[route_id],
+                attributes=group_attributes[group_key],
+            ),
         }
         filename = _config_filename(
             kernel_family,
@@ -936,6 +992,9 @@ def _emit_compact_configs(
             params_key,
             require_params_suffix=base_key_counts[(kernel_family, route_id)] > 1,
         )
+        if attribute_key != "{}":
+            digest = hashlib.sha1(attribute_key.encode("utf-8")).hexdigest()[:12]
+            filename = f"{Path(filename).stem}.{digest}.json"
         path = output_dir / filename
         if path in seen_paths:
             raise RuntimeError(f"generated config path collision for {path}")

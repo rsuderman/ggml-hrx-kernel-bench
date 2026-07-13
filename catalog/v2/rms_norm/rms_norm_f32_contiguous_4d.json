@@ -65,6 +65,7 @@
     }
   ],
   "launch": {
+    "workgroup_count_source": "value.flattened_trailing_dimensions",
     "workgroup_size": [
       32,
       1,

@@ -608,7 +608,7 @@ def _mul_mat_id_q6_k_f32(np: Any, candidate: Candidate, fixture_dir: Path, seed:
 
 def _rms_norm_f32(np: Any, candidate: Candidate, fixture_dir: Path, seed: int) -> OracleResult:
     ncols, nrows, _ = _dims(candidate)
-    eps = np.float32(0.0)
+    eps = np.float32(float(candidate.values.get("eps", 0.0)))
     src = f32_pattern(np, (nrows, ncols), seed=seed)
     scale = np.reciprocal(np.sqrt(np.mean(src * src, axis=1, keepdims=True) + eps)).astype(np.float32)
     expected = (src * scale).astype(np.float32)
@@ -618,6 +618,11 @@ def _rms_norm_f32(np: Any, candidate: Candidate, fixture_dir: Path, seed: int) -
     np.save(fixture_dir / "expected.npy", expected.reshape(nrows * ncols), allow_pickle=False)
     meta = _metadata(candidate, seed, "rms_norm_f32_numpy", {"atol": 1e-4, "rtol": 1e-4})
     meta["eps"] = float(eps)
+    meta["arrays"] = {
+        "src": str(fixture_dir / "src.npy"),
+        "dst_init": str(fixture_dir / "dst_init.npy"),
+        "expected": str(fixture_dir / "expected.npy"),
+    }
     meta_path = fixture_dir / "oracle.json"
     write_json(meta_path, meta)
     return OracleResult("fixtures_ready", meta["oracle"], fixture_dir, meta_path, fixture_dir / "expected.npy", meta["tolerance"])

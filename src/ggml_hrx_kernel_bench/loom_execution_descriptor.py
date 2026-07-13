@@ -5,7 +5,7 @@ import hashlib
 import json
 import subprocess
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Sequence
 
@@ -49,9 +49,12 @@ BINARY_F16_FAMILIES = {"add_f16", "mul_f16", "div_f16", "sub_f16"}
 UNARY_F32_FAMILIES = {"abs_f32", "exp_f32", "neg_f32", "relu_f32", "sqr_f32", "sqrt_f32"}
 UNARY_F16_FAMILIES = {"abs_f16", "exp_f16", "neg_f16", "relu_f16", "sqr_f16", "sqrt_f16"}
 SCALAR_F32_FAMILIES = {"scale_f32", "clamp_f32"}
+NORMALIZATION_F32_FAMILIES = {"rms_norm_f32"}
 INDEX_F32_FAMILIES = {"get_rows_f32", "set_rows_f32", "cont_set_rows_f32"}
 COPY_F32_FAMILIES = {"cont_f32"}
-SUPPORTED_F32_BUFFER_FAMILIES = BINARY_F32_FAMILIES | UNARY_F32_FAMILIES | SCALAR_F32_FAMILIES | COPY_F32_FAMILIES
+SUPPORTED_F32_BUFFER_FAMILIES = (
+    BINARY_F32_FAMILIES | UNARY_F32_FAMILIES | SCALAR_F32_FAMILIES | NORMALIZATION_F32_FAMILIES | COPY_F32_FAMILIES
+)
 SUPPORTED_BUFFER_FAMILIES = SUPPORTED_F32_BUFFER_FAMILIES | BINARY_F16_FAMILIES | UNARY_F16_FAMILIES | INDEX_F32_FAMILIES
 SUPPORTED_BUFFER_DTYPES = {"f32", "f16", "i32"}
 NPY_STORAGE_DTYPE_BY_DESCRIPTOR_DTYPE = {
@@ -403,6 +406,13 @@ def descriptor_from_generated_case(
             status="unsupported",
             reason=candidate.message or f"candidate {candidate.id} is not planned",
         )
+    scalar_values = {
+        str(entry["role"]): entry["value"]
+        for entry in abi_entries
+        if entry["kind"] == "scalar"
+    }
+    if scalar_values:
+        candidate = replace(candidate, values={**candidate.values, **scalar_values})
     if oracle_fixture_dir is None:
         return GeneratedDescriptorResult(
             status="unsupported",
