@@ -45,12 +45,14 @@ BINARY_F16_FAMILIES = {"add_f16", "mul_f16", "div_f16", "sub_f16"}
 UNARY_F32_FAMILIES = {"abs_f32", "exp_f32", "neg_f32", "relu_f32", "sqr_f32", "sqrt_f32"}
 UNARY_F16_FAMILIES = {"abs_f16", "exp_f16", "neg_f16", "relu_f16", "sqr_f16", "sqrt_f16"}
 SCALAR_F32_FAMILIES = {"scale_f32", "clamp_f32"}
+INDEX_F32_FAMILIES = {"get_rows_f32"}
 SUPPORTED_F32_BUFFER_FAMILIES = BINARY_F32_FAMILIES | UNARY_F32_FAMILIES | SCALAR_F32_FAMILIES
-SUPPORTED_BUFFER_FAMILIES = SUPPORTED_F32_BUFFER_FAMILIES | BINARY_F16_FAMILIES | UNARY_F16_FAMILIES
-SUPPORTED_BUFFER_DTYPES = {"f32", "f16"}
+SUPPORTED_BUFFER_FAMILIES = SUPPORTED_F32_BUFFER_FAMILIES | BINARY_F16_FAMILIES | UNARY_F16_FAMILIES | INDEX_F32_FAMILIES
+SUPPORTED_BUFFER_DTYPES = {"f32", "f16", "i32"}
 NPY_STORAGE_DTYPE_BY_DESCRIPTOR_DTYPE = {
     "f32": "float32",
     "f16": "int16",
+    "i32": "int32",
 }
 
 
@@ -133,7 +135,7 @@ def validate_descriptor(data: object) -> None:
         kind = binding.get("kind")
         _expect(kind in ("input", "output"), f"bindings[{index}].kind must be input or output")
         dtype = binding.get("dtype")
-        _expect(dtype in SUPPORTED_BUFFER_DTYPES, f"bindings[{index}].dtype must be f32 or f16")
+        _expect(dtype in SUPPORTED_BUFFER_DTYPES, f"bindings[{index}].dtype must be f32, f16, or i32")
         has_values = "values" in binding
         has_path = "path" in binding
         _expect(has_values != has_path, f"bindings[{index}] must provide exactly one of values or path")
@@ -246,7 +248,7 @@ def _execution_abi_entries(config_data: dict[str, Any]) -> tuple[list[dict[str, 
             return None, f"execution_abi.entries[{index}].role must be a non-empty string"
         dtype = entry.get("dtype")
         if dtype not in SUPPORTED_BUFFER_DTYPES:
-            return None, f"execution_abi.entries[{index}].dtype must be f32 or f16 for descriptor v1"
+            return None, f"execution_abi.entries[{index}].dtype must be f32, f16, or i32 for descriptor v1"
         if kind == "scalar" and dtype != "f32":
             return None, f"execution_abi.entries[{index}].dtype must be f32 for scalar descriptor v1"
         if kind == "scalar":
@@ -345,7 +347,7 @@ def descriptor_from_generated_case(
     if family not in SUPPORTED_BUFFER_FAMILIES:
         return GeneratedDescriptorResult(
             status="unsupported",
-            reason=f"only f32/f16 buffer generated descriptors are currently supported, saw {family!r}",
+            reason=f"only f32/f16/i32 buffer generated descriptors are currently supported, saw {family!r}",
         )
     abi_entries, abi_error = _execution_abi_entries(config_data)
     if abi_entries is None:
@@ -372,7 +374,7 @@ def descriptor_from_generated_case(
     if any(_runtime_dtype(str(tensor.dtype)) not in SUPPORTED_BUFFER_DTYPES for tensor in tensors.values()):
         return GeneratedDescriptorResult(
             status="unsupported",
-            reason="only f32/f16 tensor descriptors are currently supported",
+            reason="only f32/f16/i32 tensor descriptors are currently supported",
         )
     element_counts = {name: _storage_elements(tensor) for name, tensor in tensors.items()}
     largest = max(element_counts.values())

@@ -646,6 +646,37 @@ def test_yaml_route_import_matches_descriptor_get_rows_f32_case(tmp_path: Path) 
     config = json.loads(Path(summary["generated_config_paths"][0]).read_text())
     assert config["kernel"] == "get_rows_f32"
     assert config["route_id"] == "get_rows_f32_embedding_rows_descriptor_4d"
+    assert config["execution_abi"] == {
+        "schema": "ggml_hrx_kernel_bench.route_execution_abi.v1",
+        "route_id": "get_rows_f32_embedding_rows_descriptor_4d",
+        "entries": [
+            {
+                "position": 0,
+                "role": "src0",
+                "kind": "input",
+                "dtype": "f32",
+                "fixture": "src0",
+            },
+            {
+                "position": 1,
+                "role": "src1",
+                "kind": "input",
+                "dtype": "i32",
+                "fixture": "indices",
+            },
+            {
+                "position": 2,
+                "role": "dst",
+                "kind": "output",
+                "dtype": "f32",
+                "fixture": "dst_init",
+                "expect": {
+                    "fixture": "expected",
+                    "mode": "close",
+                },
+            },
+        ],
+    }
     shape = dict(zip(config["params"], config["cases"][0], strict=True))
     assert shape == {
         "d0": 4096,

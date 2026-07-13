@@ -108,6 +108,9 @@ std::optional<DType> ParseDType(std::string_view value) {
   if (value == "f16") {
     return DType::kF16;
   }
+  if (value == "i32") {
+    return DType::kI32;
+  }
   return std::nullopt;
 }
 
@@ -926,6 +929,10 @@ NpyLoadResult ValidateNpyStorage1D(const std::string &path, DType dtype,
     return NpyLoadResult{false, "expected f16 storage npy dtype '<i2', saw '" +
                                     *descr + "'"};
   }
+  if (dtype == DType::kI32 && *descr != "<i4" && *descr != "|i4") {
+    return NpyLoadResult{false,
+                         "expected i32 npy dtype '<i4', saw '" + *descr + "'"};
+  }
   if (!HeaderHasFalse(header, "fortran_order")) {
     return NpyLoadResult{false,
                          "only C-contiguous npy arrays are supported: " + path};
@@ -1087,6 +1094,8 @@ std::string ToString(DType dtype) {
     return "f32";
   case DType::kF16:
     return "f16";
+  case DType::kI32:
+    return "i32";
   }
   return "unknown";
 }

@@ -36,6 +36,9 @@ STATIC_SCALAR_ABI_BY_FAMILY: dict[str, tuple[dict[str, Any], ...]] = {
         {"role": "max", "dtype": "f32", "value": 0.55},
     ),
 }
+FIXTURE_BY_FAMILY_ROLE: dict[tuple[str, str], str] = {
+    ("get_rows_f32", "src1"): "indices",
+}
 
 
 def _normalize_value(value: Any) -> Any:
@@ -830,7 +833,7 @@ def _execution_abi_for_route(route: V2Route) -> dict[str, Any]:
             "role": role,
             "kind": kind,
             "dtype": _runtime_dtype(tensor.dtype),
-            "fixture": role,
+            "fixture": FIXTURE_BY_FAMILY_ROLE.get((route.family, role), role),
         }
         if kind == "output":
             entry["fixture"] = f"{role}_init" if role != "dst" else "dst_init"

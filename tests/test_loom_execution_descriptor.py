@@ -144,6 +144,40 @@ def _binary_f16_execution_abi(route_id: str) -> dict[str, object]:
     }
 
 
+def _get_rows_f32_execution_abi(route_id: str) -> dict[str, object]:
+    return {
+        "schema": ROUTE_EXECUTION_ABI_SCHEMA,
+        "route_id": route_id,
+        "entries": [
+            {
+                "position": 0,
+                "role": "src0",
+                "kind": "input",
+                "dtype": "f32",
+                "fixture": "src0",
+            },
+            {
+                "position": 1,
+                "role": "src1",
+                "kind": "input",
+                "dtype": "i32",
+                "fixture": "indices",
+            },
+            {
+                "position": 2,
+                "role": "dst",
+                "kind": "output",
+                "dtype": "f32",
+                "fixture": "dst_init",
+                "expect": {
+                    "fixture": "expected",
+                    "mode": "close",
+                },
+            },
+        ],
+    }
+
+
 def _unary_f32_execution_abi(route_id: str) -> dict[str, object]:
     return {
         "schema": ROUTE_EXECUTION_ABI_SCHEMA,
@@ -258,6 +292,17 @@ def _generated_add_f16_config() -> dict[str, object]:
         "cases": [[4, 1, 1, 1]],
         "route_id": route_id,
         "execution_abi": _binary_f16_execution_abi(route_id),
+    }
+
+
+def _generated_get_rows_f32_config() -> dict[str, object]:
+    route_id = "get_rows_f32_embedding_rows_descriptor_4d"
+    return {
+        "kernel": "get_rows_f32",
+        "params": ["d0", "d1", "d2", "d3", "src0_d1", "src1_d0", "src1_d1"],
+        "cases": [[1, 2, 1, 1, 8, 2, 1]],
+        "route_id": route_id,
+        "execution_abi": _get_rows_f32_execution_abi(route_id),
     }
 
 
@@ -693,6 +738,47 @@ def test_descriptor_from_generated_abs_f16_case_uses_int16_storage(tmp_path: Pat
     command = prepared.command
     assert f"0:input:f16:4:{tmp_path / descriptor['bindings'][0]['path']}" in command
     assert f"1:output:f16:4:{tmp_path / descriptor['bindings'][1]['path']}" in command
+
+
+def test_descriptor_from_generated_get_rows_f32_case_uses_i32_indices(tmp_path: Path) -> None:
+    assets = materialize_asset_root(tmp_path / "assets", force=True)
+    result = descriptor_from_generated_case(
+        config_data=_generated_get_rows_f32_config(),
+        case_id="d0-1-d1-2-d2-1-d3-1-src0-d1-8-src1-d0-2-src1-d1-1",
+        case_values=[1, 2, 1, 1, 8, 2, 1],
+        kernel_dir=assets / "kernels" / "v2",
+        routing_dir=assets / "catalog" / "v2",
+        target="gfx1100",
+        max_elements=32,
+        oracle_fixture_dir=tmp_path / "oracle-fixtures",
+        descriptor_dir=tmp_path,
+    )
+
+    assert result.status == "emitted", result.reason
+    assert result.descriptor is not None
+    descriptor = result.descriptor
+    assert descriptor["root"] == "@hrx2_get_rows_f32"
+    assert [binding["name"] for binding in descriptor["bindings"]] == ["src0", "src1", "dst"]
+    assert [binding["dtype"] for binding in descriptor["bindings"]] == ["f32", "i32", "f32"]
+    assert descriptor["bindings"][1]["path"].endswith("/indices.npy")
+    indices = np.load(tmp_path / descriptor["bindings"][1]["path"])
+    expected = np.load(tmp_path / descriptor["bindings"][2]["expect"]["path"])
+    assert indices.dtype == np.int32
+    assert expected.dtype == np.float32
+
+    descriptor_path = _write_descriptor(tmp_path, descriptor)
+    prepared = prepare_execution(
+        descriptor_path=descriptor_path,
+        fixture_dir=tmp_path / "fixtures",
+        output_path=tmp_path / "result.json",
+        runner="runner",
+        loom_link=None,
+        iree_run_loom=None,
+        repo_root=tmp_path,
+    )
+    command = prepared.command
+    assert f"1:input:i32:2:{tmp_path / descriptor['bindings'][1]['path']}" in command
+    assert f"2:output:f32:2:{tmp_path / descriptor['bindings'][2]['path']}" in command
 
 
 def test_descriptor_from_generated_add_case_requires_execution_abi(tmp_path: Path) -> None:

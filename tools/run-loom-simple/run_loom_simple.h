@@ -16,6 +16,7 @@ enum class BindingKind {
 enum class DType {
   kF32,
   kF16,
+  kI32,
 };
 
 enum class CheckMode {
