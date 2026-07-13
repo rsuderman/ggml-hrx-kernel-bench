@@ -45,7 +45,7 @@ BINARY_F16_FAMILIES = {"add_f16", "mul_f16", "div_f16", "sub_f16"}
 UNARY_F32_FAMILIES = {"abs_f32", "exp_f32", "neg_f32", "relu_f32", "sqr_f32", "sqrt_f32"}
 UNARY_F16_FAMILIES = {"abs_f16", "exp_f16", "neg_f16", "relu_f16", "sqr_f16", "sqrt_f16"}
 SCALAR_F32_FAMILIES = {"scale_f32", "clamp_f32"}
-INDEX_F32_FAMILIES = {"get_rows_f32"}
+INDEX_F32_FAMILIES = {"get_rows_f32", "set_rows_f32"}
 SUPPORTED_F32_BUFFER_FAMILIES = BINARY_F32_FAMILIES | UNARY_F32_FAMILIES | SCALAR_F32_FAMILIES
 SUPPORTED_BUFFER_FAMILIES = SUPPORTED_F32_BUFFER_FAMILIES | BINARY_F16_FAMILIES | UNARY_F16_FAMILIES | INDEX_F32_FAMILIES
 SUPPORTED_BUFFER_DTYPES = {"f32", "f16", "i32"}
@@ -371,7 +371,15 @@ def descriptor_from_generated_case(
             status="unsupported",
             reason=f"route {route.id!r} does not accept selected shape",
         )
-    if any(_runtime_dtype(str(tensor.dtype)) not in SUPPORTED_BUFFER_DTYPES for tensor in tensors.values()):
+    abi_dtype_by_role = {
+        str(entry["role"]): str(entry["dtype"])
+        for entry in abi_entries
+        if entry["kind"] != "scalar"
+    }
+    if any(
+        abi_dtype_by_role.get(name, _runtime_dtype(str(tensor.dtype))) not in SUPPORTED_BUFFER_DTYPES
+        for name, tensor in tensors.items()
+    ):
         return GeneratedDescriptorResult(
             status="unsupported",
             reason="only f32/f16/i32 tensor descriptors are currently supported",

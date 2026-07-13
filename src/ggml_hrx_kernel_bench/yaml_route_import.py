@@ -812,6 +812,41 @@ def _role_sort_key(role: str) -> tuple[int, int, str]:
 
 
 def _execution_abi_for_route(route: V2Route) -> dict[str, Any]:
+    if route.family == "set_rows_f32":
+        update_role, index_role = (
+            ("src1", "src2") if "src2" in route.tensors else ("src0", "src1")
+        )
+        return {
+            "schema": ROUTE_EXECUTION_ABI_SCHEMA,
+            "route_id": route.id,
+            "entries": [
+                {
+                    "position": 0,
+                    "role": update_role,
+                    "kind": "input",
+                    "dtype": "f32",
+                    "fixture": "src0",
+                },
+                {
+                    "position": 1,
+                    "role": index_role,
+                    "kind": "input",
+                    "dtype": "i32",
+                    "fixture": "indices",
+                },
+                {
+                    "position": 2,
+                    "role": "dst",
+                    "kind": "output",
+                    "dtype": "f32",
+                    "fixture": "dst_init",
+                    "expect": {
+                        "fixture": "expected",
+                        "mode": "close",
+                    },
+                },
+            ],
+        }
     entries: list[dict[str, Any]] = []
     position = 0
     for scalar in STATIC_SCALAR_ABI_BY_FAMILY.get(route.family, ()):
