@@ -22,6 +22,7 @@ from .routing.v2.runtime import shape_for_case
 
 SCHEMA = "ggml_hrx_kernel_bench.loom_execution_descriptor.v1"
 DESCRIPTOR_MANIFEST_SCHEMA = "ggml_hrx_kernel_bench.loom_execution_descriptors.v1"
+ROUTE_EXECUTION_ABI_SCHEMA = "ggml_hrx_kernel_bench.route_execution_abi.v1"
 
 
 @dataclass(frozen=True)
@@ -40,6 +41,8 @@ class GeneratedDescriptorResult:
 
 
 BINARY_F32_FAMILIES = {"add_f32", "mul_f32", "div_f32", "sub_f32"}
+UNARY_F32_FAMILIES = {"abs_f32", "exp_f32", "neg_f32", "relu_f32", "sqr_f32", "sqrt_f32"}
+SUPPORTED_F32_BUFFER_FAMILIES = BINARY_F32_FAMILIES | UNARY_F32_FAMILIES
 
 
 def _expect(condition: bool, message: str) -> None:
@@ -184,6 +187,90 @@ def _oracle_arrays(metadata_path: Path) -> dict[str, Path]:
     return result
 
 
+def _execution_abi_entries(config_data: dict[str, Any]) -> tuple[list[dict[str, Any]] | None, str | None]:
+    abi = config_data.get("execution_abi")
+    if not isinstance(abi, dict):
+        return None, "generated config is missing execution_abi"
+    if abi.get("schema") != ROUTE_EXECUTION_ABI_SCHEMA:
+        return None, f"execution_abi schema must be {ROUTE_EXECUTION_ABI_SCHEMA!r}"
+    entries = abi.get("entries")
+    if not isinstance(entries, list) or not entries:
+        return None, "execution_abi.entries must be a non-empty list"
+    result: list[dict[str, Any]] = []
+    seen_positions: set[int] = set()
+    for index, entry in enumerate(entries):
+        if not isinstance(entry, dict):
+            return None, f"execution_abi.entries[{index}] must be an object"
+        position = entry.get("position")
+        if not isinstance(position, int) or position < 0 or isinstance(position, bool):
+            return None, f"execution_abi.entries[{index}].position must be a non-negative integer"
+        if position in seen_positions:
+            return None, f"execution_abi position {position} is duplicated"
+        seen_positions.add(position)
+        kind = entry.get("kind")
+        if kind not in ("input", "output"):
+            return None, f"execution_abi.entries[{index}].kind must be input or output for descriptor v1"
+        role = entry.get("role")
+        if not isinstance(role, str) or not role:
+            return None, f"execution_abi.entries[{index}].role must be a non-empty string"
+        dtype = entry.get("dtype")
+        if dtype != "f32":
+            return None, f"execution_abi.entries[{index}].dtype must be f32 for descriptor v1"
+        fixture = entry.get("fixture")
+        if not isinstance(fixture, str) or not fixture:
+            return None, f"execution_abi.entries[{index}].fixture must be a non-empty string"
+        if kind == "output":
+            expect = entry.get("expect")
+            if not isinstance(expect, dict):
+                return None, f"execution_abi.entries[{index}].expect must be an object for output entries"
+            if expect.get("mode") != "close":
+                return None, f"execution_abi.entries[{index}].expect.mode must be close"
+            expect_fixture = expect.get("fixture")
+            if not isinstance(expect_fixture, str) or not expect_fixture:
+                return None, f"execution_abi.entries[{index}].expect.fixture must be a non-empty string"
+        result.append(entry)
+    return sorted(result, key=lambda current: current["position"]), None
+
+
+def _required_abi_fixtures(entries: list[dict[str, Any]]) -> set[str]:
+    required: set[str] = set()
+    for entry in entries:
+        required.add(str(entry["fixture"]))
+        if entry["kind"] == "output":
+            required.add(str(entry["expect"]["fixture"]))
+    return required
+
+
+def _descriptor_bindings_from_execution_abi(
+    *,
+    entries: list[dict[str, Any]],
+    arrays: dict[str, Path],
+    tolerance: dict[str, float],
+    descriptor_dir: Path | None,
+) -> list[dict[str, Any]]:
+    bindings: list[dict[str, Any]] = []
+    for entry in entries:
+        fixture = str(entry["fixture"])
+        binding: dict[str, Any] = {
+            "name": entry["role"],
+            "position": entry["position"],
+            "kind": entry["kind"],
+            "dtype": entry["dtype"],
+            "path": _descriptor_relative_path(arrays[fixture], descriptor_dir=descriptor_dir),
+        }
+        if entry["kind"] == "output":
+            expect = entry["expect"]
+            expect_fixture = str(expect["fixture"])
+            binding["expect"] = {
+                "mode": "close",
+                "path": _descriptor_relative_path(arrays[expect_fixture], descriptor_dir=descriptor_dir),
+                "atol": float(tolerance.get("atol", 1e-5)),
+                "rtol": float(tolerance.get("rtol", 1e-5)),
+            }
+        bindings.append(binding)
+    return bindings
+
+
 def descriptor_from_generated_case(
     *,
     config_data: dict[str, Any],
@@ -197,21 +284,25 @@ def descriptor_from_generated_case(
     descriptor_dir: Path | None = None,
 ) -> GeneratedDescriptorResult:
     family = str(config_data.get("kernel") or "")
-    if family not in BINARY_F32_FAMILIES:
+    if family not in SUPPORTED_F32_BUFFER_FAMILIES:
         return GeneratedDescriptorResult(
             status="unsupported",
-            reason=f"only f32 binary generated descriptors are currently supported, saw {family!r}",
+            reason=f"only f32 buffer generated descriptors are currently supported, saw {family!r}",
         )
+    abi_entries, abi_error = _execution_abi_entries(config_data)
+    if abi_entries is None:
+        return GeneratedDescriptorResult(status="unsupported", reason=abi_error)
     catalog = load_route_catalog(routing_dir)
     route = select_route(
         catalog,
         family=str(config_data["kernel"]),
         route_id=config_data.get("route_id"),
     )
-    if set(route.tensors) != {"src0", "src1", "dst"}:
+    abi_roles = {str(entry["role"]) for entry in abi_entries}
+    if not abi_roles.issubset(set(route.tensors)):
         return GeneratedDescriptorResult(
             status="unsupported",
-            reason=f"add_f32 descriptor generation requires src0/src1/dst tensors, saw {sorted(route.tensors)}",
+            reason=f"execution_abi references roles not present in route tensors: {sorted(abi_roles - set(route.tensors))}",
         )
     shape = shape_for_case(config_data, case_values)
     tensors = materialize_route_tensors(route, shape)
@@ -251,7 +342,7 @@ def descriptor_from_generated_case(
             reason=oracle.message or f"oracle generation failed with status {oracle.status}",
         )
     arrays = _oracle_arrays(oracle.metadata_path)
-    required_arrays = {"src0", "src1", "dst_init", "expected"}
+    required_arrays = _required_abi_fixtures(abi_entries)
     missing_arrays = sorted(required_arrays - set(arrays))
     if missing_arrays:
         return GeneratedDescriptorResult(
@@ -276,35 +367,12 @@ def descriptor_from_generated_case(
         "target": target,
         "workgroup_count": list(candidate.dispatch["workgroup_count"]),
         "configs": dict(sorted(candidate.config.items())),
-        "bindings": [
-            {
-                "name": "src0",
-                "position": 0,
-                "kind": "input",
-                "dtype": "f32",
-                "path": _descriptor_relative_path(arrays["src0"], descriptor_dir=descriptor_dir),
-            },
-            {
-                "name": "src1",
-                "position": 1,
-                "kind": "input",
-                "dtype": "f32",
-                "path": _descriptor_relative_path(arrays["src1"], descriptor_dir=descriptor_dir),
-            },
-            {
-                "name": "dst",
-                "position": 2,
-                "kind": "output",
-                "dtype": "f32",
-                "path": _descriptor_relative_path(arrays["dst_init"], descriptor_dir=descriptor_dir),
-                "expect": {
-                    "mode": "close",
-                    "path": _descriptor_relative_path(arrays["expected"], descriptor_dir=descriptor_dir),
-                    "atol": float(tolerance.get("atol", 1e-5)),
-                    "rtol": float(tolerance.get("rtol", 1e-5)),
-                },
-            },
-        ],
+        "bindings": _descriptor_bindings_from_execution_abi(
+            entries=abi_entries,
+            arrays=arrays,
+            tolerance=tolerance,
+            descriptor_dir=descriptor_dir,
+        ),
         "metadata": {
             "source": "generated-kernel-tests",
             "case_id": case_id,
@@ -316,6 +384,7 @@ def descriptor_from_generated_case(
             "element_counts": element_counts,
             "oracle": oracle.to_ledger(),
             "oracle_array_element_counts": array_element_counts,
+            "execution_abi": config_data["execution_abi"],
         },
     }
     validate_descriptor(descriptor)

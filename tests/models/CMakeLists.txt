@@ -25,3 +25,21 @@ add_yaml_route_import_runtime_tests(
     MUL_MAT
     SET_ROWS
 )
+
+if(GGML_HRX_ENABLE_HSA_DESCRIPTOR_TESTS)
+  set(_ggml_hrx_model_descriptor_hsa_arg ENABLE_HSA_EXECUTION)
+else()
+  set(_ggml_hrx_model_descriptor_hsa_arg)
+endif()
+
+add_yaml_route_import_descriptor_tests(
+  NAME model-llama-3-3-8b-q8-0-yaml-route-import-v2
+  GENERATED_IMPORT_DIR ${GGML_HRX_MODEL_LLAMA_3_3_8B_Q8_0_ROUTE_IMPORT_DIR_V2}
+  GROUPED_YAML ${GGML_HRX_MODEL_LLAMA_3_3_8B_Q8_0_GROUPED_YAML}
+  ROUTING_DIR ${GGML_HRX_ROUTING_DIR_V2}
+  KERNEL_DIR ${GGML_HRX_KERNEL_DIR_V2}
+  EXCLUDE_OPS
+    MUL_MAT
+    SET_ROWS
+  ${_ggml_hrx_model_descriptor_hsa_arg}
+)

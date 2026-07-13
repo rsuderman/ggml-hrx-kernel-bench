@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import shutil
-import hashlib
 from collections import Counter, defaultdict
 from dataclasses import dataclass
 from pathlib import Path
@@ -25,6 +25,7 @@ YAML_ROUTE_IMPORT_SCHEMA = "ggml_hrx_kernel_bench.yaml_route_import.v1"
 YAML_SURFACE_SCHEMA = "ggml_hrx_kernel_bench.yaml_surface.v1"
 IMPORT_TEST_COVERAGE_SCHEMA = "ggml_hrx_kernel_bench.import_test_coverage.v1"
 GENERATED_KERNEL_TESTS_SCHEMA = "ggml_hrx_kernel_bench.generated_kernel_tests.v1"
+ROUTE_EXECUTION_ABI_SCHEMA = "ggml_hrx_kernel_bench.route_execution_abi.v1"
 
 
 def _normalize_value(value: Any) -> Any:
@@ -783,6 +784,48 @@ def _write_generated_kernel_tests_json(
     return payload
 
 
+def _runtime_dtype(dtype: str | None) -> str:
+    return str(dtype or "").strip().lower()
+
+
+def _role_sort_key(role: str) -> tuple[int, int, str]:
+    if role.startswith("src") and role[3:].isdigit():
+        return (0, int(role[3:]), role)
+    if role == "dst":
+        return (1, 0, role)
+    if role.startswith("dst") and role[3:].isdigit():
+        return (1, int(role[3:]), role)
+    return (2, 0, role)
+
+
+def _execution_abi_for_route(route: V2Route) -> dict[str, Any]:
+    entries: list[dict[str, Any]] = []
+    position = 0
+    for role in sorted(route.tensors, key=_role_sort_key):
+        tensor = route.tensors[role]
+        kind = "input" if role.startswith("src") else "output"
+        entry: dict[str, Any] = {
+            "position": position,
+            "role": role,
+            "kind": kind,
+            "dtype": _runtime_dtype(tensor.dtype),
+            "fixture": role,
+        }
+        if kind == "output":
+            entry["fixture"] = f"{role}_init" if role != "dst" else "dst_init"
+            entry["expect"] = {
+                "fixture": "expected" if role == "dst" else f"{role}_expected",
+                "mode": "close",
+            }
+        entries.append(entry)
+        position += 1
+    return {
+        "schema": ROUTE_EXECUTION_ABI_SCHEMA,
+        "route_id": route.id,
+        "entries": entries,
+    }
+
+
 def _emit_compact_configs(
     *,
     yaml_paths: list[Path],
@@ -825,6 +868,7 @@ def _emit_compact_configs(
             "params": list(params_key),
             "cases": cases_for_config,
             "route_id": route_id,
+            "execution_abi": _execution_abi_for_route(routes_by_id[route_id]),
         }
         filename = _config_filename(
             kernel_family,

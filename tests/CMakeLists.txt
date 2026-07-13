@@ -2,6 +2,12 @@ find_package(Python3 REQUIRED COMPONENTS Interpreter)
 
 set(GGML_HRX_TESTS_ROOT ${CMAKE_CURRENT_SOURCE_DIR})
 
+option(
+  GGML_HRX_ENABLE_HSA_DESCRIPTOR_TESTS
+  "Register descriptor execution tests that require HSA/GPU runtime resources"
+  OFF
+)
+
 if(NOT DEFINED GGML_HRX_TOOL_DIR)
   set(_ggml_hrx_tool_dir_default "")
   if(DEFINED ENV{GGML_HRX_TOOL_DIR} AND NOT "$ENV{GGML_HRX_TOOL_DIR}" STREQUAL "")

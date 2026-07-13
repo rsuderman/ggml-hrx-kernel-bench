@@ -140,3 +140,108 @@ function(add_yaml_route_import_runtime_tests)
   )
   include(${generated_tests_include})
 endfunction()
+
+function(add_yaml_route_import_descriptor_tests)
+  set(options ENABLE_HSA_EXECUTION)
+  set(one_value_args
+    NAME
+    GENERATED_IMPORT_DIR
+    GROUPED_YAML
+    DESCRIPTOR_OUTPUT_DIR
+    PREPARE_OUTPUT_DIR
+    EXECUTE_OUTPUT_DIR
+    ROUTING_DIR
+    KERNEL_DIR
+    TARGET
+    MAX_ELEMENTS
+    LIMIT
+    RUNNER
+    REPO_ROOT
+  )
+  set(multi_value_args EXCLUDE_OPS)
+  cmake_parse_arguments(GGML_HRX_YRIDT "${options}" "${one_value_args}" "${multi_value_args}" ${ARGN})
+
+  if(NOT GGML_HRX_YRIDT_NAME)
+    message(FATAL_ERROR "add_yaml_route_import_descriptor_tests requires NAME")
+  endif()
+  if(NOT GGML_HRX_YRIDT_GENERATED_IMPORT_DIR)
+    message(FATAL_ERROR "add_yaml_route_import_descriptor_tests requires GENERATED_IMPORT_DIR")
+  endif()
+  if(NOT GGML_HRX_YRIDT_GROUPED_YAML)
+    message(FATAL_ERROR "add_yaml_route_import_descriptor_tests requires GROUPED_YAML")
+  endif()
+
+  set(descriptor_output_dir ${GGML_HRX_YRIDT_DESCRIPTOR_OUTPUT_DIR})
+  if(NOT descriptor_output_dir)
+    set(descriptor_output_dir ${CMAKE_CURRENT_BINARY_DIR}/artifacts/kernel-descriptors-${GGML_HRX_YRIDT_NAME})
+  endif()
+  set(prepare_output_dir ${GGML_HRX_YRIDT_PREPARE_OUTPUT_DIR})
+  if(NOT prepare_output_dir)
+    set(prepare_output_dir ${CMAKE_CURRENT_BINARY_DIR}/artifacts/kernel-descriptor-prepare-${GGML_HRX_YRIDT_NAME})
+  endif()
+  set(execute_output_dir ${GGML_HRX_YRIDT_EXECUTE_OUTPUT_DIR})
+  if(NOT execute_output_dir)
+    set(execute_output_dir ${CMAKE_CURRENT_BINARY_DIR}/artifacts/kernel-descriptor-execute-${GGML_HRX_YRIDT_NAME})
+  endif()
+  set(target ${GGML_HRX_YRIDT_TARGET})
+  if(NOT target)
+    set(target gfx1100)
+  endif()
+  set(max_elements ${GGML_HRX_YRIDT_MAX_ELEMENTS})
+  if(NOT max_elements)
+    set(max_elements 65536)
+  endif()
+  set(runner ${GGML_HRX_YRIDT_RUNNER})
+  if(NOT runner)
+    set(runner "$<TARGET_FILE:ggml-hrx-run-loom-simple>")
+  endif()
+  set(repo_root ${GGML_HRX_YRIDT_REPO_ROOT})
+  if(NOT repo_root)
+    set(repo_root ${CMAKE_SOURCE_DIR})
+  endif()
+
+  set(generated_tests_include ${CMAKE_CURRENT_BINARY_DIR}/${GGML_HRX_YRIDT_NAME}-loom-descriptor-tests.cmake)
+  set(generate_tests_command
+    ${Python3_EXECUTABLE}
+    ${GGML_HRX_TESTS_ROOT}/infra/generate_loom_descriptor_tests_cmake.py
+    --output ${generated_tests_include}
+    --name ${GGML_HRX_YRIDT_NAME}
+    --grouped-yaml ${GGML_HRX_YRIDT_GROUPED_YAML}
+    --generated-import-dir ${GGML_HRX_YRIDT_GENERATED_IMPORT_DIR}
+    --python-executable ${Python3_EXECUTABLE}
+    --descriptor-generator-script ${GGML_HRX_TESTS_ROOT}/infra/generate_loom_execution_descriptors.py
+    --descriptor-runner-script ${GGML_HRX_TESTS_ROOT}/infra/run_loom_execution_descriptors.py
+    --descriptor-output-dir ${descriptor_output_dir}
+    --prepare-output-dir ${prepare_output_dir}
+    --execute-output-dir ${execute_output_dir}
+    --target ${target}
+    --max-elements ${max_elements}
+    --runner ${runner}
+    --repo-root ${repo_root}
+    --all-ops
+  )
+  if(GGML_HRX_YRIDT_ROUTING_DIR)
+    list(APPEND generate_tests_command --routing-dir ${GGML_HRX_YRIDT_ROUTING_DIR})
+  endif()
+  if(GGML_HRX_YRIDT_KERNEL_DIR)
+    list(APPEND generate_tests_command --kernel-dir ${GGML_HRX_YRIDT_KERNEL_DIR})
+  endif()
+  if(GGML_HRX_TOOL_DIR)
+    list(APPEND generate_tests_command --tool-dir ${GGML_HRX_TOOL_DIR})
+  endif()
+  if(GGML_HRX_YRIDT_LIMIT)
+    list(APPEND generate_tests_command --limit ${GGML_HRX_YRIDT_LIMIT})
+  endif()
+  if(GGML_HRX_YRIDT_ENABLE_HSA_EXECUTION)
+    list(APPEND generate_tests_command --execute-hsa)
+  endif()
+  foreach(excluded_op IN LISTS GGML_HRX_YRIDT_EXCLUDE_OPS)
+    list(APPEND generate_tests_command --exclude-op ${excluded_op})
+  endforeach()
+
+  execute_process(
+    COMMAND ${generate_tests_command}
+    COMMAND_ERROR_IS_FATAL ANY
+  )
+  include(${generated_tests_include})
+endfunction()

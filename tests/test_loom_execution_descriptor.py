@@ -16,6 +16,7 @@ if str(SRC) not in sys.path:
 
 from ggml_hrx_kernel_bench.loom_execution_descriptor import (  # noqa: E402
     DESCRIPTOR_MANIFEST_SCHEMA,
+    ROUTE_EXECUTION_ABI_SCHEMA,
     SCHEMA,
     descriptor_from_generated_case,
     execute_prepared,
@@ -24,6 +25,7 @@ from ggml_hrx_kernel_bench.loom_execution_descriptor import (  # noqa: E402
     validate_descriptor,
     write_generated_execution_descriptors,
 )
+from ggml_hrx_kernel_bench.materialized_assets import materialize_asset_root  # noqa: E402
 
 
 def _descriptor() -> dict[str, object]:
@@ -74,21 +76,97 @@ def _write_descriptor(tmp_path: Path, data: dict[str, object] | None = None) -> 
     return path
 
 
+def _binary_f32_execution_abi(route_id: str) -> dict[str, object]:
+    return {
+        "schema": ROUTE_EXECUTION_ABI_SCHEMA,
+        "route_id": route_id,
+        "entries": [
+            {
+                "position": 0,
+                "role": "src0",
+                "kind": "input",
+                "dtype": "f32",
+                "fixture": "src0",
+            },
+            {
+                "position": 1,
+                "role": "src1",
+                "kind": "input",
+                "dtype": "f32",
+                "fixture": "src1",
+            },
+            {
+                "position": 2,
+                "role": "dst",
+                "kind": "output",
+                "dtype": "f32",
+                "fixture": "dst_init",
+                "expect": {
+                    "fixture": "expected",
+                    "mode": "close",
+                },
+            },
+        ],
+    }
+
+
+def _unary_f32_execution_abi(route_id: str) -> dict[str, object]:
+    return {
+        "schema": ROUTE_EXECUTION_ABI_SCHEMA,
+        "route_id": route_id,
+        "entries": [
+            {
+                "position": 0,
+                "role": "src0",
+                "kind": "input",
+                "dtype": "f32",
+                "fixture": "src0",
+            },
+            {
+                "position": 1,
+                "role": "dst",
+                "kind": "output",
+                "dtype": "f32",
+                "fixture": "dst_init",
+                "expect": {
+                    "fixture": "expected",
+                    "mode": "close",
+                },
+            },
+        ],
+    }
+
+
 def _generated_add_config() -> dict[str, object]:
+    route_id = "add_f32_generic_4d"
     return {
         "kernel": "add_f32",
         "params": ["d0", "d1", "d2", "d3"],
         "cases": [[4, 1, 1, 1]],
-        "route_id": "add_f32_generic_4d",
+        "route_id": route_id,
+        "execution_abi": _binary_f32_execution_abi(route_id),
     }
 
 
-def _generated_binary_config(kernel: str) -> dict[str, object]:
+def _generated_unary_config(kernel: str) -> dict[str, object]:
+    route_id = f"{kernel}_contiguous_4d"
     return {
         "kernel": kernel,
         "params": ["d0", "d1", "d2", "d3"],
         "cases": [[4, 1, 1, 1]],
-        "route_id": f"{kernel}_generic_4d",
+        "route_id": route_id,
+        "execution_abi": _unary_f32_execution_abi(route_id),
+    }
+
+
+def _generated_binary_config(kernel: str) -> dict[str, object]:
+    route_id = f"{kernel}_generic_4d"
+    return {
+        "kernel": kernel,
+        "params": ["d0", "d1", "d2", "d3"],
+        "cases": [[4, 1, 1, 1]],
+        "route_id": route_id,
+        "execution_abi": _binary_f32_execution_abi(route_id),
     }
 
 
@@ -261,6 +339,7 @@ def test_descriptor_from_generated_add_case_emits_compact_payload(tmp_path: Path
     assert descriptor["workgroup_count"] == [1, 1, 1]
     assert descriptor["configs"]["@hrx2.shape.add4d.ne0"] == "4"
     assert descriptor["metadata"]["element_counts"] == {"src0": 4, "src1": 4, "dst": 4}
+    assert descriptor["metadata"]["execution_abi"]["schema"] == ROUTE_EXECUTION_ABI_SCHEMA
     assert descriptor["metadata"]["oracle"]["status"] == "fixtures_ready"
     assert descriptor["bindings"][0]["path"] == "oracle-fixtures/src0.npy"
     assert descriptor["bindings"][1]["path"] == "oracle-fixtures/src1.npy"
@@ -295,6 +374,54 @@ def test_descriptor_from_generated_mul_case_uses_oracle_fixture_paths(tmp_path: 
     src1 = np.load(tmp_path / descriptor["bindings"][1]["path"])
     expected = np.load(tmp_path / descriptor["bindings"][2]["expect"]["path"])
     assert expected.tolist() == (src0 * src1).astype(np.float32).tolist()
+
+
+def test_descriptor_from_generated_unary_f32_case_uses_abi_bindings(tmp_path: Path) -> None:
+    assets = materialize_asset_root(tmp_path / "assets", force=True)
+    result = descriptor_from_generated_case(
+        config_data=_generated_unary_config("abs_f32"),
+        case_id="d0-4-d1-1-d2-1-d3-1",
+        case_values=[4, 1, 1, 1],
+        kernel_dir=assets / "kernels" / "v2",
+        routing_dir=assets / "catalog" / "v2",
+        target="gfx1100",
+        max_elements=32,
+        oracle_fixture_dir=tmp_path / "oracle-fixtures",
+        descriptor_dir=tmp_path,
+    )
+
+    assert result.status == "emitted"
+    assert result.descriptor is not None
+    descriptor = result.descriptor
+    assert descriptor["kernel"] == str(assets / "kernels" / "v2" / "abs" / "contiguous_4d.loom")
+    assert descriptor["root"] == "@abs_f32"
+    assert descriptor["metadata"]["route_id"] == "abs_f32_contiguous_4d"
+    assert [binding["position"] for binding in descriptor["bindings"]] == [0, 1]
+    assert descriptor["bindings"][0]["name"] == "src0"
+    assert descriptor["bindings"][1]["name"] == "dst"
+    src0 = np.load(tmp_path / descriptor["bindings"][0]["path"])
+    expected = np.load(tmp_path / descriptor["bindings"][1]["expect"]["path"])
+    assert expected.tolist() == np.abs(src0).astype(np.float32).tolist()
+
+
+def test_descriptor_from_generated_add_case_requires_execution_abi(tmp_path: Path) -> None:
+    config = _generated_add_config()
+    config.pop("execution_abi")
+
+    result = descriptor_from_generated_case(
+        config_data=config,
+        case_id="d0-4-d1-1-d2-1-d3-1",
+        case_values=[4, 1, 1, 1],
+        kernel_dir=Path("kernels/v2"),
+        routing_dir=Path("catalog/v2"),
+        target="gfx1100",
+        max_elements=32,
+        oracle_fixture_dir=tmp_path / "oracle-fixtures",
+        descriptor_dir=tmp_path,
+    )
+
+    assert result.status == "unsupported"
+    assert result.reason == "generated config is missing execution_abi"
 
 
 def test_descriptor_from_generated_add_case_skips_large_fixtures(tmp_path: Path) -> None:

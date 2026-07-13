@@ -22,3 +22,18 @@ add_yaml_route_import_runtime_tests(
   ROUTING_DIR ${GGML_HRX_ROUTING_DIR_V2}
   KERNEL_DIR ${GGML_HRX_KERNEL_DIR_V2}
 )
+
+if(GGML_HRX_ENABLE_HSA_DESCRIPTOR_TESTS)
+  set(_ggml_hrx_descriptor_hsa_arg ENABLE_HSA_EXECUTION)
+else()
+  set(_ggml_hrx_descriptor_hsa_arg)
+endif()
+
+add_yaml_route_import_descriptor_tests(
+  NAME llama-cpp-yaml-route-import-v2
+  GENERATED_IMPORT_DIR ${GGML_HRX_LLAMA_CPP_YAML_ROUTE_IMPORT_DIR_V2}
+  GROUPED_YAML ${GGML_HRX_GROUPED_YAML}
+  ROUTING_DIR ${GGML_HRX_ROUTING_DIR_V2}
+  KERNEL_DIR ${GGML_HRX_KERNEL_DIR_V2}
+  ${_ggml_hrx_descriptor_hsa_arg}
+)
