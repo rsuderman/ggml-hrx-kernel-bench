@@ -27,6 +27,7 @@ struct ProcessResult {
 struct BridgeRenderResult {
   IreeRunLoomCommandResult command;
   std::optional<ProcessResult> loom_link_execution;
+  std::optional<ProcessResult> target_source_materialization;
   std::optional<ProcessResult> run_execution;
   std::string status;
 };
@@ -126,8 +127,8 @@ ParseConfig(std::string_view raw, std::vector<std::string> *errors) {
       std::string(raw.substr(0, split)), std::string(raw.substr(split + 1)));
 }
 
-std::optional<std::string> ParseWorkgroupCount(std::string_view raw,
-                                               std::vector<std::string> *errors) {
+std::optional<std::string>
+ParseWorkgroupCount(std::string_view raw, std::vector<std::string> *errors) {
   const std::vector<std::string> parts = Split(raw, ',');
   if (parts.size() != 3) {
     errors->push_back("--workgroup-count must have form X,Y,Z: " +
@@ -137,8 +138,8 @@ std::optional<std::string> ParseWorkgroupCount(std::string_view raw,
   for (const std::string &part : parts) {
     std::size_t value = 0;
     if (!ParseSize(part, &value) || value == 0) {
-      errors->push_back(
-          "workgroup-count values must be positive integers: " + part);
+      errors->push_back("workgroup-count values must be positive integers: " +
+                        part);
       return std::nullopt;
     }
   }
@@ -557,6 +558,94 @@ BuildF32NpyStorageBindingSpec(const std::string &path, std::size_t elements,
   return "&@" + path;
 }
 
+bool IsAmdGpuTargetKey(const std::string &target) {
+  return target.rfind("gfx", 0) == 0;
+}
+
+std::string TargetSymbolForInvocation() {
+  return "@ggml_hrx_run_loom_simple_target";
+}
+
+std::string TargetedKernelPath(const Invocation &invocation,
+                               const std::string &kernel_path) {
+  if (!IsAmdGpuTargetKey(invocation.target)) {
+    return kernel_path;
+  }
+  if (!invocation.linked_kernel_output.empty()) {
+    return invocation.linked_kernel_output + ".target.loom";
+  }
+  return invocation.output_path + ".target.loom";
+}
+
+std::optional<std::size_t>
+FindKernelDefForRoot(std::string_view source, const std::string &root_symbol) {
+  const std::size_t root_pos = source.find(root_symbol);
+  if (root_pos == std::string_view::npos) {
+    return std::nullopt;
+  }
+  const std::size_t def_pos = source.rfind("kernel.def", root_pos);
+  if (def_pos == std::string_view::npos) {
+    return std::nullopt;
+  }
+  return def_pos;
+}
+
+ProcessResult MaterializeTargetedKernelSource(const Invocation &invocation,
+                                              const std::string &input_path,
+                                              const std::string &output_path) {
+  if (!IsAmdGpuTargetKey(invocation.target)) {
+    return ProcessResult{0, "", ""};
+  }
+
+  std::ifstream input(input_path);
+  if (!input) {
+    return ProcessResult{-1, "", "failed to open kernel source: " + input_path};
+  }
+  std::ostringstream buffer;
+  buffer << input.rdbuf();
+  if (!input.good() && !input.eof()) {
+    return ProcessResult{-1, "", "failed to read kernel source: " + input_path};
+  }
+  std::string source = buffer.str();
+  const std::string target_symbol = TargetSymbolForInvocation();
+
+  const std::optional<std::size_t> def_pos =
+      FindKernelDefForRoot(source, invocation.root_symbol);
+  if (!def_pos.has_value()) {
+    return ProcessResult{-1, "",
+                         "failed to find kernel.def for root " +
+                             invocation.root_symbol + " in " + input_path};
+  }
+
+  const std::size_t line_end = source.find('\n', *def_pos);
+  const std::string_view def_line(
+      source.data() + *def_pos,
+      (line_end == std::string::npos ? source.size() : line_end) - *def_pos);
+  if (def_line.find("target(") == std::string_view::npos) {
+    const std::size_t insert_pos =
+        *def_pos + std::string_view("kernel.def").size();
+    source.insert(insert_pos, " target(" + target_symbol + ")");
+  }
+  if (source.find(std::string("amdgpu.target<") + invocation.target + "> " +
+                  target_symbol) == std::string::npos) {
+    source.insert(0, "amdgpu.target<" + invocation.target + "> " +
+                         target_symbol + " {subgroup_size = 64}\n");
+  }
+
+  std::ofstream output(output_path);
+  if (!output) {
+    return ProcessResult{
+        -1, "", "failed to open targeted kernel source: " + output_path};
+  }
+  output << source;
+  if (!output) {
+    return ProcessResult{
+        -1, "", "failed to write targeted kernel source: " + output_path};
+  }
+  return ProcessResult{0, "wrote targeted kernel source: " + output_path + "\n",
+                       ""};
+}
+
 BridgeRenderResult BuildBridgeRenderResult(const Invocation &invocation) {
   BridgeRenderResult result;
   result.command = BuildIreeRunLoomCommand(invocation);
@@ -574,6 +663,20 @@ BridgeRenderResult BuildBridgeRenderResult(const Invocation &invocation) {
     if (result.loom_link_execution->exit_code != 0 ||
         !result.loom_link_execution->error.empty()) {
       result.status = "link_failed";
+      return result;
+    }
+  }
+
+  if (IsAmdGpuTargetKey(invocation.target)) {
+    const std::string input_path = invocation.configs.empty()
+                                       ? invocation.kernel_path
+                                       : invocation.linked_kernel_output;
+    const std::string output_path = TargetedKernelPath(invocation, input_path);
+    result.target_source_materialization =
+        MaterializeTargetedKernelSource(invocation, input_path, output_path);
+    if (result.target_source_materialization->exit_code != 0 ||
+        !result.target_source_materialization->error.empty()) {
+      result.status = "target_source_failed";
       return result;
     }
   }
@@ -828,6 +931,7 @@ IreeRunLoomCommandResult BuildIreeRunLoomCommand(const Invocation &invocation) {
     loom_link_args = link_args;
     kernel_path = invocation.linked_kernel_output;
   }
+  kernel_path = TargetedKernelPath(invocation, kernel_path);
   if (invocation.expectations.empty()) {
     return IreeRunLoomCommandResult{
         std::nullopt, std::nullopt,
@@ -843,9 +947,6 @@ IreeRunLoomCommandResult BuildIreeRunLoomCommand(const Invocation &invocation) {
   args.push_back(kernel_path);
   const std::string backend = BackendForTarget(invocation.target);
   args.push_back("--backend=" + backend);
-  if (backend == "amdgpu-hal" && invocation.target != "amdgpu-hal") {
-    args.push_back("--target=" + invocation.target);
-  }
   args.push_back("--function=" + invocation.root_symbol);
   if (!invocation.workgroup_count.empty()) {
     args.push_back("--workgroup-count=" + invocation.workgroup_count);

@@ -32,16 +32,26 @@ void Expect(bool condition, const std::string &message) {
 
 std::vector<std::string> ValidArgs() {
   return {
-      "--kernel",  "kernels/v2/add_f32.loom",
-      "--root",    "@add_f32",
-      "--target",  "gfx1100",
-      "--workgroup-count", "16,1,1",
-      "--config",  "BLOCK_SIZE=256",
-      "--binding", "1:input:f32:4096:fixtures/src1.npy",
-      "--binding", "0:input:f32:4096:fixtures/src0.npy",
-      "--binding", "2:output:f32:4096:fixtures/dst_init.npy",
-      "--expect",  "2:close:fixtures/expected.npy:1e-5:1e-5",
-      "--output",  "result.json",
+      "--kernel",
+      "kernels/v2/add_f32.loom",
+      "--root",
+      "@add_f32",
+      "--target",
+      "gfx1100",
+      "--workgroup-count",
+      "16,1,1",
+      "--config",
+      "BLOCK_SIZE=256",
+      "--binding",
+      "1:input:f32:4096:fixtures/src1.npy",
+      "--binding",
+      "0:input:f32:4096:fixtures/src0.npy",
+      "--binding",
+      "2:output:f32:4096:fixtures/dst_init.npy",
+      "--expect",
+      "2:close:fixtures/expected.npy:1e-5:1e-5",
+      "--output",
+      "result.json",
   };
 }
 
@@ -74,6 +84,23 @@ std::filesystem::path TempDir() {
       ("ggml-hrx-run-loom-simple-tests-" + std::to_string(now));
   std::filesystem::create_directories(path);
   return path;
+}
+
+void WriteTextFile(const std::filesystem::path &path,
+                   const std::string &contents) {
+  std::ofstream output(path);
+  output << contents;
+}
+
+std::string ReadTextFile(const std::filesystem::path &path) {
+  std::ifstream input(path);
+  std::string contents;
+  std::string line;
+  while (std::getline(input, line)) {
+    contents += line;
+    contents += "\n";
+  }
+  return contents;
 }
 
 void WriteF32Npy(const std::filesystem::path &path,
@@ -560,8 +587,8 @@ void TestIreeRunLoomBridgeStagesConfigKernel() {
                    "--output=" + (dir / "linked.loom").string()) !=
              command.loom_link_args->end(),
          "link command output");
-  Expect((*command.args)[1] == (dir / "linked.loom").string(),
-         "run command uses linked kernel");
+  Expect((*command.args)[1] == (dir / "linked.loom.target.loom").string(),
+         "run command uses targeted linked kernel");
 }
 
 void TestIreeRunLoomBridgeBuildsNpyBackedCommand() {
@@ -607,8 +634,8 @@ void TestIreeRunLoomBridgeBuildsNpyBackedCommand() {
                    "--backend=amdgpu-hal") != command.args->end(),
          "bridge command backend");
   Expect(std::find(command.args->begin(), command.args->end(),
-                   "--target=gfx1100") != command.args->end(),
-         "bridge command target");
+                   "--target=gfx1100") == command.args->end(),
+         "bridge command does not require iree-run-loom target support");
   Expect(std::find(command.args->begin(), command.args->end(),
                    "--workgroup-count=4,1,1") != command.args->end(),
          "bridge command workgroup count");
@@ -681,6 +708,14 @@ void TestIreeRunLoomBridgeBuildsScalarCommand() {
 
 void TestExecuteBridgeRunsNoConfigCommand() {
   const std::filesystem::path dir = TempDir();
+  WriteTextFile(dir / "linked.loom",
+                "kernel.def export(\"add_f32\") @add_f32() {\n"
+                "  %one = index.constant 1 : index\n"
+                "  kernel.launch.config workgroups(%one, %one, %one) "
+                "workgroup_size(%one, %one, %one) : index\n"
+                "} launch(%src: buffer, %dst: buffer) {\n"
+                "  kernel.return\n"
+                "}\n");
   WriteF32Npy(dir / "src0.npy", {1.0f, 2.0f, 3.0f, 4.0f});
   WriteF32Npy(dir / "dst_init.npy", {0.0f, 0.0f, 0.0f, 0.0f});
   WriteF32Npy(dir / "expected.npy", {2.0f, 3.0f, 4.0f, 5.0f});
@@ -689,7 +724,7 @@ void TestExecuteBridgeRunsNoConfigCommand() {
 
   auto args = std::vector<std::string>{
       "--kernel",
-      "linked.loom",
+      (dir / "linked.loom").string(),
       "--root",
       "@add_f32",
       "--target",
@@ -703,7 +738,7 @@ void TestExecuteBridgeRunsNoConfigCommand() {
       "--expect",
       "1:close:" + (dir / "expected.npy").string() + ":1e-5:1e-5",
       "--output",
-      "result.json",
+      (dir / "result.json").string(),
       "--execute-iree-run-loom-command",
   };
   const auto parsed = ParseArgs(args);
@@ -719,8 +754,19 @@ void TestExecuteBridgeRunsNoConfigCommand() {
          "executed bridge updates check status");
   Expect(json.find("\"run_exit_code\": 0") != std::string::npos,
          "executed bridge records run exit code");
-  Expect(json.find("run-tool linked.loom") != std::string::npos,
+  Expect(json.find("run-tool " + (dir / "result.json.target.loom").string()) !=
+             std::string::npos,
          "executed bridge captures run output");
+  const std::string targeted_source =
+      ReadTextFile(dir / "result.json.target.loom");
+  Expect(targeted_source.find("amdgpu.target<gfx1100> "
+                              "@ggml_hrx_run_loom_simple_target") !=
+             std::string::npos,
+         "targeted source declares amdgpu target");
+  Expect(targeted_source.find(
+             "kernel.def target(@ggml_hrx_run_loom_simple_target) "
+             "export(\"add_f32\") @add_f32") != std::string::npos,
+         "targeted source annotates selected kernel");
 }
 
 void TestExecuteBridgeStopsOnLinkFailure() {
