@@ -171,6 +171,33 @@ def _unary_f32_execution_abi(route_id: str) -> dict[str, object]:
     }
 
 
+def _unary_f16_execution_abi(route_id: str) -> dict[str, object]:
+    return {
+        "schema": ROUTE_EXECUTION_ABI_SCHEMA,
+        "route_id": route_id,
+        "entries": [
+            {
+                "position": 0,
+                "role": "src0",
+                "kind": "input",
+                "dtype": "f16",
+                "fixture": "src0",
+            },
+            {
+                "position": 1,
+                "role": "dst",
+                "kind": "output",
+                "dtype": "f16",
+                "fixture": "dst_init",
+                "expect": {
+                    "fixture": "expected",
+                    "mode": "close",
+                },
+            },
+        ],
+    }
+
+
 def _scale_f32_execution_abi(route_id: str) -> dict[str, object]:
     return {
         "schema": ROUTE_EXECUTION_ABI_SCHEMA,
@@ -253,6 +280,17 @@ def _generated_unary_config(kernel: str) -> dict[str, object]:
         "cases": [[4, 1, 1, 1]],
         "route_id": route_id,
         "execution_abi": _unary_f32_execution_abi(route_id),
+    }
+
+
+def _generated_unary_f16_config(kernel: str, *, route_id: str | None = None) -> dict[str, object]:
+    route_id = route_id or f"{kernel}_contiguous_4d"
+    return {
+        "kernel": kernel,
+        "params": ["d0", "d1", "d2", "d3"],
+        "cases": [[4, 1, 1, 1]],
+        "route_id": route_id,
+        "execution_abi": _unary_f16_execution_abi(route_id),
     }
 
 
@@ -615,6 +653,46 @@ def test_descriptor_from_generated_add_f16_case_uses_int16_storage(tmp_path: Pat
     command = prepared.command
     assert f"0:input:f16:4:{tmp_path / descriptor['bindings'][0]['path']}" in command
     assert f"2:output:f16:4:{tmp_path / descriptor['bindings'][2]['path']}" in command
+
+
+def test_descriptor_from_generated_abs_f16_case_uses_int16_storage(tmp_path: Path) -> None:
+    assets = materialize_asset_root(tmp_path / "assets", force=True)
+    result = descriptor_from_generated_case(
+        config_data=_generated_unary_f16_config("abs_f16"),
+        case_id="d0-4-d1-1-d2-1-d3-1",
+        case_values=[4, 1, 1, 1],
+        kernel_dir=assets / "kernels" / "v2",
+        routing_dir=assets / "catalog" / "v2",
+        target="gfx1100",
+        max_elements=32,
+        oracle_fixture_dir=tmp_path / "oracle-fixtures",
+        descriptor_dir=tmp_path,
+    )
+
+    assert result.status == "emitted", result.reason
+    assert result.descriptor is not None
+    descriptor = result.descriptor
+    assert descriptor["root"] == "@abs_f16"
+    assert [binding["position"] for binding in descriptor["bindings"]] == [0, 1]
+    assert [binding["dtype"] for binding in descriptor["bindings"]] == ["f16", "f16"]
+    src0 = np.load(tmp_path / descriptor["bindings"][0]["path"])
+    expected = np.load(tmp_path / descriptor["bindings"][1]["expect"]["path"])
+    assert src0.dtype == np.int16
+    assert expected.dtype == np.int16
+
+    descriptor_path = _write_descriptor(tmp_path, descriptor)
+    prepared = prepare_execution(
+        descriptor_path=descriptor_path,
+        fixture_dir=tmp_path / "fixtures",
+        output_path=tmp_path / "result.json",
+        runner="runner",
+        loom_link=None,
+        iree_run_loom=None,
+        repo_root=tmp_path,
+    )
+    command = prepared.command
+    assert f"0:input:f16:4:{tmp_path / descriptor['bindings'][0]['path']}" in command
+    assert f"1:output:f16:4:{tmp_path / descriptor['bindings'][1]['path']}" in command
 
 
 def test_descriptor_from_generated_add_case_requires_execution_abi(tmp_path: Path) -> None:
