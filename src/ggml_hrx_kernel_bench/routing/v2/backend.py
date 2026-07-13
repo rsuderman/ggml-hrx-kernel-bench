@@ -23,6 +23,8 @@ from .manifest import build_manifest
 from .query import RouteCatalog, load_route_catalog
 from .runtime import case_result as runtime_case_result
 from .runtime import execute_case as runtime_execute_case
+from .selection import RouteSelector, create_route_selector
+
 
 @dataclass(frozen=True)
 class V2RoutingBackend:
@@ -32,6 +34,10 @@ class V2RoutingBackend:
     @cached_property
     def catalog(self) -> RouteCatalog:
         return load_route_catalog(self.context.routing_dir)
+
+    @cached_property
+    def selector(self) -> RouteSelector:
+        return create_route_selector(self.catalog)
 
     def manifest(self, *, original_root: Path | None = None) -> dict[str, object]:
         return build_manifest(
@@ -76,7 +82,7 @@ class V2RoutingBackend:
         )
 
     def resolve_imported_suite(self, suite: ImportedSuite) -> ImportedSuite:
-        return resolve_imported_suite(suite, catalog=self.catalog)
+        return resolve_imported_suite(suite, catalog=self.catalog, selector=self.selector)
 
     def select_case(self, config: dict[str, object], selector: str) -> tuple[str, list[int]]:
         return shared_select_case(config, selector)
@@ -89,8 +95,18 @@ class V2RoutingBackend:
     def execute_case(self, request: RuntimeCaseRequest) -> ExecutedCase:
         kernel_dir = request.kernel_dir or self.context.kernel_dir
         routing_dir = request.routing_dir or self.context.routing_dir
-        catalog = self.catalog if routing_dir == self.context.routing_dir else load_route_catalog(routing_dir)
-        return runtime_execute_case(request, catalog=catalog, kernel_dir=kernel_dir)
+        if routing_dir == self.context.routing_dir:
+            catalog = self.catalog
+            selector = self.selector
+        else:
+            catalog = load_route_catalog(routing_dir)
+            selector = create_route_selector(catalog)
+        return runtime_execute_case(
+            request,
+            catalog=catalog,
+            kernel_dir=kernel_dir,
+            selector=selector,
+        )
 
     def case_result(self, execution: ExecutedCase) -> dict[str, object]:
         return runtime_case_result(execution)

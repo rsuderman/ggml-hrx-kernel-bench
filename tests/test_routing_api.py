@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+import ggml_hrx_kernel_bench.routing.v2.backend as v2_backend
 from ggml_hrx_kernel_bench.generators.copy import (
     render_catalog_artifacts,
     render_kernel_artifacts,
@@ -13,14 +14,20 @@ from ggml_hrx_kernel_bench.import_models import (
     ImportedCase,
     ImportedOpGroup,
     ImportedSuite,
+    ResolvedBenchmarkCase,
+    UnmappedCase,
 )
 from ggml_hrx_kernel_bench.routing.api import (
     CandidateQuery,
+    RoutingBackend,
     RuntimeCaseRequest,
     create_router,
 )
 from ggml_hrx_kernel_bench.import_route_resolution import resolve_case_routes
-from ggml_hrx_kernel_bench.routing.v2.import_resolution import resolve_imported_suite, resolve_route_for_case
+from ggml_hrx_kernel_bench.routing.v2.import_resolution import (
+    resolve_imported_suite,
+    resolve_route_for_case,
+)
 from ggml_hrx_kernel_bench.routing.v2.candidates import candidate_from_shape
 from ggml_hrx_kernel_bench.routing.v1.routes import DEFAULT_V1_ROUTING_DIR, iter_routes
 from ggml_hrx_kernel_bench.routing.v2.models import (
@@ -32,7 +39,12 @@ from ggml_hrx_kernel_bench.routing.v2.models import (
 )
 from ggml_hrx_kernel_bench.routing.v2.manifest import build_manifest
 from ggml_hrx_kernel_bench.routing.v2.matching import materialize_route_tensors, route_accepts_tensors
-from ggml_hrx_kernel_bench.routing.v2.query import load_route_catalog, routes_for_op
+from ggml_hrx_kernel_bench.routing.v2.query import RouteCatalog, load_route_catalog, routes_for_op
+from ggml_hrx_kernel_bench.routing.v2.selection import (
+    PythonRouteSelector,
+    RouteMatch,
+    RouteMatchQuery,
+)
 
 
 # Unary + copy families are code-generated into the materialized asset tree (not the source catalog),
@@ -46,6 +58,53 @@ _MATERIALIZED_V2_ASSETS = _materialize_asset_root(
 )
 ACTUAL_V2_ROUTING_DIR = _MATERIALIZED_V2_ASSETS / "catalog" / "v2"
 ACTUAL_V2_KERNEL_DIR = _MATERIALIZED_V2_ASSETS / "kernels" / "v2"
+
+
+def _python_router(*, kernel_dir: Path, routing_dir: Path) -> RoutingBackend:
+    return create_router(
+        version="v2",
+        kernel_dir=kernel_dir,
+        routing_dir=routing_dir,
+        v2_selector_mode="python",
+    )
+
+
+ACTUAL_V2_ROUTER = _python_router(
+    kernel_dir=ACTUAL_V2_KERNEL_DIR,
+    routing_dir=ACTUAL_V2_ROUTING_DIR,
+)
+SOURCE_V2_ROUTER = _python_router(
+    kernel_dir=Path("kernels/v2"),
+    routing_dir=Path("catalog/v2"),
+)
+
+
+def _resolve_one_case(
+    router: RoutingBackend,
+    case: ImportedCase,
+) -> ResolvedBenchmarkCase | UnmappedCase:
+    suite = ImportedSuite(
+        schema="test",
+        source_path=case.source_path,
+        op_groups=[
+            ImportedOpGroup(
+                op=case.op,
+                dtype=case.dtype,
+                source_path=case.source_path,
+                cases=(case,),
+            )
+        ],
+    )
+
+    result = router.resolve_imported_suite(suite)
+
+    rows: list[ResolvedBenchmarkCase | UnmappedCase] = [*result.resolved, *result.unmapped]
+    assert len(rows) == 1
+    return rows[0]
+
+
+def _resolved_shape(result: ResolvedBenchmarkCase) -> dict[str, int]:
+    return dict(zip(result.params, result.values, strict=True))
 
 
 def _softmax_kqv_shape(k: int, *, rows: int = 128, cols: int = 24, nheads_kv: int = 8) -> dict[str, int]:
@@ -347,7 +406,6 @@ def test_v2_resolve_copy_route_for_contiguous_case(tmp_path: Path) -> None:
     routing_dir = tmp_path / "routing"
     _write_copy_kernel(kernel_dir)
     _write_v2_copy_descriptor(routing_dir)
-    catalog = load_route_catalog(routing_dir)
     case = ImportedCase(
         op="CPY",
         dtype={"type_src": "f32", "type_dst": "f16"},
@@ -363,13 +421,14 @@ def test_v2_resolve_copy_route_for_contiguous_case(tmp_path: Path) -> None:
         source_case_index=0,
     )
 
-    route, shape, reason, detail = resolve_route_for_case(case, list(routes_for_op(catalog, "CPY")))
+    result = _resolve_one_case(
+        _python_router(kernel_dir=kernel_dir, routing_dir=routing_dir),
+        case,
+    )
 
-    assert reason is None
-    assert detail is None
-    assert route is not None
-    assert route.id == "copy_f32_f16_contiguous_1d"
-    assert shape == {"d0": 16, "d1": 4, "d2": 2, "d3": 2}
+    assert isinstance(result, ResolvedBenchmarkCase)
+    assert result.route_id == "copy_f32_f16_contiguous_1d"
+    assert _resolved_shape(result) == {"d0": 16, "d1": 4, "d2": 2, "d3": 2}
 
 
 def test_v2_resolve_copy_route_for_transposed_f32_case(tmp_path: Path) -> None:
@@ -377,7 +436,6 @@ def test_v2_resolve_copy_route_for_transposed_f32_case(tmp_path: Path) -> None:
     routing_dir = tmp_path / "routing"
     _write_copy_kernel(kernel_dir)
     _write_v2_copy_descriptor(routing_dir)
-    catalog = load_route_catalog(routing_dir)
     case = ImportedCase(
         op="CPY",
         dtype={"type_src": "f32", "type_dst": "f32"},
@@ -393,13 +451,14 @@ def test_v2_resolve_copy_route_for_transposed_f32_case(tmp_path: Path) -> None:
         source_case_index=0,
     )
 
-    route, shape, reason, detail = resolve_route_for_case(case, list(routes_for_op(catalog, "CPY")))
+    result = _resolve_one_case(
+        _python_router(kernel_dir=kernel_dir, routing_dir=routing_dir),
+        case,
+    )
 
-    assert reason is None
-    assert detail is None
-    assert route is not None
-    assert route.id == "copy_f32_f32_non_contiguous_4d"
-    assert shape == {
+    assert isinstance(result, ResolvedBenchmarkCase)
+    assert result.route_id == "copy_f32_f32_non_contiguous_4d"
+    assert _resolved_shape(result) == {
         "d0": 4,
         "d1": 256,
         "d2": 3,
@@ -418,7 +477,6 @@ def test_v2_resolve_copy_route_for_chained_source_and_destination_permutations(t
     routing_dir = tmp_path / "routing"
     _write_copy_kernel(kernel_dir)
     _write_v2_copy_descriptor(routing_dir)
-    catalog = load_route_catalog(routing_dir)
     case = ImportedCase(
         op="CPY",
         dtype={"type_src": "f32", "type_dst": "f32"},
@@ -434,13 +492,14 @@ def test_v2_resolve_copy_route_for_chained_source_and_destination_permutations(t
         source_case_index=0,
     )
 
-    route, shape, reason, detail = resolve_route_for_case(case, list(routes_for_op(catalog, "CPY")))
+    result = _resolve_one_case(
+        _python_router(kernel_dir=kernel_dir, routing_dir=routing_dir),
+        case,
+    )
 
-    assert reason is None
-    assert detail is None
-    assert route is not None
-    assert route.id == "copy_f32_f32_non_contiguous_4d"
-    assert shape == {
+    assert isinstance(result, ResolvedBenchmarkCase)
+    assert result.route_id == "copy_f32_f32_non_contiguous_4d"
+    assert _resolved_shape(result) == {
         "d0": 2,
         "d1": 7,
         "d2": 3,
@@ -480,7 +539,6 @@ def test_v2_copy_catalog_keeps_generated_descriptors_declarative(tmp_path: Path)
 
 
 def test_v2_resolve_cont_route_for_contiguous_f32_case() -> None:
-    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
     case = ImportedCase(
         op="CONT",
         dtype={"type": "f32"},
@@ -494,17 +552,14 @@ def test_v2_resolve_cont_route_for_contiguous_f32_case() -> None:
         source_case_index=0,
     )
 
-    route, shape, reason, detail = resolve_route_for_case(case, list(routes_for_op(catalog, "CONT")))
+    result = _resolve_one_case(ACTUAL_V2_ROUTER, case)
 
-    assert reason is None
-    assert detail is None
-    assert route is not None
-    assert route.id == "cont_f32_contiguous_4d"
-    assert shape == {"d0": 2, "d1": 3, "d2": 5, "d3": 7, "cont.d1": 105}
+    assert isinstance(result, ResolvedBenchmarkCase)
+    assert result.route_id == "cont_f32_contiguous_4d"
+    assert _resolved_shape(result) == {"d0": 2, "d1": 3, "d2": 5, "d3": 7, "cont.d1": 105}
 
 
 def test_v2_resolve_cont_route_for_rank2_f32_case() -> None:
-    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
     case = ImportedCase(
         op="CONT",
         dtype={"type": "f32"},
@@ -518,17 +573,14 @@ def test_v2_resolve_cont_route_for_rank2_f32_case() -> None:
         source_case_index=0,
     )
 
-    route, shape, reason, detail = resolve_route_for_case(case, list(routes_for_op(catalog, "CONT")))
+    result = _resolve_one_case(ACTUAL_V2_ROUTER, case)
 
-    assert reason is None
-    assert detail is None
-    assert route is not None
-    assert route.id == "cont_f32_contiguous_4d"
-    assert shape == {"d0": 7, "d1": 5, "cont.d1": 5}
+    assert isinstance(result, ResolvedBenchmarkCase)
+    assert result.route_id == "cont_f32_contiguous_4d"
+    assert _resolved_shape(result) == {"d0": 7, "d1": 5, "cont.d1": 5}
 
 
 def test_v2_resolve_cont_route_for_rank3_f32_case() -> None:
-    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
     case = ImportedCase(
         op="CONT",
         dtype={"type": "f32"},
@@ -542,13 +594,11 @@ def test_v2_resolve_cont_route_for_rank3_f32_case() -> None:
         source_case_index=0,
     )
 
-    route, shape, reason, detail = resolve_route_for_case(case, list(routes_for_op(catalog, "CONT")))
+    result = _resolve_one_case(ACTUAL_V2_ROUTER, case)
 
-    assert reason is None
-    assert detail is None
-    assert route is not None
-    assert route.id == "cont_f32_contiguous_4d"
-    assert shape == {"d0": 4, "d1": 3, "d2": 2, "cont.d1": 6}
+    assert isinstance(result, ResolvedBenchmarkCase)
+    assert result.route_id == "cont_f32_contiguous_4d"
+    assert _resolved_shape(result) == {"d0": 4, "d1": 3, "d2": 2, "cont.d1": 6}
 
 
 def test_v2_default_cont_candidate_derives_rank_polymorphic_shape_bindings() -> None:
@@ -583,7 +633,6 @@ def test_v2_default_cont_candidate_derives_rank_polymorphic_shape_bindings() -> 
     ),
 )
 def test_v2_resolve_ne_a_unary_route_for_contiguous_case(op: str, dtype: str, route_id: str) -> None:
-    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
     case = ImportedCase(
         op=op,
         dtype={"type": dtype},
@@ -597,20 +646,17 @@ def test_v2_resolve_ne_a_unary_route_for_contiguous_case(op: str, dtype: str, ro
         source_case_index=0,
     )
 
-    route, shape, reason, detail = resolve_route_for_case(case, list(routes_for_op(catalog, op)))
+    result = _resolve_one_case(ACTUAL_V2_ROUTER, case)
 
-    assert reason is None
-    assert detail is None
-    assert route is not None
-    assert route.id == route_id
-    assert shape == {"d0": 4, "d1": 3, "d2": 2, "d3": 5}
+    assert isinstance(result, ResolvedBenchmarkCase)
+    assert result.route_id == route_id
+    assert _resolved_shape(result) == {"d0": 4, "d1": 3, "d2": 2, "d3": 5}
 
 
 @pytest.mark.parametrize("op", ("EXP", "NEG", "RELU"))
 def test_v2_unary_view_case_maps_to_non_contiguous_route(op: str) -> None:
     # ne_a=[4,3,2,5] v=1 -> ggml view src0 strides [1, 3*4, 6*4*3, 30*4*3*2] = [1,12,72,720].
     # The generated non-contiguous unary routes accept the strided src0 the import query emits.
-    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
     case = ImportedCase(
         op=op,
         dtype={"type": "f32"},
@@ -621,13 +667,11 @@ def test_v2_unary_view_case_maps_to_non_contiguous_route(op: str) -> None:
         source_case_index=0,
     )
 
-    route, shape, reason, detail = resolve_route_for_case(case, list(routes_for_op(catalog, op)))
+    result = _resolve_one_case(ACTUAL_V2_ROUTER, case)
 
-    assert reason is None
-    assert detail is None
-    assert route is not None
-    assert route.id == f"{op.lower()}_f32_non_contiguous_4d"
-    assert shape is not None
+    assert isinstance(result, ResolvedBenchmarkCase)
+    assert result.route_id == f"{op.lower()}_f32_non_contiguous_4d"
+    shape = _resolved_shape(result)
     assert shape["d0"] == 4 and shape["d1"] == 3 and shape["d2"] == 2 and shape["d3"] == 5
     assert shape["src0_d1_stride"] == 12
     assert shape["src0_d2_stride"] == 72
@@ -642,7 +686,6 @@ def test_v2_unary_view_case_maps_to_non_contiguous_route(op: str) -> None:
     ),
 )
 def test_v2_resolve_abs_contiguous_case(dtype: str, route_id: str) -> None:
-    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
     case = ImportedCase(
         op="ABS",
         dtype={"type": dtype},
@@ -653,12 +696,11 @@ def test_v2_resolve_abs_contiguous_case(dtype: str, route_id: str) -> None:
         source_case_index=0,
     )
 
-    route, shape, reason, detail = resolve_route_for_case(case, list(routes_for_op(catalog, "ABS")))
+    result = _resolve_one_case(ACTUAL_V2_ROUTER, case)
 
-    assert reason is None
-    assert route is not None
-    assert route.id == route_id
-    assert shape == {"d0": 5, "d1": 7, "d2": 11, "d3": 13}
+    assert isinstance(result, ResolvedBenchmarkCase)
+    assert result.route_id == route_id
+    assert _resolved_shape(result) == {"d0": 5, "d1": 7, "d2": 11, "d3": 13}
 
 
 @pytest.mark.parametrize(
@@ -671,7 +713,6 @@ def test_v2_resolve_abs_contiguous_case(dtype: str, route_id: str) -> None:
 def test_v2_resolve_abs_view_case_encodes_strided_src0(dtype: str, route_id: str) -> None:
     # ggml test_unary v=1 view: parent inflated [3, 2, 5, 4] per dim; the ne_a view
     # keeps element strides [1, 3*ne0, 6*ne0*ne1, 30*ne0*ne1*ne2].
-    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
     case = ImportedCase(
         op="ABS",
         dtype={"type": dtype},
@@ -682,13 +723,11 @@ def test_v2_resolve_abs_view_case_encodes_strided_src0(dtype: str, route_id: str
         source_case_index=0,
     )
 
-    route, shape, reason, detail = resolve_route_for_case(case, list(routes_for_op(catalog, "ABS")))
+    result = _resolve_one_case(ACTUAL_V2_ROUTER, case)
 
-    assert reason is None
-    assert detail is None
-    assert route is not None
-    assert route.id == route_id
-    assert shape is not None
+    assert isinstance(result, ResolvedBenchmarkCase)
+    assert result.route_id == route_id
+    shape = _resolved_shape(result)
     assert shape["d0"] == 5 and shape["d1"] == 7 and shape["d2"] == 11 and shape["d3"] == 13
     assert shape["src0_d1_stride"] == 15
     assert shape["src0_d2_stride"] == 210
@@ -699,7 +738,6 @@ def test_v2_abs_view_shape_round_trips_through_materialize() -> None:
     # The serialized shape must rehydrate into the same strided src0 and still be accepted
     # by the route (the runtime hydration + validation path).
     catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
-    routes = list(routes_for_op(catalog, "ABS"))
     case = ImportedCase(
         op="ABS",
         dtype={"type": "f16"},
@@ -710,8 +748,11 @@ def test_v2_abs_view_shape_round_trips_through_materialize() -> None:
         source_case_index=0,
     )
 
-    route, shape, reason, _ = resolve_route_for_case(case, routes)
-    assert reason is None and route is not None and shape is not None
+    result = _resolve_one_case(ACTUAL_V2_ROUTER, case)
+    assert isinstance(result, ResolvedBenchmarkCase)
+    assert result.route_id is not None
+    route = catalog.routes_by_id[result.route_id]
+    shape = _resolved_shape(result)
 
     tensors = materialize_route_tensors(route, shape)
     assert route_accepts_tensors(route, tensors) is True
@@ -722,7 +763,6 @@ def test_v2_abs_view_shape_round_trips_through_materialize() -> None:
 
 
 def test_v2_resolve_scale_route_for_f32_case() -> None:
-    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
     case = ImportedCase(
         op="SCALE",
         dtype={"type": "f32"},
@@ -738,17 +778,20 @@ def test_v2_resolve_scale_route_for_f32_case() -> None:
         source_case_index=0,
     )
 
-    route, shape, reason, detail = resolve_route_for_case(case, list(routes_for_op(catalog, "SCALE")))
+    result = _resolve_one_case(ACTUAL_V2_ROUTER, case)
 
-    assert reason is None
-    assert detail is None
-    assert route is not None
-    assert route.id == "scale_f32_contiguous_4d"
-    assert shape == {"d0": 10, "d1": 10, "d2": 10, "d3": 10, "pointwise.d1": 1000}
+    assert isinstance(result, ResolvedBenchmarkCase)
+    assert result.route_id == "scale_f32_contiguous_4d"
+    assert _resolved_shape(result) == {
+        "d0": 10,
+        "d1": 10,
+        "d2": 10,
+        "d3": 10,
+        "pointwise.d1": 1000,
+    }
 
 
 def test_v2_resolve_scale_route_for_rank2_f32_case() -> None:
-    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
     case = ImportedCase(
         op="SCALE",
         dtype={"type": "f32"},
@@ -764,17 +807,14 @@ def test_v2_resolve_scale_route_for_rank2_f32_case() -> None:
         source_case_index=0,
     )
 
-    route, shape, reason, detail = resolve_route_for_case(case, list(routes_for_op(catalog, "SCALE")))
+    result = _resolve_one_case(ACTUAL_V2_ROUTER, case)
 
-    assert reason is None
-    assert detail is None
-    assert route is not None
-    assert route.id == "scale_f32_contiguous_4d"
-    assert shape == {"d0": 7, "d1": 5, "pointwise.d1": 5}
+    assert isinstance(result, ResolvedBenchmarkCase)
+    assert result.route_id == "scale_f32_contiguous_4d"
+    assert _resolved_shape(result) == {"d0": 7, "d1": 5, "pointwise.d1": 5}
 
 
 def test_v2_resolve_scale_route_for_rank3_f32_case() -> None:
-    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
     case = ImportedCase(
         op="SCALE",
         dtype={"type": "f32"},
@@ -790,13 +830,11 @@ def test_v2_resolve_scale_route_for_rank3_f32_case() -> None:
         source_case_index=0,
     )
 
-    route, shape, reason, detail = resolve_route_for_case(case, list(routes_for_op(catalog, "SCALE")))
+    result = _resolve_one_case(ACTUAL_V2_ROUTER, case)
 
-    assert reason is None
-    assert detail is None
-    assert route is not None
-    assert route.id == "scale_f32_contiguous_4d"
-    assert shape == {"d0": 4, "d1": 3, "d2": 2, "pointwise.d1": 6}
+    assert isinstance(result, ResolvedBenchmarkCase)
+    assert result.route_id == "scale_f32_contiguous_4d"
+    assert _resolved_shape(result) == {"d0": 4, "d1": 3, "d2": 2, "pointwise.d1": 6}
 
 
 @pytest.mark.parametrize(
@@ -809,7 +847,6 @@ def test_v2_resolve_scale_route_for_rank3_f32_case() -> None:
     ),
 )
 def test_v2_resolve_ne_unary_route_for_rank3_case(op: str, dtype: str, route_id: str) -> None:
-    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
     case = ImportedCase(
         op=op,
         dtype={"type": dtype},
@@ -822,17 +859,14 @@ def test_v2_resolve_ne_unary_route_for_rank3_case(op: str, dtype: str, route_id:
         source_case_index=0,
     )
 
-    route, shape, reason, detail = resolve_route_for_case(case, list(routes_for_op(catalog, op)))
+    result = _resolve_one_case(ACTUAL_V2_ROUTER, case)
 
-    assert reason is None
-    assert detail is None
-    assert route is not None
-    assert route.id == route_id
-    assert shape == {"d0": 4, "d1": 3, "d2": 2, "pointwise.d1": 6}
+    assert isinstance(result, ResolvedBenchmarkCase)
+    assert result.route_id == route_id
+    assert _resolved_shape(result) == {"d0": 4, "d1": 3, "d2": 2, "pointwise.d1": 6}
 
 
 def test_v2_resolve_clamp_route_for_f32_case() -> None:
-    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
     case = ImportedCase(
         op="CLAMP",
         dtype={"type": "f32"},
@@ -847,17 +881,14 @@ def test_v2_resolve_clamp_route_for_f32_case() -> None:
         source_case_index=0,
     )
 
-    route, shape, reason, detail = resolve_route_for_case(case, list(routes_for_op(catalog, "CLAMP")))
+    result = _resolve_one_case(ACTUAL_V2_ROUTER, case)
 
-    assert reason is None
-    assert detail is None
-    assert route is not None
-    assert route.id == "clamp_f32_contiguous_4d"
-    assert shape == {"d0": 7, "d1": 1, "d2": 5, "d3": 3, "pointwise.d1": 15}
+    assert isinstance(result, ResolvedBenchmarkCase)
+    assert result.route_id == "clamp_f32_contiguous_4d"
+    assert _resolved_shape(result) == {"d0": 7, "d1": 1, "d2": 5, "d3": 3, "pointwise.d1": 15}
 
 
 def test_v2_resolve_clamp_route_for_rank2_f32_case() -> None:
-    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
     case = ImportedCase(
         op="CLAMP",
         dtype={"type": "f32"},
@@ -872,17 +903,14 @@ def test_v2_resolve_clamp_route_for_rank2_f32_case() -> None:
         source_case_index=0,
     )
 
-    route, shape, reason, detail = resolve_route_for_case(case, list(routes_for_op(catalog, "CLAMP")))
+    result = _resolve_one_case(ACTUAL_V2_ROUTER, case)
 
-    assert reason is None
-    assert detail is None
-    assert route is not None
-    assert route.id == "clamp_f32_contiguous_4d"
-    assert shape == {"d0": 7, "d1": 5, "pointwise.d1": 5}
+    assert isinstance(result, ResolvedBenchmarkCase)
+    assert result.route_id == "clamp_f32_contiguous_4d"
+    assert _resolved_shape(result) == {"d0": 7, "d1": 5, "pointwise.d1": 5}
 
 
 def test_v2_resolve_clamp_route_for_rank3_f32_case() -> None:
-    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
     case = ImportedCase(
         op="CLAMP",
         dtype={"type": "f32"},
@@ -897,17 +925,14 @@ def test_v2_resolve_clamp_route_for_rank3_f32_case() -> None:
         source_case_index=0,
     )
 
-    route, shape, reason, detail = resolve_route_for_case(case, list(routes_for_op(catalog, "CLAMP")))
+    result = _resolve_one_case(ACTUAL_V2_ROUTER, case)
 
-    assert reason is None
-    assert detail is None
-    assert route is not None
-    assert route.id == "clamp_f32_contiguous_4d"
-    assert shape == {"d0": 4, "d1": 3, "d2": 2, "pointwise.d1": 6}
+    assert isinstance(result, ResolvedBenchmarkCase)
+    assert result.route_id == "clamp_f32_contiguous_4d"
+    assert _resolved_shape(result) == {"d0": 4, "d1": 3, "d2": 2, "pointwise.d1": 6}
 
 
 def test_v2_resolve_set_rows_route_for_f32_i64_case() -> None:
-    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
     case = ImportedCase(
         op="SET_ROWS",
         dtype={"type": "f32", "type_idx": "i64"},
@@ -923,13 +948,11 @@ def test_v2_resolve_set_rows_route_for_f32_i64_case() -> None:
         source_case_index=0,
     )
 
-    route, shape, reason, detail = resolve_route_for_case(case, list(routes_for_op(catalog, "SET_ROWS")))
+    result = _resolve_one_case(ACTUAL_V2_ROUTER, case)
 
-    assert reason is None
-    assert detail is None
-    assert route is not None
-    assert route.id == "set_rows_f32_f32_contiguous_4d"
-    assert shape == {
+    assert isinstance(result, ResolvedBenchmarkCase)
+    assert result.route_id == "set_rows_f32_f32_contiguous_4d"
+    assert _resolved_shape(result) == {
         "d0": 256,
         "d1": 5,
         "d2": 7,
@@ -943,7 +966,6 @@ def test_v2_resolve_set_rows_route_for_f32_i64_case() -> None:
 
 
 def test_v2_set_rows_i32_indices_remain_unmapped_without_dtype_route() -> None:
-    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
     case = ImportedCase(
         op="SET_ROWS",
         dtype={"type": "f32", "type_idx": "i32"},
@@ -959,17 +981,14 @@ def test_v2_set_rows_i32_indices_remain_unmapped_without_dtype_route() -> None:
         source_case_index=0,
     )
 
-    route, shape, reason, detail = resolve_route_for_case(case, list(routes_for_op(catalog, "SET_ROWS")))
+    result = _resolve_one_case(ACTUAL_V2_ROUTER, case)
 
-    assert route is None
-    assert shape is None
-    assert reason is not None
-    assert reason.value == "no_dtype_mapping"
-    assert detail == "matching v2 op mapping exists, but not for this dtype combination"
+    assert isinstance(result, UnmappedCase)
+    assert result.reason.value == "no_dtype_mapping"
+    assert result.detail == "matching v2 op mapping exists, but not for this dtype combination"
 
 
 def test_v2_resolve_cont_set_rows_route_for_f32_i64_f16_case() -> None:
-    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
     case = ImportedCase(
         op="SET_ROWS",
         dtype={"type_src": "f32", "type_idx": "i64", "type_dst": "f16"},
@@ -985,13 +1004,11 @@ def test_v2_resolve_cont_set_rows_route_for_f32_i64_f16_case() -> None:
         source_case_index=0,
     )
 
-    route, shape, reason, detail = resolve_route_for_case(case, list(routes_for_op(catalog, "SET_ROWS")))
+    result = _resolve_one_case(ACTUAL_V2_ROUTER, case)
 
-    assert reason is None
-    assert detail is None
-    assert route is not None
-    assert route.id == "cont_set_rows_f32_f16_n128_r2_dst4_contiguous_4d"
-    assert shape == {
+    assert isinstance(result, ResolvedBenchmarkCase)
+    assert result.route_id == "cont_set_rows_f32_f16_n128_r2_dst4_contiguous_4d"
+    assert _resolved_shape(result) == {
         "d0": 128,
         "d1": 4,
         "d2": 1,
@@ -1003,7 +1020,6 @@ def test_v2_resolve_cont_set_rows_route_for_f32_i64_f16_case() -> None:
 
 
 def test_v2_resolve_set_rows_route_preserves_non_contiguous_idx_stride() -> None:
-    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
     case = ImportedCase(
         op="SET_ROWS",
         dtype={"type": "f32", "type_idx": "i64"},
@@ -1019,13 +1035,11 @@ def test_v2_resolve_set_rows_route_preserves_non_contiguous_idx_stride() -> None
         source_case_index=0,
     )
 
-    route, shape, reason, detail = resolve_route_for_case(case, list(routes_for_op(catalog, "SET_ROWS")))
+    result = _resolve_one_case(ACTUAL_V2_ROUTER, case)
 
-    assert reason is None
-    assert detail is None
-    assert route is not None
-    assert route.id == "set_rows_f32_f32_contiguous_4d"
-    assert shape is not None
+    assert isinstance(result, ResolvedBenchmarkCase)
+    assert result.route_id == "set_rows_f32_f32_contiguous_4d"
+    shape = _resolved_shape(result)
     assert shape["src1_d2_stride"] == 2
 
 
@@ -1168,7 +1182,7 @@ def test_v2_router_lowers_permuted_rhs_add_case(tmp_path: Path) -> None:
     routing_dir = tmp_path / "routing"
     _write_kernel(kernel_dir)
     _write_v2_descriptor(routing_dir)
-    router = create_router(version="v2", kernel_dir=kernel_dir, routing_dir=routing_dir)
+    router = _python_router(kernel_dir=kernel_dir, routing_dir=routing_dir)
     suite = ImportedSuite(
         schema="test",
         source_path="test.yaml",
@@ -1256,7 +1270,11 @@ def test_v2_import_resolution_lowers_permuted_rhs_for_non_add_generic_route() ->
         source_case_index=0,
     )
 
-    resolved_route, shape, reason, detail = resolve_route_for_case(case, [route])
+    resolved_route, shape, reason, detail = resolve_route_for_case(
+        case,
+        [route],
+        selector=PythonRouteSelector((route,)),
+    )
 
     assert resolved_route is route
     assert shape == {
@@ -1273,7 +1291,6 @@ def test_v2_import_resolution_lowers_permuted_rhs_for_non_add_generic_route() ->
 
 
 def test_v2_mul_route_resolves_rms_norm_mul_f32_fused_case() -> None:
-    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
     case = ImportedCase(
         op="MUL",
         dtype={"type": "f32"},
@@ -1288,16 +1305,11 @@ def test_v2_mul_route_resolves_rms_norm_mul_f32_fused_case() -> None:
         source_group_index=1,
         source_case_index=42,
     )
+    result = _resolve_one_case(ACTUAL_V2_ROUTER, case)
 
-    routes = list(routes_for_op(catalog, "MUL"))
-
-    resolved_route, shape, reason, detail = resolve_route_for_case(case, routes)
-
-    assert reason is None
-    assert detail is None
-    assert resolved_route is not None
-    assert resolved_route.id == "rms_norm_mul_f32_n16_r60_vector_tail"
-    assert shape == {
+    assert isinstance(result, ResolvedBenchmarkCase)
+    assert result.route_id == "rms_norm_mul_f32_n16_r60_vector_tail"
+    assert _resolved_shape(result) == {
         "d0": 16,
         "d1": 60,
         "src1_d1": 1,
@@ -1308,7 +1320,6 @@ def test_v2_mul_route_resolves_rms_norm_mul_f32_fused_case() -> None:
 
 
 def test_v2_model_style_add_resolves_to_generic_2d_route() -> None:
-    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
     case = ImportedCase(
         op="ADD",
         dtype={
@@ -1327,16 +1338,11 @@ def test_v2_model_style_add_resolves_to_generic_2d_route() -> None:
         source_group_index=0,
         source_case_index=1,
     )
+    result = _resolve_one_case(ACTUAL_V2_ROUTER, case)
 
-    routes = list(routes_for_op(catalog, "ADD"))
-
-    resolved_route, shape, reason, detail = resolve_route_for_case(case, routes)
-
-    assert reason is None
-    assert detail is None
-    assert resolved_route is not None
-    assert resolved_route.id == "add_f32_generic_2d"
-    assert shape == {
+    assert isinstance(result, ResolvedBenchmarkCase)
+    assert result.route_id == "add_f32_generic_2d"
+    assert _resolved_shape(result) == {
         "d0": 4096,
         "d1": 512,
         "src0_d1_stride": 4096,
@@ -1346,7 +1352,6 @@ def test_v2_model_style_add_resolves_to_generic_2d_route() -> None:
 
 
 def test_v2_model_style_mul_broadcast_resolves_to_generic_2d_route() -> None:
-    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
     case = ImportedCase(
         op="MUL",
         dtype={
@@ -1365,16 +1370,11 @@ def test_v2_model_style_mul_broadcast_resolves_to_generic_2d_route() -> None:
         source_group_index=0,
         source_case_index=1,
     )
+    result = _resolve_one_case(ACTUAL_V2_ROUTER, case)
 
-    routes = list(routes_for_op(catalog, "MUL"))
-
-    resolved_route, shape, reason, detail = resolve_route_for_case(case, routes)
-
-    assert reason is None
-    assert detail is None
-    assert resolved_route is not None
-    assert resolved_route.id == "mul_f32_generic_2d"
-    assert shape == {
+    assert isinstance(result, ResolvedBenchmarkCase)
+    assert result.route_id == "mul_f32_generic_2d"
+    assert _resolved_shape(result) == {
         "d0": 4096,
         "d1": 512,
         "src1_d1": 1,
@@ -1385,7 +1385,6 @@ def test_v2_model_style_mul_broadcast_resolves_to_generic_2d_route() -> None:
 
 
 def test_v2_add_rms_norm_route_resolves_fused_mul_case() -> None:
-    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
     case = ImportedCase(
         op="ADD_RMS_NORM",
         dtype={"type": "f32"},
@@ -1399,16 +1398,11 @@ def test_v2_add_rms_norm_route_resolves_fused_mul_case() -> None:
         source_group_index=0,
         source_case_index=1,
     )
+    result = _resolve_one_case(ACTUAL_V2_ROUTER, case)
 
-    routes = list(routes_for_op(catalog, "ADD_RMS_NORM"))
-
-    resolved_route, shape, reason, detail = resolve_route_for_case(case, routes)
-
-    assert reason is None
-    assert detail is None
-    assert resolved_route is not None
-    assert resolved_route.id == "add_rms_norm_mul_f32_n64_r60_vector_tail"
-    assert shape == {
+    assert isinstance(result, ResolvedBenchmarkCase)
+    assert result.route_id == "add_rms_norm_mul_f32_n64_r60_vector_tail"
+    assert _resolved_shape(result) == {
         "d0": 64,
         "d1": 60,
         "weight_d1": 1,
@@ -1419,7 +1413,6 @@ def test_v2_add_rms_norm_route_resolves_fused_mul_case() -> None:
 
 
 def test_v2_add_rms_norm_nonzero_eps_case_stays_unmapped() -> None:
-    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
     case = ImportedCase(
         op="ADD_RMS_NORM",
         dtype={"type": "f32"},
@@ -1433,20 +1426,14 @@ def test_v2_add_rms_norm_nonzero_eps_case_stays_unmapped() -> None:
         source_group_index=0,
         source_case_index=3,
     )
+    result = _resolve_one_case(ACTUAL_V2_ROUTER, case)
 
-    routes = list(routes_for_op(catalog, "ADD_RMS_NORM"))
-
-    resolved_route, shape, reason, detail = resolve_route_for_case(case, routes)
-
-    assert resolved_route is None
-    assert shape is None
-    assert reason is not None
-    assert reason.value == "shape_lowering_not_implemented"
-    assert detail == "add_rms_norm_mul_f32 routing currently requires eps=0.0"
+    assert isinstance(result, UnmappedCase)
+    assert result.reason.value == "shape_lowering_not_implemented"
+    assert result.detail == "add_rms_norm_mul_f32 routing currently requires eps=0.0"
 
 
 def test_v2_quantize_route_resolves_rms_norm_mul_quantize_q8_1_x4_case() -> None:
-    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
     case = ImportedCase(
         op="QUANTIZE",
         dtype={"type_src": "f32", "type_weight": "f32", "type_dst": "q8_1_x4"},
@@ -1459,16 +1446,11 @@ def test_v2_quantize_route_resolves_rms_norm_mul_quantize_q8_1_x4_case() -> None
         source_group_index=0,
         source_case_index=0,
     )
+    result = _resolve_one_case(ACTUAL_V2_ROUTER, case)
 
-    routes = list(routes_for_op(catalog, "QUANTIZE"))
-
-    resolved_route, shape, reason, detail = resolve_route_for_case(case, routes)
-
-    assert reason is None
-    assert detail is None
-    assert resolved_route is not None
-    assert resolved_route.id == "rms_norm_mul_quantize_q8_1_f32_n3072_r1_x4_recompute"
-    assert shape == {
+    assert isinstance(result, ResolvedBenchmarkCase)
+    assert result.route_id == "rms_norm_mul_quantize_q8_1_f32_n3072_r1_x4_recompute"
+    assert _resolved_shape(result) == {
         "d0": 3072,
         "d1": 1,
         "weight_d1_stride": 0,
@@ -1478,7 +1460,6 @@ def test_v2_quantize_route_resolves_rms_norm_mul_quantize_q8_1_x4_case() -> None
 
 
 def test_v2_quantize_route_resolves_standalone_q8_1_case() -> None:
-    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
     case = ImportedCase(
         op="QUANTIZE",
         dtype={"type_src": "f32", "type_dst": "q8_1"},
@@ -1490,16 +1471,11 @@ def test_v2_quantize_route_resolves_standalone_q8_1_case() -> None:
         source_group_index=1,
         source_case_index=0,
     )
+    result = _resolve_one_case(ACTUAL_V2_ROUTER, case)
 
-    routes = list(routes_for_op(catalog, "QUANTIZE"))
-
-    resolved_route, shape, reason, detail = resolve_route_for_case(case, routes)
-
-    assert reason is None
-    assert detail is None
-    assert resolved_route is not None
-    assert resolved_route.id == "quantize_q8_1_f32_contiguous_n256_r1"
-    assert shape == {
+    assert isinstance(result, ResolvedBenchmarkCase)
+    assert result.route_id == "quantize_q8_1_f32_contiguous_n256_r1"
+    assert _resolved_shape(result) == {
         "d0": 256,
         "d1": 1,
         "ncols": 256,
@@ -1511,7 +1487,6 @@ def test_v2_quantize_route_resolves_standalone_q8_1_case() -> None:
 
 
 def test_v2_quantize_route_rejects_unsupported_destination() -> None:
-    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
     case = ImportedCase(
         op="QUANTIZE",
         dtype={"type_src": "f32", "type_dst": "q8_0"},
@@ -1524,16 +1499,11 @@ def test_v2_quantize_route_rejects_unsupported_destination() -> None:
         source_group_index=0,
         source_case_index=0,
     )
+    result = _resolve_one_case(ACTUAL_V2_ROUTER, case)
 
-    routes = list(routes_for_op(catalog, "QUANTIZE"))
-
-    resolved_route, shape, reason, detail = resolve_route_for_case(case, routes)
-
-    assert resolved_route is None
-    assert shape is None
-    assert reason is not None
-    assert reason.value == "no_dtype_mapping"
-    assert detail == "matching v2 op mapping exists, but not for this dtype combination"
+    assert isinstance(result, UnmappedCase)
+    assert result.reason.value == "no_dtype_mapping"
+    assert result.detail == "matching v2 op mapping exists, but not for this dtype combination"
 
 
 def test_v2_helpers_require_catalog_or_routing_dir(tmp_path: Path) -> None:
@@ -1542,7 +1512,57 @@ def test_v2_helpers_require_catalog_or_routing_dir(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="routing_dir or catalog is required"):
         resolve_imported_suite(
             ImportedSuite(schema="test", source_path="test.yaml", op_groups=[]),
+            selector=PythonRouteSelector(()),
         )
+
+
+def test_v2_public_import_resolution_uses_configured_selector(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    factory_modes: list[str | None] = []
+    select_calls: list[tuple[str, RouteMatchQuery]] = []
+
+    class RecordingSelector:
+        def __init__(self, catalog: RouteCatalog):
+            self._delegate = PythonRouteSelector(catalog)
+
+        def select(self, op: str, query: RouteMatchQuery) -> RouteMatch | None:
+            select_calls.append((op, query))
+            return self._delegate.select(op, query)
+
+    def recording_selector_factory(
+        catalog: RouteCatalog,
+        *,
+        mode: str | None = None,
+    ) -> RecordingSelector:
+        factory_modes.append(mode)
+        return RecordingSelector(catalog)
+
+    monkeypatch.setattr(v2_backend, "create_route_selector", recording_selector_factory)
+    router = _python_router(
+        kernel_dir=ACTUAL_V2_KERNEL_DIR,
+        routing_dir=ACTUAL_V2_ROUTING_DIR,
+    )
+    case = ImportedCase(
+        op="ABS",
+        dtype={"type": "f32"},
+        raw_case={},
+        normalized_params={"ne_a": [5, 7, 11, 13], "v": 0},
+        source_path="tests/kernels/data/llamacpp_test.yaml",
+        source_group_index=0,
+        source_case_index=0,
+    )
+
+    result = _resolve_one_case(router, case)
+
+    assert isinstance(result, ResolvedBenchmarkCase)
+    assert result.route_id == "abs_f32_contiguous_4d"
+    assert factory_modes == ["python"]
+    assert len(select_calls) == 1
+    op, query = select_calls[0]
+    assert op == "ABS"
+    assert set(query.tensors) == {"src0", "dst"}
+    assert query.allowed_route_ids is None
 
 
 def test_v2_router_maps_contiguous_and_generic_add_cases(tmp_path: Path) -> None:
@@ -1550,7 +1570,7 @@ def test_v2_router_maps_contiguous_and_generic_add_cases(tmp_path: Path) -> None
     routing_dir = tmp_path / "routing"
     _write_kernel(kernel_dir)
     _write_v2_descriptor(routing_dir)
-    router = create_router(version="v2", kernel_dir=kernel_dir, routing_dir=routing_dir)
+    router = _python_router(kernel_dir=kernel_dir, routing_dir=routing_dir)
     suite = ImportedSuite(
         schema="test",
         source_path="test.yaml",
@@ -1614,7 +1634,7 @@ def test_v2_router_executes_matching_case(tmp_path: Path, monkeypatch) -> None:
     output_dir = tmp_path / "out"
     _write_kernel(kernel_dir)
     _write_v2_descriptor(routing_dir)
-    router = create_router(version="v2", kernel_dir=kernel_dir, routing_dir=routing_dir)
+    router = _python_router(kernel_dir=kernel_dir, routing_dir=routing_dir)
     config = {
         "kernel": "add_f32",
         "route_id": "add_f32_contiguous_1d",
@@ -1755,16 +1775,11 @@ def test_v2_oversized_contiguous_pointwise_case_becomes_unmapped() -> None:
         source_group_index=0,
         source_case_index=0,
     )
-    catalog = load_route_catalog(Path("catalog/v2"))
-    add_routes = list(routes_for_op(catalog, "ADD"))
+    result = _resolve_one_case(SOURCE_V2_ROUTER, case)
 
-    resolved_route, shape, reason, detail = resolve_route_for_case(case, add_routes)
-
-    assert resolved_route is None
-    assert shape is None
-    assert reason is not None
-    assert reason.value == "no_route_match"
-    assert detail == "YAML import tensor query did not satisfy any v2 route"
+    assert isinstance(result, UnmappedCase)
+    assert result.reason.value == "no_route_match"
+    assert result.detail == "YAML import tensor query did not satisfy any v2 route"
 
 
 def test_v2_sum_rows_route_resolves_for_contiguous_case() -> None:
@@ -1785,18 +1800,13 @@ def test_v2_sum_rows_route_resolves_for_contiguous_case() -> None:
         source_group_index=0,
         source_case_index=0,
     )
-    catalog = load_route_catalog(Path("catalog/v2"))
-    sum_rows_routes = list(routes_for_op(catalog, "SUM_ROWS"))
+    result = _resolve_one_case(SOURCE_V2_ROUTER, case)
 
-    resolved_route, shape, reason, detail = resolve_route_for_case(case, sum_rows_routes)
-
-    assert resolved_route is not None
-    assert resolved_route.id == "sum_rows_f32_contiguous_4d"
-    assert shape is not None
+    assert isinstance(result, ResolvedBenchmarkCase)
+    assert result.route_id == "sum_rows_f32_contiguous_4d"
+    shape = _resolved_shape(result)
     assert shape["d0"] == 33
     assert shape["d1"] == 256
-    assert reason is None
-    assert detail is None
 
 
 def test_v2_sum_rows_permuted_case_stays_unmapped() -> None:
@@ -1817,20 +1827,14 @@ def test_v2_sum_rows_permuted_case_stays_unmapped() -> None:
         source_group_index=0,
         source_case_index=0,
     )
-    catalog = load_route_catalog(Path("catalog/v2"))
-    sum_rows_routes = list(routes_for_op(catalog, "SUM_ROWS"))
+    result = _resolve_one_case(SOURCE_V2_ROUTER, case)
 
-    resolved_route, shape, reason, detail = resolve_route_for_case(case, sum_rows_routes)
-
-    assert resolved_route is None
-    assert shape is None
-    assert reason is not None
-    assert reason.value == "shape_lowering_not_implemented"
-    assert detail == "SUM_ROWS v2 routing requires permute=0"
+    assert isinstance(result, UnmappedCase)
+    assert result.reason.value == "shape_lowering_not_implemented"
+    assert result.detail == "SUM_ROWS v2 routing requires permute=0"
 
 
 def test_v2_rms_norm_route_resolves_for_contiguous_eps0_case() -> None:
-    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
     case = ImportedCase(
         op="RMS_NORM",
         dtype={"type": "f32"},
@@ -1845,20 +1849,14 @@ def test_v2_rms_norm_route_resolves_for_contiguous_eps0_case() -> None:
         source_group_index=0,
         source_case_index=0,
     )
+    result = _resolve_one_case(ACTUAL_V2_ROUTER, case)
 
-    rms_norm_routes = list(routes_for_op(catalog, "RMS_NORM"))
-
-    resolved_route, shape, reason, detail = resolve_route_for_case(case, rms_norm_routes)
-
-    assert reason is None
-    assert detail is None
-    assert resolved_route is not None
-    assert resolved_route.id == "rms_norm_f32_contiguous_4d"
-    assert shape == {"d0": 1025, "d1": 5, "d2": 4, "d3": 3}
+    assert isinstance(result, ResolvedBenchmarkCase)
+    assert result.route_id == "rms_norm_f32_contiguous_4d"
+    assert _resolved_shape(result) == {"d0": 1025, "d1": 5, "d2": 4, "d3": 3}
 
 
 def test_v2_rms_norm_nonzero_eps_case_stays_unmapped() -> None:
-    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
     case = ImportedCase(
         op="RMS_NORM",
         dtype={"type": "f32"},
@@ -1873,20 +1871,14 @@ def test_v2_rms_norm_nonzero_eps_case_stays_unmapped() -> None:
         source_group_index=0,
         source_case_index=0,
     )
+    result = _resolve_one_case(ACTUAL_V2_ROUTER, case)
 
-    rms_norm_routes = list(routes_for_op(catalog, "RMS_NORM"))
-
-    resolved_route, shape, reason, detail = resolve_route_for_case(case, rms_norm_routes)
-
-    assert resolved_route is None
-    assert shape is None
-    assert reason is not None
-    assert reason.value == "shape_lowering_not_implemented"
-    assert detail == "RMS_NORM v2 routing currently requires eps=0.0"
+    assert isinstance(result, UnmappedCase)
+    assert result.reason.value == "shape_lowering_not_implemented"
+    assert result.detail == "RMS_NORM v2 routing currently requires eps=0.0"
 
 
 def test_v2_swiglu_route_resolves_for_packed_contiguous_case() -> None:
-    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
     case = ImportedCase(
         op="SWIGLU",
         dtype={"type": "f32"},
@@ -1900,21 +1892,15 @@ def test_v2_swiglu_route_resolves_for_packed_contiguous_case() -> None:
         source_group_index=0,
         source_case_index=0,
     )
+    result = _resolve_one_case(ACTUAL_V2_ROUTER, case)
 
-    swiglu_routes = list(routes_for_op(catalog, "SWIGLU"))
-
-    resolved_route, shape, reason, detail = resolve_route_for_case(case, swiglu_routes)
-
-    assert reason is None
-    assert detail is None
-    assert resolved_route is not None
-    assert resolved_route.id == "swiglu_f32_packed_contiguous_4d"
-    assert shape == {"d0": 128, "d1": 2, "d2": 2, "d3": 2, "src0_d0": 256}
+    assert isinstance(result, ResolvedBenchmarkCase)
+    assert result.route_id == "swiglu_f32_packed_contiguous_4d"
+    assert _resolved_shape(result) == {"d0": 128, "d1": 2, "d2": 2, "d3": 2, "src0_d0": 256}
 
 
 @pytest.mark.parametrize("rows", [1, 512])
 def test_v2_model_style_swiglu_split_sources_pack_into_existing_route(rows: int) -> None:
-    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
     case = ImportedCase(
         op="SWIGLU",
         dtype={
@@ -1934,20 +1920,20 @@ def test_v2_model_style_swiglu_split_sources_pack_into_existing_route(rows: int)
         source_group_index=0,
         source_case_index=0,
     )
+    result = _resolve_one_case(ACTUAL_V2_ROUTER, case)
 
-    swiglu_routes = list(routes_for_op(catalog, "SWIGLU"))
-
-    resolved_route, shape, reason, detail = resolve_route_for_case(case, swiglu_routes)
-
-    assert reason is None
-    assert detail is None
-    assert resolved_route is not None
-    assert resolved_route.id == "swiglu_f32_packed_contiguous_4d"
-    assert shape == {"d0": 14336, "d1": rows, "d2": 1, "d3": 1, "src0_d0": 28672}
+    assert isinstance(result, ResolvedBenchmarkCase)
+    assert result.route_id == "swiglu_f32_packed_contiguous_4d"
+    assert _resolved_shape(result) == {
+        "d0": 14336,
+        "d1": rows,
+        "d2": 1,
+        "d3": 1,
+        "src0_d0": 28672,
+    }
 
 
 def test_v2_model_style_swiglu_unknown_op_params_stays_unmapped() -> None:
-    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
     case = ImportedCase(
         op="SWIGLU",
         dtype={
@@ -1967,20 +1953,14 @@ def test_v2_model_style_swiglu_unknown_op_params_stays_unmapped() -> None:
         source_group_index=0,
         source_case_index=0,
     )
+    result = _resolve_one_case(ACTUAL_V2_ROUTER, case)
 
-    swiglu_routes = list(routes_for_op(catalog, "SWIGLU"))
-
-    resolved_route, shape, reason, detail = resolve_route_for_case(case, swiglu_routes)
-
-    assert resolved_route is None
-    assert shape is None
-    assert reason is not None
-    assert reason.value == "shape_lowering_not_implemented"
-    assert detail == "SWIGLU YAML import currently requires op_params=['0:2']"
+    assert isinstance(result, UnmappedCase)
+    assert result.reason.value == "shape_lowering_not_implemented"
+    assert result.detail == "SWIGLU YAML import currently requires op_params=['0:2']"
 
 
 def test_v2_swiglu_split_case_stays_unmapped_without_split_route() -> None:
-    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
     case = ImportedCase(
         op="SWIGLU",
         dtype={"type": "f32"},
@@ -1994,20 +1974,14 @@ def test_v2_swiglu_split_case_stays_unmapped_without_split_route() -> None:
         source_group_index=0,
         source_case_index=0,
     )
+    result = _resolve_one_case(ACTUAL_V2_ROUTER, case)
 
-    swiglu_routes = list(routes_for_op(catalog, "SWIGLU"))
-
-    resolved_route, shape, reason, detail = resolve_route_for_case(case, swiglu_routes)
-
-    assert resolved_route is None
-    assert shape is None
-    assert reason is not None
-    assert reason.value == "shape_lowering_not_implemented"
-    assert detail == "SWIGLU v2 routing currently requires packed input (split=false)"
+    assert isinstance(result, UnmappedCase)
+    assert result.reason.value == "shape_lowering_not_implemented"
+    assert result.detail == "SWIGLU v2 routing currently requires packed input (split=false)"
 
 
 def test_v2_swiglu_swapped_case_stays_unmapped() -> None:
-    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
     case = ImportedCase(
         op="SWIGLU",
         dtype={"type": "f32"},
@@ -2021,20 +1995,14 @@ def test_v2_swiglu_swapped_case_stays_unmapped() -> None:
         source_group_index=0,
         source_case_index=0,
     )
+    result = _resolve_one_case(ACTUAL_V2_ROUTER, case)
 
-    swiglu_routes = list(routes_for_op(catalog, "SWIGLU"))
-
-    resolved_route, shape, reason, detail = resolve_route_for_case(case, swiglu_routes)
-
-    assert resolved_route is None
-    assert shape is None
-    assert reason is not None
-    assert reason.value == "shape_lowering_not_implemented"
-    assert detail == "SWIGLU v2 routing currently requires swapped=0"
+    assert isinstance(result, UnmappedCase)
+    assert result.reason.value == "shape_lowering_not_implemented"
+    assert result.detail == "SWIGLU v2 routing currently requires swapped=0"
 
 
 def test_v2_get_rows_route_resolves_for_base_f32_case() -> None:
-    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
     case = ImportedCase(
         op="GET_ROWS",
         dtype={"type": "f32"},
@@ -2051,16 +2019,11 @@ def test_v2_get_rows_route_resolves_for_base_f32_case() -> None:
         source_group_index=0,
         source_case_index=0,
     )
+    result = _resolve_one_case(ACTUAL_V2_ROUTER, case)
 
-    get_rows_routes = list(routes_for_op(catalog, "GET_ROWS"))
-
-    resolved_route, shape, reason, detail = resolve_route_for_case(case, get_rows_routes)
-
-    assert reason is None
-    assert detail is None
-    assert resolved_route is not None
-    assert resolved_route.id == "get_rows_f32_embedding_rows_2d"
-    assert shape == {
+    assert isinstance(result, ResolvedBenchmarkCase)
+    assert result.route_id == "get_rows_f32_embedding_rows_2d"
+    assert _resolved_shape(result) == {
         "d0": 256,
         "d1": 4,
         "src0_d1": 5,
@@ -2071,7 +2034,6 @@ def test_v2_get_rows_route_resolves_for_base_f32_case() -> None:
 
 
 def test_v2_get_rows_route_resolves_for_q8_0_case() -> None:
-    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
     case = ImportedCase(
         op="GET_ROWS",
         dtype={
@@ -2093,16 +2055,11 @@ def test_v2_get_rows_route_resolves_for_q8_0_case() -> None:
         source_group_index=0,
         source_case_index=0,
     )
+    result = _resolve_one_case(ACTUAL_V2_ROUTER, case)
 
-    get_rows_routes = list(routes_for_op(catalog, "GET_ROWS"))
-
-    resolved_route, shape, reason, detail = resolve_route_for_case(case, get_rows_routes)
-
-    assert reason is None
-    assert detail is None
-    assert resolved_route is not None
-    assert resolved_route.id == "get_rows_q8_0_f32_embedding_rows_2d"
-    assert shape == {
+    assert isinstance(result, ResolvedBenchmarkCase)
+    assert result.route_id == "get_rows_q8_0_f32_embedding_rows_2d"
+    assert _resolved_shape(result) == {
         "d0": 256,
         "d1": 4,
         "src0_d1": 5,
@@ -2113,7 +2070,6 @@ def test_v2_get_rows_route_resolves_for_q8_0_case() -> None:
 
 
 def test_v2_model_style_get_rows_f32_uses_source_table_row_count() -> None:
-    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
     case = ImportedCase(
         op="GET_ROWS",
         dtype={
@@ -2134,13 +2090,11 @@ def test_v2_model_style_get_rows_f32_uses_source_table_row_count() -> None:
         source_case_index=1,
     )
 
-    resolved_route, shape, reason, detail = resolve_route_for_case(case, list(routes_for_op(catalog, "GET_ROWS")))
+    result = _resolve_one_case(ACTUAL_V2_ROUTER, case)
 
-    assert reason is None
-    assert detail is None
-    assert resolved_route is not None
-    assert resolved_route.id == "get_rows_f32_embedding_rows_2d"
-    assert shape == {
+    assert isinstance(result, ResolvedBenchmarkCase)
+    assert result.route_id == "get_rows_f32_embedding_rows_2d"
+    assert _resolved_shape(result) == {
         "d0": 4096,
         "d1": 512,
         "src1_d0": 1,
@@ -2150,7 +2104,6 @@ def test_v2_model_style_get_rows_f32_uses_source_table_row_count() -> None:
 
 
 def test_v2_model_style_get_rows_q8_0_preserves_embedding_table_rows() -> None:
-    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
     case = ImportedCase(
         op="GET_ROWS",
         dtype={
@@ -2171,13 +2124,11 @@ def test_v2_model_style_get_rows_q8_0_preserves_embedding_table_rows() -> None:
         source_case_index=1,
     )
 
-    resolved_route, shape, reason, detail = resolve_route_for_case(case, list(routes_for_op(catalog, "GET_ROWS")))
+    result = _resolve_one_case(ACTUAL_V2_ROUTER, case)
 
-    assert reason is None
-    assert detail is None
-    assert resolved_route is not None
-    assert resolved_route.id == "get_rows_q8_0_f32_embedding_rows_2d"
-    assert shape == {
+    assert isinstance(result, ResolvedBenchmarkCase)
+    assert result.route_id == "get_rows_q8_0_f32_embedding_rows_2d"
+    assert _resolved_shape(result) == {
         "d0": 4096,
         "d1": 512,
         "src0_d1": 128256,
@@ -2188,7 +2139,6 @@ def test_v2_model_style_get_rows_q8_0_preserves_embedding_table_rows() -> None:
 
 
 def test_v2_get_rows_route_resolves_for_q4_k_case() -> None:
-    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
     case = ImportedCase(
         op="GET_ROWS",
         dtype={"type": "q4_K"},
@@ -2205,16 +2155,11 @@ def test_v2_get_rows_route_resolves_for_q4_k_case() -> None:
         source_group_index=0,
         source_case_index=0,
     )
+    result = _resolve_one_case(ACTUAL_V2_ROUTER, case)
 
-    get_rows_routes = list(routes_for_op(catalog, "GET_ROWS"))
-
-    resolved_route, shape, reason, detail = resolve_route_for_case(case, get_rows_routes)
-
-    assert reason is None
-    assert detail is None
-    assert resolved_route is not None
-    assert resolved_route.id == "get_rows_q4_k_f32_embedding_rows_2d"
-    assert shape == {
+    assert isinstance(result, ResolvedBenchmarkCase)
+    assert result.route_id == "get_rows_q4_k_f32_embedding_rows_2d"
+    assert _resolved_shape(result) == {
         "d0": 256,
         "d1": 4,
         "src0_d1": 5,
@@ -2225,7 +2170,6 @@ def test_v2_get_rows_route_resolves_for_q4_k_case() -> None:
 
 
 def test_v2_get_rows_route_resolves_for_q5_k_case() -> None:
-    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
     case = ImportedCase(
         op="GET_ROWS",
         dtype={"type": "q5_K"},
@@ -2242,16 +2186,11 @@ def test_v2_get_rows_route_resolves_for_q5_k_case() -> None:
         source_group_index=0,
         source_case_index=0,
     )
+    result = _resolve_one_case(ACTUAL_V2_ROUTER, case)
 
-    get_rows_routes = list(routes_for_op(catalog, "GET_ROWS"))
-
-    resolved_route, shape, reason, detail = resolve_route_for_case(case, get_rows_routes)
-
-    assert reason is None
-    assert detail is None
-    assert resolved_route is not None
-    assert resolved_route.id == "get_rows_q5_k_f32_embedding_rows_2d"
-    assert shape == {
+    assert isinstance(result, ResolvedBenchmarkCase)
+    assert result.route_id == "get_rows_q5_k_f32_embedding_rows_2d"
+    assert _resolved_shape(result) == {
         "d0": 256,
         "d1": 4,
         "src0_d1": 5,
@@ -2262,7 +2201,6 @@ def test_v2_get_rows_route_resolves_for_q5_k_case() -> None:
 
 
 def test_v2_get_rows_route_resolves_for_q6_k_case() -> None:
-    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
     case = ImportedCase(
         op="GET_ROWS",
         dtype={"type": "q6_K"},
@@ -2279,16 +2217,11 @@ def test_v2_get_rows_route_resolves_for_q6_k_case() -> None:
         source_group_index=0,
         source_case_index=0,
     )
+    result = _resolve_one_case(ACTUAL_V2_ROUTER, case)
 
-    get_rows_routes = list(routes_for_op(catalog, "GET_ROWS"))
-
-    resolved_route, shape, reason, detail = resolve_route_for_case(case, get_rows_routes)
-
-    assert reason is None
-    assert detail is None
-    assert resolved_route is not None
-    assert resolved_route.id == "get_rows_q6_k_f32_embedding_rows_2d"
-    assert shape == {
+    assert isinstance(result, ResolvedBenchmarkCase)
+    assert result.route_id == "get_rows_q6_k_f32_embedding_rows_2d"
+    assert _resolved_shape(result) == {
         "d0": 256,
         "d1": 4,
         "src0_d1": 5,
@@ -2299,7 +2232,6 @@ def test_v2_get_rows_route_resolves_for_q6_k_case() -> None:
 
 
 def test_v2_get_rows_route_resolves_for_moe_weights_case() -> None:
-    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
     case = ImportedCase(
         op="GET_ROWS",
         dtype={"type": "f32"},
@@ -2317,16 +2249,11 @@ def test_v2_get_rows_route_resolves_for_moe_weights_case() -> None:
         source_group_index=0,
         source_case_index=0,
     )
+    result = _resolve_one_case(ACTUAL_V2_ROUTER, case)
 
-    get_rows_routes = list(routes_for_op(catalog, "GET_ROWS"))
-
-    resolved_route, shape, reason, detail = resolve_route_for_case(case, get_rows_routes)
-
-    assert reason is None
-    assert detail is None
-    assert resolved_route is not None
-    assert resolved_route.id == "get_rows_moe_weights_f32_topk_view_2d"
-    assert shape == {
+    assert isinstance(result, ResolvedBenchmarkCase)
+    assert result.route_id == "get_rows_moe_weights_f32_topk_view_2d"
+    assert _resolved_shape(result) == {
         "d0": 8,
         "d1": 16,
         "src0_d0": 128,
@@ -2340,7 +2267,6 @@ def test_v2_get_rows_route_resolves_for_moe_weights_case() -> None:
 
 
 def test_v2_get_rows_view_case_stays_unmapped() -> None:
-    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
     case = ImportedCase(
         op="GET_ROWS",
         dtype={"type": "f32"},
@@ -2357,20 +2283,14 @@ def test_v2_get_rows_view_case_stays_unmapped() -> None:
         source_group_index=0,
         source_case_index=0,
     )
+    result = _resolve_one_case(ACTUAL_V2_ROUTER, case)
 
-    get_rows_routes = list(routes_for_op(catalog, "GET_ROWS"))
-
-    resolved_route, shape, reason, detail = resolve_route_for_case(case, get_rows_routes)
-
-    assert resolved_route is None
-    assert shape is None
-    assert reason is not None
-    assert reason.value == "shape_lowering_not_implemented"
-    assert detail == "GET_ROWS v2 routing requires contiguous input (v=0)"
+    assert isinstance(result, UnmappedCase)
+    assert result.reason.value == "shape_lowering_not_implemented"
+    assert result.detail == "GET_ROWS v2 routing requires contiguous input (v=0)"
 
 
 def test_v2_get_rows_non_unit_be1_case_stays_unmapped() -> None:
-    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
     case = ImportedCase(
         op="GET_ROWS",
         dtype={"type": "f32"},
@@ -2387,20 +2307,14 @@ def test_v2_get_rows_non_unit_be1_case_stays_unmapped() -> None:
         source_group_index=0,
         source_case_index=0,
     )
+    result = _resolve_one_case(ACTUAL_V2_ROUTER, case)
 
-    get_rows_routes = list(routes_for_op(catalog, "GET_ROWS"))
-
-    resolved_route, shape, reason, detail = resolve_route_for_case(case, get_rows_routes)
-
-    assert resolved_route is None
-    assert shape is None
-    assert reason is not None
-    assert reason.value == "shape_lowering_not_implemented"
-    assert detail == "GET_ROWS v2 routing currently requires be1=1"
+    assert isinstance(result, UnmappedCase)
+    assert result.reason.value == "shape_lowering_not_implemented"
+    assert result.detail == "GET_ROWS v2 routing currently requires be1=1"
 
 
 def test_v2_argsort_route_resolves_for_base_f32_case() -> None:
-    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
     case = ImportedCase(
         op="ARGSORT",
         dtype={"type": "f32"},
@@ -2413,20 +2327,14 @@ def test_v2_argsort_route_resolves_for_base_f32_case() -> None:
         source_group_index=0,
         source_case_index=0,
     )
+    result = _resolve_one_case(ACTUAL_V2_ROUTER, case)
 
-    argsort_routes = list(routes_for_op(catalog, "ARGSORT"))
-
-    resolved_route, shape, reason, detail = resolve_route_for_case(case, argsort_routes)
-
-    assert reason is None
-    assert detail is None
-    assert resolved_route is not None
-    assert resolved_route.id == "argsort_f32_i32_n128_r1_desc_wg128"
-    assert shape == {"d0": 128, "d1": 1}
+    assert isinstance(result, ResolvedBenchmarkCase)
+    assert result.route_id == "argsort_f32_i32_n128_r1_desc_wg128"
+    assert _resolved_shape(result) == {"d0": 128, "d1": 1}
 
 
 def test_v2_argsort_ascending_case_stays_unmapped() -> None:
-    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
     case = ImportedCase(
         op="ARGSORT",
         dtype={"type": "f32"},
@@ -2439,20 +2347,14 @@ def test_v2_argsort_ascending_case_stays_unmapped() -> None:
         source_group_index=0,
         source_case_index=0,
     )
+    result = _resolve_one_case(ACTUAL_V2_ROUTER, case)
 
-    argsort_routes = list(routes_for_op(catalog, "ARGSORT"))
-
-    resolved_route, shape, reason, detail = resolve_route_for_case(case, argsort_routes)
-
-    assert resolved_route is None
-    assert shape is None
-    assert reason is not None
-    assert reason.value == "shape_lowering_not_implemented"
-    assert detail == "ARGSORT v2 routing currently requires order=0"
+    assert isinstance(result, UnmappedCase)
+    assert result.reason.value == "shape_lowering_not_implemented"
+    assert result.detail == "ARGSORT v2 routing currently requires order=0"
 
 
 def test_v2_argsort_non_route_shape_case_stays_unmapped() -> None:
-    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
     case = ImportedCase(
         op="ARGSORT",
         dtype={"type": "f32"},
@@ -2465,20 +2367,14 @@ def test_v2_argsort_non_route_shape_case_stays_unmapped() -> None:
         source_group_index=0,
         source_case_index=0,
     )
+    result = _resolve_one_case(ACTUAL_V2_ROUTER, case)
 
-    argsort_routes = list(routes_for_op(catalog, "ARGSORT"))
-
-    resolved_route, shape, reason, detail = resolve_route_for_case(case, argsort_routes)
-
-    assert resolved_route is None
-    assert shape is None
-    assert reason is not None
-    assert reason.value == "no_route_match"
-    assert detail == "YAML import tensor query did not satisfy any v2 route"
+    assert isinstance(result, UnmappedCase)
+    assert result.reason.value == "no_route_match"
+    assert result.detail == "YAML import tensor query did not satisfy any v2 route"
 
 
 def test_v2_mul_mat_route_resolves_for_small_contiguous_f32_case() -> None:
-    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
     case = ImportedCase(
         op="MUL_MAT",
         dtype={"type_a": "f32", "type_b": "f32"},
@@ -2498,15 +2394,11 @@ def test_v2_mul_mat_route_resolves_for_small_contiguous_f32_case() -> None:
         source_case_index=0,
     )
 
-    routes = list(routes_for_op(catalog, "MUL_MAT"))
+    result = _resolve_one_case(ACTUAL_V2_ROUTER, case)
 
-    resolved_route, shape, reason, detail = resolve_route_for_case(case, routes)
-
-    assert reason is None
-    assert detail is None
-    assert resolved_route is not None
-    assert resolved_route.id == "mul_mat_f32_f32_contiguous_small_2d"
-    assert shape == {
+    assert isinstance(result, ResolvedBenchmarkCase)
+    assert result.route_id == "mul_mat_f32_f32_contiguous_small_2d"
+    assert _resolved_shape(result) == {
         "d0": 16,
         "d1": 8,
         "src0_d0": 256,
@@ -2519,7 +2411,6 @@ def test_v2_mul_mat_route_resolves_for_small_contiguous_f32_case() -> None:
 
 
 def test_v2_mul_mat_route_resolves_for_logits_cols1_f32_case() -> None:
-    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
     case = ImportedCase(
         op="MUL_MAT",
         dtype={"type_a": "f32", "type_b": "f32"},
@@ -2539,15 +2430,11 @@ def test_v2_mul_mat_route_resolves_for_logits_cols1_f32_case() -> None:
         source_case_index=6,
     )
 
-    routes = list(routes_for_op(catalog, "MUL_MAT"))
+    result = _resolve_one_case(ACTUAL_V2_ROUTER, case)
 
-    resolved_route, shape, reason, detail = resolve_route_for_case(case, routes)
-
-    assert reason is None
-    assert detail is None
-    assert resolved_route is not None
-    assert resolved_route.id == "mul_mat_f32_f32_contiguous_logits_cols1_2d"
-    assert shape == {
+    assert isinstance(result, ResolvedBenchmarkCase)
+    assert result.route_id == "mul_mat_f32_f32_contiguous_logits_cols1_2d"
+    assert _resolved_shape(result) == {
         "d0": 129,
         "d1": 1,
         "src0_d0": 1057,
@@ -2580,14 +2467,11 @@ def test_v2_mul_mat_route_resolves_for_logits_cols1_f16_batched_case() -> None:
         source_case_index=6,
     )
 
-    routes = list(routes_for_op(catalog, "MUL_MAT"))
+    result = _resolve_one_case(ACTUAL_V2_ROUTER, case)
 
-    resolved_route, shape, reason, detail = resolve_route_for_case(case, routes)
-
-    assert reason is None
-    assert detail is None
-    assert resolved_route is not None
-    assert resolved_route.id == "mul_mat_f16_f32_batched_logits_cols1_2d"
+    assert isinstance(result, ResolvedBenchmarkCase)
+    assert result.route_id == "mul_mat_f16_f32_batched_logits_cols1_2d"
+    shape = _resolved_shape(result)
     assert shape == {
         "d0": 129,
         "d1": 1,
@@ -2601,7 +2485,7 @@ def test_v2_mul_mat_route_resolves_for_logits_cols1_f16_batched_case() -> None:
 
     candidate = candidate_from_shape(
         kernel_dir=ACTUAL_V2_KERNEL_DIR,
-        route=resolved_route,
+        route=catalog.routes_by_id[result.route_id],
         shape=shape,
     )
     assert candidate.config["@hrx2.shape.mul_mat_f16.k"] == "1057"
@@ -2634,14 +2518,11 @@ def test_v2_mul_mat_route_resolves_for_batched_logits_cols1_f16_case() -> None:
         source_case_index=40,
     )
 
-    routes = list(routes_for_op(catalog, "MUL_MAT"))
+    result = _resolve_one_case(ACTUAL_V2_ROUTER, case)
 
-    resolved_route, shape, reason, detail = resolve_route_for_case(case, routes)
-
-    assert reason is None
-    assert detail is None
-    assert resolved_route is not None
-    assert resolved_route.id == "mul_mat_f16_f32_batched_logits_cols1_4d"
+    assert isinstance(result, ResolvedBenchmarkCase)
+    assert result.route_id == "mul_mat_f16_f32_batched_logits_cols1_4d"
+    shape = _resolved_shape(result)
     assert shape == {
         "d0": 128,
         "d1": 1,
@@ -2663,7 +2544,7 @@ def test_v2_mul_mat_route_resolves_for_batched_logits_cols1_f16_case() -> None:
 
     candidate = candidate_from_shape(
         kernel_dir=ACTUAL_V2_KERNEL_DIR,
-        route=resolved_route,
+        route=catalog.routes_by_id[result.route_id],
         shape=shape,
     )
     assert candidate.config["@hrx2.shape.mul_mat_f16.dst_ne2"] == "2"
@@ -2677,7 +2558,6 @@ def test_v2_mul_mat_route_resolves_for_batched_logits_cols1_f16_case() -> None:
 
 
 def test_v2_mul_mat_route_resolves_for_q8_0_case() -> None:
-    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
     case = ImportedCase(
         op="MUL_MAT",
         dtype={"type_a": "q8_0", "type_b": "f32"},
@@ -2697,15 +2577,11 @@ def test_v2_mul_mat_route_resolves_for_q8_0_case() -> None:
         source_case_index=0,
     )
 
-    routes = list(routes_for_op(catalog, "MUL_MAT"))
+    result = _resolve_one_case(ACTUAL_V2_ROUTER, case)
 
-    resolved_route, shape, reason, detail = resolve_route_for_case(case, routes)
-
-    assert reason is None
-    assert detail is None
-    assert resolved_route is not None
-    assert resolved_route.id == "mul_mat_q8_0_f32_contiguous_2d"
-    assert shape == {
+    assert isinstance(result, ResolvedBenchmarkCase)
+    assert result.route_id == "mul_mat_q8_0_f32_contiguous_2d"
+    assert _resolved_shape(result) == {
         "d0": 1,
         "d1": 64,
         "src0_d0": 256,
@@ -2758,7 +2634,6 @@ def test_v2_model_style_mul_mat_q8_0_resolves_to_contiguous_2d_route(
     sources: str,
     expected_shape: dict[str, int],
 ) -> None:
-    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
     case = ImportedCase(
         op="MUL_MAT",
         dtype={
@@ -2782,17 +2657,14 @@ def test_v2_model_style_mul_mat_q8_0_resolves_to_contiguous_2d_route(
         source_case_index=0,
     )
 
-    resolved_route, shape, reason, detail = resolve_route_for_case(case, list(routes_for_op(catalog, "MUL_MAT")))
+    result = _resolve_one_case(ACTUAL_V2_ROUTER, case)
 
-    assert reason is None
-    assert detail is None
-    assert resolved_route is not None
-    assert resolved_route.id == "mul_mat_q8_0_f32_contiguous_2d"
-    assert shape == expected_shape
+    assert isinstance(result, ResolvedBenchmarkCase)
+    assert result.route_id == "mul_mat_q8_0_f32_contiguous_2d"
+    assert _resolved_shape(result) == expected_shape
 
 
 def test_v2_mul_mat_route_resolves_for_q4_k_direct_case() -> None:
-    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
     case = ImportedCase(
         op="MUL_MAT",
         dtype={"type_a": "q4_k", "type_b": "f32"},
@@ -2812,15 +2684,11 @@ def test_v2_mul_mat_route_resolves_for_q4_k_direct_case() -> None:
         source_case_index=0,
     )
 
-    routes = list(routes_for_op(catalog, "MUL_MAT"))
+    result = _resolve_one_case(ACTUAL_V2_ROUTER, case)
 
-    resolved_route, shape, reason, detail = resolve_route_for_case(case, routes)
-
-    assert reason is None
-    assert detail is None
-    assert resolved_route is not None
-    assert resolved_route.id == "mul_mat_q4_k_f32_direct_contiguous_2d"
-    assert shape == {
+    assert isinstance(result, ResolvedBenchmarkCase)
+    assert result.route_id == "mul_mat_q4_k_f32_direct_contiguous_2d"
+    assert _resolved_shape(result) == {
         "d0": 16,
         "d1": 8,
         "src0_d0": 256,
@@ -2833,7 +2701,6 @@ def test_v2_mul_mat_route_resolves_for_q4_k_direct_case() -> None:
 
 
 def test_v2_mul_mat_id_route_resolves_for_q4_k_case() -> None:
-    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
     case = ImportedCase(
         op="MUL_MAT_ID",
         dtype={"type_a": "q4_K", "type_b": "f32"},
@@ -2851,15 +2718,11 @@ def test_v2_mul_mat_id_route_resolves_for_q4_k_case() -> None:
         source_case_index=0,
     )
 
-    routes = list(routes_for_op(catalog, "MUL_MAT_ID"))
+    result = _resolve_one_case(ACTUAL_V2_ROUTER, case)
 
-    resolved_route, shape, reason, detail = resolve_route_for_case(case, routes)
-
-    assert reason is None
-    assert detail is None
-    assert resolved_route is not None
-    assert resolved_route.id == "mul_mat_id_q4_k_f32_expert_planes_3d"
-    assert shape == {
+    assert isinstance(result, ResolvedBenchmarkCase)
+    assert result.route_id == "mul_mat_id_q4_k_f32_expert_planes_3d"
+    assert _resolved_shape(result) == {
         "d0": 512,
         "d1": 2,
         "d2": 1,
@@ -2882,7 +2745,6 @@ def test_v2_mul_mat_id_route_resolves_for_q4_k_case() -> None:
 
 
 def test_v2_mul_mat_id_route_resolves_for_q5_k_case() -> None:
-    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
     case = ImportedCase(
         op="MUL_MAT_ID",
         dtype={"type_a": "q5_K", "type_b": "f32"},
@@ -2900,15 +2762,11 @@ def test_v2_mul_mat_id_route_resolves_for_q5_k_case() -> None:
         source_case_index=0,
     )
 
-    routes = list(routes_for_op(catalog, "MUL_MAT_ID"))
+    result = _resolve_one_case(ACTUAL_V2_ROUTER, case)
 
-    resolved_route, shape, reason, detail = resolve_route_for_case(case, routes)
-
-    assert reason is None
-    assert detail is None
-    assert resolved_route is not None
-    assert resolved_route.id == "mul_mat_id_q5_k_f32_expert_planes_3d"
-    assert shape == {
+    assert isinstance(result, ResolvedBenchmarkCase)
+    assert result.route_id == "mul_mat_id_q5_k_f32_expert_planes_3d"
+    assert _resolved_shape(result) == {
         "d0": 512,
         "d1": 2,
         "d2": 1,
@@ -2931,7 +2789,6 @@ def test_v2_mul_mat_id_route_resolves_for_q5_k_case() -> None:
 
 
 def test_v2_mul_mat_id_route_resolves_for_q6_k_case() -> None:
-    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
     case = ImportedCase(
         op="MUL_MAT_ID",
         dtype={"type_a": "q6_K", "type_b": "f32"},
@@ -2949,15 +2806,11 @@ def test_v2_mul_mat_id_route_resolves_for_q6_k_case() -> None:
         source_case_index=0,
     )
 
-    routes = list(routes_for_op(catalog, "MUL_MAT_ID"))
+    result = _resolve_one_case(ACTUAL_V2_ROUTER, case)
 
-    resolved_route, shape, reason, detail = resolve_route_for_case(case, routes)
-
-    assert reason is None
-    assert detail is None
-    assert resolved_route is not None
-    assert resolved_route.id == "mul_mat_id_q6_k_f32_expert_planes_3d"
-    assert shape == {
+    assert isinstance(result, ResolvedBenchmarkCase)
+    assert result.route_id == "mul_mat_id_q6_k_f32_expert_planes_3d"
+    assert _resolved_shape(result) == {
         "d0": 512,
         "d1": 2,
         "d2": 1,
@@ -2980,7 +2833,6 @@ def test_v2_mul_mat_id_route_resolves_for_q6_k_case() -> None:
 
 
 def test_v2_mul_mat_route_resolves_for_q5_dot16_case() -> None:
-    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
     case = ImportedCase(
         op="MUL_MAT",
         dtype={"type_a": "q5_k", "type_b": "f32"},
@@ -3000,15 +2852,11 @@ def test_v2_mul_mat_route_resolves_for_q5_dot16_case() -> None:
         source_case_index=0,
     )
 
-    routes = list(routes_for_op(catalog, "MUL_MAT"))
+    result = _resolve_one_case(ACTUAL_V2_ROUTER, case)
 
-    resolved_route, shape, reason, detail = resolve_route_for_case(case, routes)
-
-    assert reason is None
-    assert detail is None
-    assert resolved_route is not None
-    assert resolved_route.id == "mul_mat_q5_k_f32_dot16_contiguous_cols1_2d"
-    assert shape == {
+    assert isinstance(result, ResolvedBenchmarkCase)
+    assert result.route_id == "mul_mat_q5_k_f32_dot16_contiguous_cols1_2d"
+    assert _resolved_shape(result) == {
         "d0": 16,
         "d1": 1,
         "src0_d0": 256,
@@ -3021,7 +2869,6 @@ def test_v2_mul_mat_route_resolves_for_q5_dot16_case() -> None:
 
 
 def test_v2_mul_mat_route_prefers_q6_rows2_for_cols1_case() -> None:
-    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
     case = ImportedCase(
         op="MUL_MAT",
         dtype={"type_a": "q6_k", "type_b": "f32"},
@@ -3041,15 +2888,11 @@ def test_v2_mul_mat_route_prefers_q6_rows2_for_cols1_case() -> None:
         source_case_index=0,
     )
 
-    routes = list(routes_for_op(catalog, "MUL_MAT"))
+    result = _resolve_one_case(ACTUAL_V2_ROUTER, case)
 
-    resolved_route, shape, reason, detail = resolve_route_for_case(case, routes)
-
-    assert reason is None
-    assert detail is None
-    assert resolved_route is not None
-    assert resolved_route.id == "mul_mat_q6_k_f32_rows2_contiguous_cols1_2d"
-    assert shape == {
+    assert isinstance(result, ResolvedBenchmarkCase)
+    assert result.route_id == "mul_mat_q6_k_f32_rows2_contiguous_cols1_2d"
+    assert _resolved_shape(result) == {
         "d0": 16,
         "d1": 1,
         "src0_d0": 256,
@@ -3062,7 +2905,6 @@ def test_v2_mul_mat_route_prefers_q6_rows2_for_cols1_case() -> None:
 
 
 def test_v2_mul_mat_route_resolves_for_q6_direct_case() -> None:
-    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
     case = ImportedCase(
         op="MUL_MAT",
         dtype={"type_a": "q6_k", "type_b": "f32"},
@@ -3082,15 +2924,11 @@ def test_v2_mul_mat_route_resolves_for_q6_direct_case() -> None:
         source_case_index=0,
     )
 
-    routes = list(routes_for_op(catalog, "MUL_MAT"))
+    result = _resolve_one_case(ACTUAL_V2_ROUTER, case)
 
-    resolved_route, shape, reason, detail = resolve_route_for_case(case, routes)
-
-    assert reason is None
-    assert detail is None
-    assert resolved_route is not None
-    assert resolved_route.id == "mul_mat_q6_k_f32_direct_contiguous_2d"
-    assert shape == {
+    assert isinstance(result, ResolvedBenchmarkCase)
+    assert result.route_id == "mul_mat_q6_k_f32_direct_contiguous_2d"
+    assert _resolved_shape(result) == {
         "d0": 16,
         "d1": 8,
         "src0_d0": 256,
@@ -3146,7 +2984,6 @@ def test_v2_flash_attn_ext_fixed_decode_routes_resolve_grouped_yaml_cases(
     route_id: str,
     kv: int,
 ) -> None:
-    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
     case = ImportedCase(
         op="FLASH_ATTN_EXT",
         dtype={"type_KV": "f16"},
@@ -3170,15 +3007,11 @@ def test_v2_flash_attn_ext_fixed_decode_routes_resolve_grouped_yaml_cases(
         source_case_index=0,
     )
 
-    resolved_route, shape, reason, detail = resolve_route_for_case(
-        case, list(routes_for_op(catalog, "FLASH_ATTN_EXT"))
-    )
+    result = _resolve_one_case(ACTUAL_V2_ROUTER, case)
 
-    assert reason is None
-    assert detail is None
-    assert resolved_route is not None
-    assert resolved_route.id == route_id
-    assert shape == {
+    assert isinstance(result, ResolvedBenchmarkCase)
+    assert result.route_id == route_id
+    assert _resolved_shape(result) == {
         "d0": 24,
         "d1": 128,
         "src0_d0": kv,
@@ -3197,7 +3030,6 @@ def test_v2_flash_attn_ext_fixed_decode_routes_resolve_grouped_yaml_cases(
 
 
 def test_v2_flash_attn_ext_route_leaves_maskless_grouped_yaml_case_unmapped() -> None:
-    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
     case = ImportedCase(
         op="FLASH_ATTN_EXT",
         dtype={"type_KV": "f16"},
@@ -3218,20 +3050,15 @@ def test_v2_flash_attn_ext_route_leaves_maskless_grouped_yaml_case_unmapped() ->
         source_case_index=3,
     )
 
-    resolved_route, shape, reason, detail = resolve_route_for_case(
-        case, list(routes_for_op(catalog, "FLASH_ATTN_EXT"))
-    )
+    result = _resolve_one_case(ACTUAL_V2_ROUTER, case)
 
-    assert resolved_route is None
-    assert shape is None
-    assert reason is not None
-    assert reason.value == "shape_lowering_not_implemented"
-    assert detail == "FLASH_ATTN_EXT v2 routing currently requires mask=1"
+    assert isinstance(result, UnmappedCase)
+    assert result.reason.value == "shape_lowering_not_implemented"
+    assert result.detail == "FLASH_ATTN_EXT v2 routing currently requires mask=1"
 
 
 @pytest.mark.parametrize("kv", (512, 1024, 2048, 4096))
 def test_v2_flash_attn_ext_masked_identity_route_resolves_grouped_yaml_family(kv: int) -> None:
-    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
     case = ImportedCase(
         op="FLASH_ATTN_EXT",
         dtype={"type_KV": "f16"},
@@ -3255,15 +3082,11 @@ def test_v2_flash_attn_ext_masked_identity_route_resolves_grouped_yaml_family(kv
         source_case_index=0,
     )
 
-    resolved_route, shape, reason, detail = resolve_route_for_case(
-        case, list(routes_for_op(catalog, "FLASH_ATTN_EXT"))
-    )
+    result = _resolve_one_case(ACTUAL_V2_ROUTER, case)
 
-    assert reason is None
-    assert detail is None
-    assert resolved_route is not None
-    assert resolved_route.id == "softmax_kqv_f32_f16_masked_identity_kv512_4096_d128_h8_wg256_row1"
-    assert shape == {
+    assert isinstance(result, ResolvedBenchmarkCase)
+    assert result.route_id == "softmax_kqv_f32_f16_masked_identity_kv512_4096_d128_h8_wg256_row1"
+    assert _resolved_shape(result) == {
         "d0": 8,
         "d1": 128,
         "src0_d0": kv,
@@ -3306,7 +3129,6 @@ def test_v2_flash_attn_ext_masked_identity_route_materializes_candidates(kv: int
 
 
 def test_v2_mul_mat_broadcast_case_stays_unmapped() -> None:
-    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
     case = ImportedCase(
         op="MUL_MAT",
         dtype={"type_a": "f32", "type_b": "f32"},
@@ -3326,19 +3148,14 @@ def test_v2_mul_mat_broadcast_case_stays_unmapped() -> None:
         source_case_index=0,
     )
 
-    routes = list(routes_for_op(catalog, "MUL_MAT"))
+    result = _resolve_one_case(ACTUAL_V2_ROUTER, case)
 
-    resolved_route, shape, reason, detail = resolve_route_for_case(case, routes)
-
-    assert resolved_route is None
-    assert shape is None
-    assert reason is not None
-    assert reason.value == "shape_lowering_not_implemented"
-    assert detail == "MUL_MAT v2 routing currently requires nr=[1, 1]"
+    assert isinstance(result, UnmappedCase)
+    assert result.reason.value == "shape_lowering_not_implemented"
+    assert result.detail == "MUL_MAT v2 routing currently requires nr=[1, 1]"
 
 
 def test_v2_mul_mat_permuted_case_stays_unmapped() -> None:
-    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
     case = ImportedCase(
         op="MUL_MAT",
         dtype={"type_a": "f32", "type_b": "f32"},
@@ -3358,19 +3175,14 @@ def test_v2_mul_mat_permuted_case_stays_unmapped() -> None:
         source_case_index=0,
     )
 
-    routes = list(routes_for_op(catalog, "MUL_MAT"))
+    result = _resolve_one_case(ACTUAL_V2_ROUTER, case)
 
-    resolved_route, shape, reason, detail = resolve_route_for_case(case, routes)
-
-    assert resolved_route is None
-    assert shape is None
-    assert reason is not None
-    assert reason.value == "shape_lowering_not_implemented"
-    assert detail == "MUL_MAT v2 routing currently requires per=[0, 1, 2, 3]"
+    assert isinstance(result, UnmappedCase)
+    assert result.reason.value == "shape_lowering_not_implemented"
+    assert result.detail == "MUL_MAT v2 routing currently requires per=[0, 1, 2, 3]"
 
 
 def test_v2_rope_route_resolves_for_plain_f32_case() -> None:
-    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
     case = ImportedCase(
         op="ROPE",
         dtype={"type": "f32"},
@@ -3392,15 +3204,11 @@ def test_v2_rope_route_resolves_for_plain_f32_case() -> None:
         source_case_index=0,
     )
 
-    rope_routes = list(routes_for_op(catalog, "ROPE"))
+    result = _resolve_one_case(ACTUAL_V2_ROUTER, case)
 
-    resolved_route, shape, reason, detail = resolve_route_for_case(case, rope_routes)
-
-    assert reason is None
-    assert detail is None
-    assert resolved_route is not None
-    assert resolved_route.id == "rope_f32_normal_n128_h32_t2_contiguous_4d"
-    assert shape == {
+    assert isinstance(result, ResolvedBenchmarkCase)
+    assert result.route_id == "rope_f32_normal_n128_h32_t2_contiguous_4d"
+    assert _resolved_shape(result) == {
         "d0": 128,
         "d1": 32,
         "d2": 2,
@@ -3420,7 +3228,6 @@ def test_v2_rope_route_resolves_for_plain_f32_case() -> None:
 
 
 def test_v2_rope_route_resolves_for_scaled_plain_f32_case() -> None:
-    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
     case = ImportedCase(
         op="ROPE",
         dtype={"type": "f32"},
@@ -3442,15 +3249,11 @@ def test_v2_rope_route_resolves_for_scaled_plain_f32_case() -> None:
         source_case_index=152,
     )
 
-    rope_routes = list(routes_for_op(catalog, "ROPE"))
+    result = _resolve_one_case(ACTUAL_V2_ROUTER, case)
 
-    resolved_route, shape, reason, detail = resolve_route_for_case(case, rope_routes)
-
-    assert reason is None
-    assert detail is None
-    assert resolved_route is not None
-    assert resolved_route.id == "rope_f32_normal_n128_h32_t2_contiguous_4d"
-    assert shape == {
+    assert isinstance(result, ResolvedBenchmarkCase)
+    assert result.route_id == "rope_f32_normal_n128_h32_t2_contiguous_4d"
+    assert _resolved_shape(result) == {
         "d0": 128,
         "d1": 32,
         "d2": 2,
@@ -3470,7 +3273,6 @@ def test_v2_rope_route_resolves_for_scaled_plain_f32_case() -> None:
 
 
 def test_v2_rope_view_case_stays_unmapped() -> None:
-    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
     case = ImportedCase(
         op="ROPE",
         dtype={"type": "f32"},
@@ -3492,19 +3294,14 @@ def test_v2_rope_view_case_stays_unmapped() -> None:
         source_case_index=0,
     )
 
-    rope_routes = list(routes_for_op(catalog, "ROPE"))
+    result = _resolve_one_case(ACTUAL_V2_ROUTER, case)
 
-    resolved_route, shape, reason, detail = resolve_route_for_case(case, rope_routes)
-
-    assert resolved_route is None
-    assert shape is None
-    assert reason is not None
-    assert reason.value == "shape_lowering_not_implemented"
-    assert detail == "ROPE v2 routing requires contiguous input (v=0)"
+    assert isinstance(result, UnmappedCase)
+    assert result.reason.value == "shape_lowering_not_implemented"
+    assert result.detail == "ROPE v2 routing requires contiguous input (v=0)"
 
 
 def test_v2_rope_neox_route_resolves_for_plain_f32_case() -> None:
-    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
     case = ImportedCase(
         op="ROPE",
         dtype={"type": "f32"},
@@ -3526,15 +3323,11 @@ def test_v2_rope_neox_route_resolves_for_plain_f32_case() -> None:
         source_case_index=0,
     )
 
-    rope_routes = list(routes_for_op(catalog, "ROPE"))
+    result = _resolve_one_case(ACTUAL_V2_ROUTER, case)
 
-    resolved_route, shape, reason, detail = resolve_route_for_case(case, rope_routes)
-
-    assert reason is None
-    assert detail is None
-    assert resolved_route is not None
-    assert resolved_route.id == "rope_neox_f32_n64_h128_t2_contiguous_4d"
-    assert shape == {
+    assert isinstance(result, ResolvedBenchmarkCase)
+    assert result.route_id == "rope_neox_f32_n64_h128_t2_contiguous_4d"
+    assert _resolved_shape(result) == {
         "d0": 64,
         "d1": 128,
         "d2": 2,
@@ -3582,7 +3375,11 @@ def test_v2_rope_neox_partial_dims_case_stays_unmapped() -> None:
         if route.id == "rope_neox_f32_n64_h128_t2_contiguous_4d"
     ]
 
-    resolved_route, shape, reason, detail = resolve_route_for_case(case, rope_routes)
+    resolved_route, shape, reason, detail = resolve_route_for_case(
+        case,
+        rope_routes,
+        selector=PythonRouteSelector(rope_routes),
+    )
 
     assert resolved_route is None
     assert shape is None
@@ -3592,7 +3389,6 @@ def test_v2_rope_neox_partial_dims_case_stays_unmapped() -> None:
 
 
 def test_v2_rope_scale_route_resolves_for_neox_freq_f32_case() -> None:
-    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
     case = ImportedCase(
         op="ROPE_SCALE",
         dtype={"type": "f32"},
@@ -3614,15 +3410,11 @@ def test_v2_rope_scale_route_resolves_for_neox_freq_f32_case() -> None:
         source_case_index=0,
     )
 
-    routes = list(routes_for_op(catalog, "ROPE_SCALE"))
+    result = _resolve_one_case(ACTUAL_V2_ROUTER, case)
 
-    resolved_route, shape, reason, detail = resolve_route_for_case(case, routes)
-
-    assert reason is None
-    assert detail is None
-    assert resolved_route is not None
-    assert resolved_route.id == "rope_scale_f32_neox_freq_n128_d96_h24_t1_contiguous_4d"
-    assert shape == {
+    assert isinstance(result, ResolvedBenchmarkCase)
+    assert result.route_id == "rope_scale_f32_neox_freq_n128_d96_h24_t1_contiguous_4d"
+    assert _resolved_shape(result) == {
         "d0": 128,
         "d1": 24,
         "d2": 1,
@@ -3644,7 +3436,6 @@ def test_v2_rope_scale_route_resolves_for_neox_freq_f32_case() -> None:
 
 
 def test_v2_rope_scale_nonzero_ext_factor_stays_unmapped() -> None:
-    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
     case = ImportedCase(
         op="ROPE_SCALE",
         dtype={"type": "f32"},
@@ -3666,19 +3457,14 @@ def test_v2_rope_scale_nonzero_ext_factor_stays_unmapped() -> None:
         source_case_index=0,
     )
 
-    routes = list(routes_for_op(catalog, "ROPE_SCALE"))
+    result = _resolve_one_case(ACTUAL_V2_ROUTER, case)
 
-    resolved_route, shape, reason, detail = resolve_route_for_case(case, routes)
-
-    assert resolved_route is None
-    assert shape is None
-    assert reason is not None
-    assert reason.value == "shape_lowering_not_implemented"
-    assert detail == "ROPE_SCALE v2 routing currently requires ef=0.0"
+    assert isinstance(result, UnmappedCase)
+    assert result.reason.value == "shape_lowering_not_implemented"
+    assert result.detail == "ROPE_SCALE v2 routing currently requires ef=0.0"
 
 
 def test_v2_rope_set_rows_route_resolves_for_f16_mode0_case() -> None:
-    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
     case = ImportedCase(
         op="ROPE_SET_ROWS",
         dtype={"type": "f16", "type_idx": "i64"},
@@ -3692,14 +3478,11 @@ def test_v2_rope_set_rows_route_resolves_for_f16_mode0_case() -> None:
         source_case_index=0,
     )
 
-    routes = list(routes_for_op(catalog, "ROPE_SET_ROWS"))
-    resolved_route, shape, reason, detail = resolve_route_for_case(case, routes)
+    result = _resolve_one_case(ACTUAL_V2_ROUTER, case)
 
-    assert reason is None
-    assert detail is None
-    assert resolved_route is not None
-    assert resolved_route.id == "rope_set_rows_f16_normal_n128_h32_t1_contiguous_4d"
-    assert shape is not None
+    assert isinstance(result, ResolvedBenchmarkCase)
+    assert result.route_id == "rope_set_rows_f16_normal_n128_h32_t1_contiguous_4d"
+    shape = _resolved_shape(result)
     assert shape["d0"] == 4096
     assert shape["d1"] == 4
     assert shape["d2"] == 1
@@ -3714,7 +3497,6 @@ def test_v2_rope_set_rows_route_resolves_for_f16_mode0_case() -> None:
 
 
 def test_v2_rope_set_rows_f32_case_stays_unmapped() -> None:
-    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
     case = ImportedCase(
         op="ROPE_SET_ROWS",
         dtype={"type": "f32", "type_idx": "i64"},
@@ -3728,18 +3510,14 @@ def test_v2_rope_set_rows_f32_case_stays_unmapped() -> None:
         source_case_index=4,
     )
 
-    routes = list(routes_for_op(catalog, "ROPE_SET_ROWS"))
-    resolved_route, shape, reason, detail = resolve_route_for_case(case, routes)
+    result = _resolve_one_case(ACTUAL_V2_ROUTER, case)
 
-    assert resolved_route is None
-    assert shape is None
-    assert reason is not None
-    assert reason.value == "no_dtype_mapping"
-    assert detail == "matching v2 op mapping exists, but not for this dtype combination"
+    assert isinstance(result, UnmappedCase)
+    assert result.reason.value == "no_dtype_mapping"
+    assert result.detail == "matching v2 op mapping exists, but not for this dtype combination"
 
 
 def test_v2_rope_set_rows_batch_case_stays_unmapped() -> None:
-    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
     case = ImportedCase(
         op="ROPE_SET_ROWS",
         dtype={"type": "f16", "type_idx": "i64"},
@@ -3753,18 +3531,14 @@ def test_v2_rope_set_rows_batch_case_stays_unmapped() -> None:
         source_case_index=5,
     )
 
-    routes = list(routes_for_op(catalog, "ROPE_SET_ROWS"))
-    resolved_route, shape, reason, detail = resolve_route_for_case(case, routes)
+    result = _resolve_one_case(ACTUAL_V2_ROUTER, case)
 
-    assert resolved_route is None
-    assert shape is None
-    assert reason is not None
-    assert reason.value == "shape_lowering_not_implemented"
-    assert detail == "ROPE_SET_ROWS v2 routing currently requires ne_a[3]=1"
+    assert isinstance(result, UnmappedCase)
+    assert result.reason.value == "shape_lowering_not_implemented"
+    assert result.detail == "ROPE_SET_ROWS v2 routing currently requires ne_a[3]=1"
 
 
 def test_v2_rope_set_rows_multi_token_case_stays_unmapped() -> None:
-    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
     case = ImportedCase(
         op="ROPE_SET_ROWS",
         dtype={"type": "f16", "type_idx": "i64"},
@@ -3778,17 +3552,13 @@ def test_v2_rope_set_rows_multi_token_case_stays_unmapped() -> None:
         source_case_index=4,
     )
 
-    routes = list(routes_for_op(catalog, "ROPE_SET_ROWS"))
-    resolved_route, shape, reason, detail = resolve_route_for_case(case, routes)
+    result = _resolve_one_case(ACTUAL_V2_ROUTER, case)
 
-    assert resolved_route is None
-    assert shape is None
-    assert reason is not None
-    assert reason.value == "no_route_match"
+    assert isinstance(result, UnmappedCase)
+    assert result.reason.value == "no_route_match"
 
 
 def test_v2_soft_max_route_resolves_for_plain_f32_case() -> None:
-    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
     case = ImportedCase(
         op="SOFT_MAX",
         dtype={"type": "f32"},
@@ -3808,19 +3578,14 @@ def test_v2_soft_max_route_resolves_for_plain_f32_case() -> None:
         source_case_index=0,
     )
 
-    soft_max_routes = list(routes_for_op(catalog, "SOFT_MAX"))
+    result = _resolve_one_case(ACTUAL_V2_ROUTER, case)
 
-    resolved_route, shape, reason, detail = resolve_route_for_case(case, soft_max_routes)
-
-    assert reason is None
-    assert detail is None
-    assert resolved_route is not None
-    assert resolved_route.id == "soft_max_f32_contiguous_2d"
-    assert shape == {"d0": 16, "d1": 16}
+    assert isinstance(result, ResolvedBenchmarkCase)
+    assert result.route_id == "soft_max_f32_contiguous_2d"
+    assert _resolved_shape(result) == {"d0": 16, "d1": 16}
 
 
 def test_v2_soft_max_masked_case_stays_unmapped() -> None:
-    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
     case = ImportedCase(
         op="SOFT_MAX",
         dtype={"type": "f32"},
@@ -3840,19 +3605,14 @@ def test_v2_soft_max_masked_case_stays_unmapped() -> None:
         source_case_index=0,
     )
 
-    soft_max_routes = list(routes_for_op(catalog, "SOFT_MAX"))
+    result = _resolve_one_case(ACTUAL_V2_ROUTER, case)
 
-    resolved_route, shape, reason, detail = resolve_route_for_case(case, soft_max_routes)
-
-    assert reason is None
-    assert detail is None
-    assert resolved_route is not None
-    assert resolved_route.id == "soft_max_f32_mask_contiguous_2d"
-    assert shape == {"d0": 1024, "d1": 16}
+    assert isinstance(result, ResolvedBenchmarkCase)
+    assert result.route_id == "soft_max_f32_mask_contiguous_2d"
+    assert _resolved_shape(result) == {"d0": 1024, "d1": 16}
 
 
 def test_v2_soft_max_masked_broadcast_case_stays_unmapped() -> None:
-    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
     case = ImportedCase(
         op="SOFT_MAX",
         dtype={"type": "f32"},
@@ -3872,19 +3632,14 @@ def test_v2_soft_max_masked_broadcast_case_stays_unmapped() -> None:
         source_case_index=0,
     )
 
-    soft_max_routes = list(routes_for_op(catalog, "SOFT_MAX"))
+    result = _resolve_one_case(ACTUAL_V2_ROUTER, case)
 
-    resolved_route, shape, reason, detail = resolve_route_for_case(case, soft_max_routes)
-
-    assert resolved_route is None
-    assert shape is None
-    assert reason is not None
-    assert reason.value == "shape_lowering_not_implemented"
-    assert detail == "SOFT_MAX masked v2 routing currently requires nr23=[1, 1]"
+    assert isinstance(result, UnmappedCase)
+    assert result.reason.value == "shape_lowering_not_implemented"
+    assert result.detail == "SOFT_MAX masked v2 routing currently requires nr23=[1, 1]"
 
 
 def test_v2_soft_max_large_ncols_case_stays_unmapped() -> None:
-    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
     case = ImportedCase(
         op="SOFT_MAX",
         dtype={"type": "f32"},
@@ -3904,12 +3659,8 @@ def test_v2_soft_max_large_ncols_case_stays_unmapped() -> None:
         source_case_index=0,
     )
 
-    soft_max_routes = list(routes_for_op(catalog, "SOFT_MAX"))
+    result = _resolve_one_case(ACTUAL_V2_ROUTER, case)
 
-    resolved_route, shape, reason, detail = resolve_route_for_case(case, soft_max_routes)
-
-    assert resolved_route is None
-    assert shape is None
-    assert reason is not None
-    assert reason.value == "shape_lowering_not_implemented"
-    assert detail == "SOFT_MAX v2 routing currently requires ne[0] <= 1024"
+    assert isinstance(result, UnmappedCase)
+    assert result.reason.value == "shape_lowering_not_implemented"
+    assert result.detail == "SOFT_MAX v2 routing currently requires ne[0] <= 1024"
