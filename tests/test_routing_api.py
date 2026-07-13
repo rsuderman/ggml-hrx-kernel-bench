@@ -618,6 +618,21 @@ def test_v2_rms_norm_dispatch_uses_flattened_trailing_rows() -> None:
     assert candidate.dispatch["workgroup_count"] == [60, 1, 1]
 
 
+@pytest.mark.parametrize("route_id", ["soft_max_f32_contiguous_4d", "soft_max_f32_mask_contiguous_4d"])
+def test_v2_soft_max_dispatch_uses_flattened_trailing_rows(route_id: str) -> None:
+    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
+    route = next(current for current in routes_for_op(catalog, "SOFT_MAX") if current.id == route_id)
+
+    candidate = candidate_from_shape(
+        kernel_dir=ACTUAL_V2_KERNEL_DIR,
+        route=route,
+        shape={"d0": 16, "d1": 2, "d2": 32, "d3": 1},
+    )
+
+    assert candidate.config["@hrx2.shape.soft_max.nrows"] == "64"
+    assert candidate.dispatch["workgroup_count"] == [64, 1, 1]
+
+
 def test_v2_default_cont_candidate_derives_rank_polymorphic_shape_bindings() -> None:
     router = create_router(version="v2", kernel_dir=ACTUAL_V2_KERNEL_DIR, routing_dir=ACTUAL_V2_ROUTING_DIR)
 
@@ -1316,10 +1331,69 @@ def test_yaml_route_import_matches_unmasked_rank4_soft_max_descriptor(tmp_path: 
             strict=True,
         )
     )
-    assert plain_shape["ncols"] == 16
-    assert plain_shape["nrows"] == 64
-    assert masked_shape["ncols"] == 16
-    assert masked_shape["nrows"] == 64
+    assert plain_shape == {"d0": 16, "d1": 2, "d2": 32, "d3": 1}
+    assert masked_shape == {"d0": 16, "d1": 2, "d2": 32, "d3": 1}
+    assert configs["soft_max_f32_contiguous_4d"]["execution_abi"]["entries"] == [
+        {
+            "position": 0,
+            "role": "scale",
+            "kind": "scalar",
+            "dtype": "f32",
+            "value": 0.75,
+        },
+        {
+            "position": 1,
+            "role": "src0",
+            "kind": "input",
+            "dtype": "f32",
+            "fixture": "src0",
+        },
+        {
+            "position": 2,
+            "role": "dst",
+            "kind": "output",
+            "dtype": "f32",
+            "fixture": "dst_init",
+            "expect": {
+                "fixture": "expected",
+                "mode": "close",
+            },
+        },
+    ]
+    assert configs["soft_max_f32_mask_contiguous_4d"]["execution_abi"]["entries"] == [
+        {
+            "position": 0,
+            "role": "scale",
+            "kind": "scalar",
+            "dtype": "f32",
+            "value": 0.75,
+        },
+        {
+            "position": 1,
+            "role": "src0",
+            "kind": "input",
+            "dtype": "f32",
+            "fixture": "src0",
+        },
+        {
+            "position": 2,
+            "role": "mask",
+            "kind": "input",
+            "dtype": "f32",
+            "fixture": "mask",
+        },
+        {
+            "position": 3,
+            "role": "dst",
+            "kind": "output",
+            "dtype": "f32",
+            "fixture": "dst_init",
+            "expect": {
+                "fixture": "expected",
+                "mode": "close",
+            },
+        },
+    ]
 
 
 def test_yaml_route_import_matches_default_rank4_rope_descriptor(tmp_path: Path) -> None:

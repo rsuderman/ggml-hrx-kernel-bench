@@ -476,6 +476,64 @@ def _generated_swiglu_config() -> dict[str, object]:
     }
 
 
+def _soft_max_f32_execution_abi(route_id: str, *, masked: bool) -> dict[str, object]:
+    entries: list[dict[str, object]] = [
+        {
+            "position": 0,
+            "role": "scale",
+            "kind": "scalar",
+            "dtype": "f32",
+            "value": 0.75,
+        },
+        {
+            "position": 1,
+            "role": "src0",
+            "kind": "input",
+            "dtype": "f32",
+            "fixture": "src0",
+        },
+    ]
+    if masked:
+        entries.append(
+            {
+                "position": 2,
+                "role": "mask",
+                "kind": "input",
+                "dtype": "f32",
+                "fixture": "mask",
+            }
+        )
+    entries.append(
+        {
+            "position": 3 if masked else 2,
+            "role": "dst",
+            "kind": "output",
+            "dtype": "f32",
+            "fixture": "dst_init",
+            "expect": {
+                "fixture": "expected",
+                "mode": "close",
+            },
+        }
+    )
+    return {
+        "schema": ROUTE_EXECUTION_ABI_SCHEMA,
+        "route_id": route_id,
+        "entries": entries,
+    }
+
+
+def _generated_soft_max_config(*, masked: bool = False) -> dict[str, object]:
+    route_id = "soft_max_f32_mask_contiguous_4d" if masked else "soft_max_f32_contiguous_4d"
+    return {
+        "kernel": "soft_max_f32",
+        "params": ["d0", "d1", "d2", "d3"],
+        "cases": [[4, 2, 1, 1]],
+        "route_id": route_id,
+        "execution_abi": _soft_max_f32_execution_abi(route_id, masked=masked),
+    }
+
+
 def _generated_unary_config(kernel: str) -> dict[str, object]:
     route_id = f"{kernel}_contiguous_4d"
     return {
@@ -922,6 +980,68 @@ def test_descriptor_from_generated_swiglu_f32_case_uses_packed_input(tmp_path: P
     expected = np.load(tmp_path / descriptor["bindings"][1]["expect"]["path"])
     assert src0.shape == (16,)
     assert expected.shape == (8,)
+
+
+@pytest.mark.parametrize(("masked", "expected_root"), [(False, "@hrx2_soft_max_f32"), (True, "@hrx2_soft_max_f32_mask")])
+def test_descriptor_from_generated_soft_max_f32_case_materializes_row_fixtures(
+    tmp_path: Path,
+    masked: bool,
+    expected_root: str,
+) -> None:
+    assets = materialize_asset_root(tmp_path / "assets", force=True)
+    result = descriptor_from_generated_case(
+        config_data=_generated_soft_max_config(masked=masked),
+        case_id="d0-4-d1-2-d2-1-d3-1",
+        case_values=[4, 2, 1, 1],
+        kernel_dir=assets / "kernels" / "v2",
+        routing_dir=assets / "catalog" / "v2",
+        target="gfx1100",
+        max_elements=32,
+        oracle_fixture_dir=tmp_path / "oracle-fixtures",
+        descriptor_dir=tmp_path,
+    )
+
+    assert result.status == "emitted", result.reason
+    assert result.descriptor is not None
+    descriptor = result.descriptor
+    assert descriptor["root"] == expected_root
+    assert descriptor["scalars"] == [
+        {
+            "name": "scale",
+            "position": 0,
+            "dtype": "f32",
+            "value": 0.75,
+        }
+    ]
+    expected_binding_names = ["src0", "mask", "dst"] if masked else ["src0", "dst"]
+    assert [binding["name"] for binding in descriptor["bindings"]] == expected_binding_names
+    assert descriptor["metadata"]["element_counts"]["dst"] == 8
+    assert descriptor["metadata"]["dispatch"]["workgroup_count"] == [2, 1, 1]
+    expected = np.load(tmp_path / descriptor["bindings"][-1]["expect"]["path"])
+    assert expected.shape == (8,)
+    rows = expected.reshape(2, 4)
+    np.testing.assert_allclose(rows.sum(axis=1), np.ones((2,), dtype=np.float32), rtol=1e-5, atol=1e-5)
+
+    descriptor_path = _write_descriptor(tmp_path, descriptor)
+    prepared = prepare_execution(
+        descriptor_path=descriptor_path,
+        fixture_dir=tmp_path / "fixtures",
+        output_path=tmp_path / "result.json",
+        runner="runner",
+        loom_link=None,
+        iree_run_loom=None,
+        repo_root=tmp_path,
+    )
+    command = prepared.command
+    assert "--scalar" in command
+    assert "0:f32:0.75" in command
+    if masked:
+        mask = np.load(tmp_path / descriptor["bindings"][1]["path"])
+        assert mask.shape == (8,)
+        assert f"2:input:f32:8:{tmp_path / descriptor['bindings'][1]['path']}" in command
+        assert f"3:output:f32:8:{tmp_path / descriptor['bindings'][2]['path']}" in command
+    else:
+        assert f"2:output:f32:8:{tmp_path / descriptor['bindings'][1]['path']}" in command
 
 
 def test_descriptor_from_generated_add_f16_case_uses_int16_storage(tmp_path: Path) -> None:

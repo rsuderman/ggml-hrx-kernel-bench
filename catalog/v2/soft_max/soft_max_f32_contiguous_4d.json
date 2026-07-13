@@ -99,6 +99,7 @@
     }
   ],
   "launch": {
+    "workgroup_count_source": "value.nrows",
     "workgroup_size": [
       1024,
       1,
@@ -109,11 +110,11 @@
     "bindings": [
       {
         "key": "@hrx2.shape.soft_max.ncols",
-        "source": "shape.ncols"
+        "source": "value.ncols"
       },
       {
         "key": "@hrx2.shape.soft_max.nrows",
-        "source": "shape.nrows"
+        "source": "value.nrows"
       },
       {
         "key": "@hrx2.tuning.soft_max.workgroup_size",

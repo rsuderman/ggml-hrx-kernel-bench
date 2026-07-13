@@ -35,6 +35,7 @@ add_yaml_route_import_runtime_tests(
     RMS_NORM
     SCALE
     SET_ROWS
+    SOFT_MAX
     SQR
     SQRT
     SUB

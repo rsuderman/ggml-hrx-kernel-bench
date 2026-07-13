@@ -35,6 +35,9 @@ STATIC_SCALAR_ABI_BY_FAMILY: dict[str, tuple[dict[str, Any], ...]] = {
         {"role": "min", "dtype": "f32", "value": -0.45},
         {"role": "max", "dtype": "f32", "value": 0.55},
     ),
+    "soft_max_f32": (
+        {"role": "scale", "dtype": "f32", "value": 0.75},
+    ),
 }
 ATTRIBUTE_SCALAR_ABI_BY_FAMILY: dict[str, tuple[dict[str, Any], ...]] = {
     "rms_norm_f32": (
@@ -44,6 +47,10 @@ ATTRIBUTE_SCALAR_ABI_BY_FAMILY: dict[str, tuple[dict[str, Any], ...]] = {
 FIXTURE_BY_FAMILY_ROLE: dict[tuple[str, str], str] = {
     ("get_rows_f32", "src1"): "indices",
     ("rms_norm_f32", "src0"): "src",
+    ("soft_max_f32", "mask"): "mask",
+}
+INPUT_ROLES_BY_FAMILY: dict[str, frozenset[str]] = {
+    "soft_max_f32": frozenset({"mask"}),
 }
 
 
@@ -838,6 +845,8 @@ def _attribute_scalar_key(route: V2Route, attributes: Mapping[str, Any]) -> str:
 def _role_sort_key(role: str) -> tuple[int, int, str]:
     if role.startswith("src") and role[3:].isdigit():
         return (0, int(role[3:]), role)
+    if role == "mask":
+        return (0, 1000, role)
     if role == "dst":
         return (1, 0, role)
     if role.startswith("dst") and role[3:].isdigit():
@@ -912,7 +921,7 @@ def _execution_abi_for_route(route: V2Route, attributes: Mapping[str, Any] | Non
         position += 1
     for role in sorted(route.tensors, key=_role_sort_key):
         tensor = route.tensors[role]
-        kind = "input" if role.startswith("src") else "output"
+        kind = "input" if role.startswith("src") or role in INPUT_ROLES_BY_FAMILY.get(route.family, frozenset()) else "output"
         entry: dict[str, Any] = {
             "position": position,
             "role": role,
