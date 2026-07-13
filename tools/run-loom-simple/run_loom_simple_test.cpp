@@ -17,9 +17,11 @@ using ggml_hrx::run_loom_simple::BackendForTarget;
 using ggml_hrx::run_loom_simple::BindingKind;
 using ggml_hrx::run_loom_simple::BuildIreeRunLoomCommand;
 using ggml_hrx::run_loom_simple::CompareClose;
+using ggml_hrx::run_loom_simple::DType;
 using ggml_hrx::run_loom_simple::LoadF32Npy1D;
 using ggml_hrx::run_loom_simple::ParseArgs;
 using ggml_hrx::run_loom_simple::RenderResultJson;
+using ggml_hrx::run_loom_simple::ValidateNpyStorage1D;
 
 int g_failures = 0;
 
@@ -148,6 +150,36 @@ void WriteF32Npy(const std::filesystem::path &path,
   }
   output.write(header.data(), static_cast<std::streamsize>(header.size()));
   for (const float value : values) {
+    output.write(reinterpret_cast<const char *>(&value), sizeof(value));
+  }
+}
+
+void WriteI16Npy(const std::filesystem::path &path,
+                 const std::vector<std::int16_t> &values,
+                 const std::string &descr = "<i2") {
+  std::ofstream output(path, std::ios::binary);
+  std::string header = "{'descr': '" + descr +
+                       "', 'fortran_order': False, 'shape': (" +
+                       std::to_string(values.size()) + ",), }";
+  const std::size_t prefix_size = 10;
+  const std::size_t newline_size = 1;
+  const std::size_t remainder =
+      (prefix_size + header.size() + newline_size) % 16;
+  const std::size_t padding = remainder == 0 ? 0 : 16 - remainder;
+  header.append(padding, ' ');
+  header.push_back('\n');
+
+  output.write("\x93NUMPY", 6);
+  const unsigned char version[2] = {1, 0};
+  output.write(reinterpret_cast<const char *>(version), 2);
+  const std::uint16_t len = static_cast<std::uint16_t>(header.size());
+  const unsigned char bytes[2] = {
+      static_cast<unsigned char>(len & 0xFF),
+      static_cast<unsigned char>((len >> 8) & 0xFF),
+  };
+  output.write(reinterpret_cast<const char *>(bytes), 2);
+  output.write(header.data(), static_cast<std::streamsize>(header.size()));
+  for (const std::int16_t value : values) {
     output.write(reinterpret_cast<const char *>(&value), sizeof(value));
   }
 }
@@ -304,14 +336,31 @@ void TestRejectsUnsupportedDType() {
   auto args = ValidArgs();
   for (std::size_t i = 0; i + 1 < args.size(); ++i) {
     if (args[i] == "--binding") {
-      args[i + 1] = "0:input:f16:4096:fixtures/src0.npy";
+      args[i + 1] = "0:input:q8_0:4096:fixtures/src0.npy";
       break;
     }
   }
   const auto parsed = ParseArgs(args);
   Expect(!parsed.invocation.has_value(), "unsupported dtype rejected");
-  Expect(HasErrorContaining(parsed.errors, "unsupported dtype: f16"),
+  Expect(HasErrorContaining(parsed.errors, "unsupported dtype: q8_0"),
          "unsupported dtype error");
+}
+
+void TestParsesF16BindingDType() {
+  auto args = ValidArgsWithoutConfig();
+  for (std::size_t i = 0; i + 1 < args.size(); ++i) {
+    if (args[i] == "--binding") {
+      args[i + 1] = "0:input:f16:4:fixtures/src0.npy";
+      break;
+    }
+  }
+  const auto parsed = ParseArgs(args);
+  Expect(parsed.invocation.has_value(), "f16 dtype parses");
+  if (!parsed.invocation.has_value()) {
+    return;
+  }
+  Expect(parsed.invocation->bindings[0].dtype == DType::kF16,
+         "f16 dtype recorded");
 }
 
 void TestRejectsUnsupportedKind() {
@@ -437,6 +486,25 @@ void TestLoadsF32NpyV2() {
   if (loaded.tensor.has_value()) {
     Expect(loaded.tensor->values[0] == 4.0f, "loaded v2 npy value");
   }
+}
+
+void TestValidatesF16StorageNpy() {
+  const std::filesystem::path dir = TempDir();
+  const std::filesystem::path path = dir / "values-f16-storage.npy";
+  WriteI16Npy(path, {0x3C00, 0x4000, -0x4200});
+  const auto loaded = ValidateNpyStorage1D(path.string(), DType::kF16, 3);
+  Expect(loaded.loaded, "validates f16 int16-backed npy");
+}
+
+void TestRejectsF16StorageDTypeMismatch() {
+  const std::filesystem::path dir = TempDir();
+  const std::filesystem::path path = dir / "values-f32.npy";
+  WriteF32Npy(path, {1.0f, 2.0f});
+  const auto loaded = ValidateNpyStorage1D(path.string(), DType::kF16, 2);
+  Expect(!loaded.loaded, "f16 storage dtype mismatch rejected");
+  Expect(loaded.error.find("expected f16 storage npy dtype") !=
+             std::string::npos,
+         "f16 storage dtype mismatch error");
 }
 
 void TestRejectsMissingNpyFile() {
@@ -649,6 +717,42 @@ void TestIreeRunLoomBridgeBuildsNpyBackedCommand() {
          "bridge command expected spec");
 }
 
+void TestIreeRunLoomBridgeBuildsF16NpyBackedCommand() {
+  const std::filesystem::path dir = TempDir();
+  WriteI16Npy(dir / "src0.npy", {0x3C00, 0x4000, 0x4200, 0x4400});
+  WriteI16Npy(dir / "dst_init.npy", {0, 0, 0, 0});
+  WriteI16Npy(dir / "expected.npy", {0x3C00, 0x4000, 0x4200, 0x4400});
+  auto args = std::vector<std::string>{
+      "--kernel",        "linked.loom",
+      "--root",          "@add_f16",
+      "--target",        "gfx1100",
+      "--iree-run-loom", "/tmp/iree-run-loom",
+      "--binding",       "0:input:f16:4:" + (dir / "src0.npy").string(),
+      "--binding",       "1:output:f16:4:" + (dir / "dst_init.npy").string(),
+      "--expect",        "1:close:" + (dir / "expected.npy").string() + ":0:0",
+      "--output",        "result.json",
+  };
+  const auto parsed = ParseArgs(args);
+  Expect(parsed.invocation.has_value(), "f16 npy bridge command parses");
+  if (!parsed.invocation.has_value()) {
+    return;
+  }
+  const auto command = BuildIreeRunLoomCommand(*parsed.invocation);
+  Expect(command.args.has_value(), "f16 npy bridge command builds");
+  if (!command.args.has_value()) {
+    std::cerr << "bridge error: " << command.error << "\n";
+    return;
+  }
+  Expect(std::find(command.args->begin(), command.args->end(),
+                   "--kernel-input-buffer=&@" + (dir / "src0.npy").string()) !=
+             command.args->end(),
+         "f16 bridge command input spec");
+  Expect(std::find(command.args->begin(), command.args->end(),
+                   "--expected-kernel-buffer=&@" +
+                       (dir / "expected.npy").string()) != command.args->end(),
+         "f16 bridge command expected spec");
+}
+
 void TestIreeRunLoomBridgeAcceptsNonSplatTensor() {
   const std::filesystem::path dir = TempDir();
   WriteF32Npy(dir / "src0.npy", {1.0f, 2.0f, 1.0f, 1.0f});
@@ -833,6 +937,7 @@ int main() {
   TestRejectsDuplicateBindingPosition();
   TestParsesScalarCommand();
   TestRejectsUnsupportedDType();
+  TestParsesF16BindingDType();
   TestRejectsUnsupportedKind();
   TestRejectsExpectForInputBinding();
   TestParsesMultipleExpectations();
@@ -840,6 +945,8 @@ int main() {
   TestParsesIreeRunLoomBridgeFlags();
   TestLoadsF32NpyV1();
   TestLoadsF32NpyV2();
+  TestValidatesF16StorageNpy();
+  TestRejectsF16StorageDTypeMismatch();
   TestRejectsMissingNpyFile();
   TestRejectsInvalidNpyMagic();
   TestRejectsNpyDTypeMismatch();
@@ -853,6 +960,7 @@ int main() {
   TestIreeRunLoomBridgeRejectsConfigWithoutLinkedOutput();
   TestIreeRunLoomBridgeStagesConfigKernel();
   TestIreeRunLoomBridgeBuildsNpyBackedCommand();
+  TestIreeRunLoomBridgeBuildsF16NpyBackedCommand();
   TestIreeRunLoomBridgeAcceptsNonSplatTensor();
   TestIreeRunLoomBridgeBuildsScalarCommand();
   TestExecuteBridgeRunsNoConfigCommand();

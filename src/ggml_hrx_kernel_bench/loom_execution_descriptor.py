@@ -41,9 +41,16 @@ class GeneratedDescriptorResult:
 
 
 BINARY_F32_FAMILIES = {"add_f32", "mul_f32", "div_f32", "sub_f32"}
+BINARY_F16_FAMILIES = {"add_f16", "mul_f16", "div_f16", "sub_f16"}
 UNARY_F32_FAMILIES = {"abs_f32", "exp_f32", "neg_f32", "relu_f32", "sqr_f32", "sqrt_f32"}
 SCALAR_F32_FAMILIES = {"scale_f32", "clamp_f32"}
 SUPPORTED_F32_BUFFER_FAMILIES = BINARY_F32_FAMILIES | UNARY_F32_FAMILIES | SCALAR_F32_FAMILIES
+SUPPORTED_BUFFER_FAMILIES = SUPPORTED_F32_BUFFER_FAMILIES | BINARY_F16_FAMILIES
+SUPPORTED_BUFFER_DTYPES = {"f32", "f16"}
+NPY_STORAGE_DTYPE_BY_DESCRIPTOR_DTYPE = {
+    "f32": "float32",
+    "f16": "int16",
+}
 
 
 def _expect(condition: bool, message: str) -> None:
@@ -55,6 +62,10 @@ def _json_value_to_text(value: object) -> str:
     if isinstance(value, bool):
         return "true" if value else "false"
     return str(value)
+
+
+def _runtime_dtype(dtype: str | None) -> str:
+    return str(dtype or "").strip().lower()
 
 
 def _resolve_descriptor_path(path: str | Path, *, descriptor_dir: Path) -> Path:
@@ -121,11 +132,12 @@ def validate_descriptor(data: object) -> None:
         kind = binding.get("kind")
         _expect(kind in ("input", "output"), f"bindings[{index}].kind must be input or output")
         dtype = binding.get("dtype")
-        _expect(dtype == "f32", f"bindings[{index}].dtype must be f32")
+        _expect(dtype in SUPPORTED_BUFFER_DTYPES, f"bindings[{index}].dtype must be f32 or f16")
         has_values = "values" in binding
         has_path = "path" in binding
         _expect(has_values != has_path, f"bindings[{index}] must provide exactly one of values or path")
         if has_values:
+            _expect(dtype == "f32", f"bindings[{index}].values are only supported for f32")
             _validate_values(binding["values"], context=f"bindings[{index}].values")
         else:
             _expect(isinstance(binding["path"], str) and binding["path"], f"bindings[{index}].path must be a non-empty string")
@@ -137,6 +149,7 @@ def validate_descriptor(data: object) -> None:
             has_expect_path = "path" in expect
             _expect(has_expect_values != has_expect_path, f"bindings[{index}].expect must provide exactly one of values or path")
             if has_expect_values:
+                _expect(dtype == "f32", f"bindings[{index}].expect.values are only supported for f32")
                 _validate_values(expect["values"], context=f"bindings[{index}].expect.values")
             else:
                 _expect(isinstance(expect["path"], str) and expect["path"], f"bindings[{index}].expect.path must be a non-empty string")
@@ -183,11 +196,12 @@ def _descriptor_relative_path(path: Path, *, descriptor_dir: Path | None) -> str
         return str(resolved)
 
 
-def _load_f32_array_element_count(path: Path) -> int:
+def _load_array_element_count(path: Path, *, dtype: str) -> int:
     np = require_numpy()
     array = np.load(path, allow_pickle=False)
     _expect(array.ndim == 1, f"{path} must be one-dimensional")
-    _expect(str(array.dtype) == "float32", f"{path} must be a float32 npy array")
+    expected_storage_dtype = NPY_STORAGE_DTYPE_BY_DESCRIPTOR_DTYPE[dtype]
+    _expect(str(array.dtype) == expected_storage_dtype, f"{path} must be a {expected_storage_dtype} npy array")
     return int(array.shape[0])
 
 
@@ -230,8 +244,10 @@ def _execution_abi_entries(config_data: dict[str, Any]) -> tuple[list[dict[str, 
         if not isinstance(role, str) or not role:
             return None, f"execution_abi.entries[{index}].role must be a non-empty string"
         dtype = entry.get("dtype")
-        if dtype != "f32":
-            return None, f"execution_abi.entries[{index}].dtype must be f32 for descriptor v1"
+        if dtype not in SUPPORTED_BUFFER_DTYPES:
+            return None, f"execution_abi.entries[{index}].dtype must be f32 or f16 for descriptor v1"
+        if kind == "scalar" and dtype != "f32":
+            return None, f"execution_abi.entries[{index}].dtype must be f32 for scalar descriptor v1"
         if kind == "scalar":
             value = entry.get("value")
             if not isinstance(value, (int, float, str)) or isinstance(value, bool) or not str(value):
@@ -325,10 +341,10 @@ def descriptor_from_generated_case(
     descriptor_dir: Path | None = None,
 ) -> GeneratedDescriptorResult:
     family = str(config_data.get("kernel") or "")
-    if family not in SUPPORTED_F32_BUFFER_FAMILIES:
+    if family not in SUPPORTED_BUFFER_FAMILIES:
         return GeneratedDescriptorResult(
             status="unsupported",
-            reason=f"only f32 buffer generated descriptors are currently supported, saw {family!r}",
+            reason=f"only f32/f16 buffer generated descriptors are currently supported, saw {family!r}",
         )
     abi_entries, abi_error = _execution_abi_entries(config_data)
     if abi_entries is None:
@@ -352,10 +368,10 @@ def descriptor_from_generated_case(
             status="unsupported",
             reason=f"route {route.id!r} does not accept selected shape",
         )
-    if any(str(tensor.dtype).upper() != "F32" for tensor in tensors.values()):
+    if any(_runtime_dtype(str(tensor.dtype)) not in SUPPORTED_BUFFER_DTYPES for tensor in tensors.values()):
         return GeneratedDescriptorResult(
             status="unsupported",
-            reason="only f32 tensor descriptors are currently supported",
+            reason="only f32/f16 tensor descriptors are currently supported",
         )
     element_counts = {name: _storage_elements(tensor) for name, tensor in tensors.items()}
     largest = max(element_counts.values())
@@ -390,7 +406,16 @@ def descriptor_from_generated_case(
             status="unsupported",
             reason=f"oracle did not produce required arrays: {missing_arrays}",
         )
-    array_element_counts = {name: _load_f32_array_element_count(arrays[name]) for name in required_arrays}
+    abi_fixture_dtypes: dict[str, str] = {}
+    for entry in abi_entries:
+        if entry["kind"] == "scalar":
+            continue
+        abi_fixture_dtypes[str(entry["fixture"])] = str(entry["dtype"])
+        if entry["kind"] == "output":
+            abi_fixture_dtypes[str(entry["expect"]["fixture"])] = str(entry["dtype"])
+    array_element_counts = {
+        name: _load_array_element_count(arrays[name], dtype=abi_fixture_dtypes[name]) for name in required_arrays
+    }
     if array_element_counts:
         largest_array = max(array_element_counts.values())
         if largest_array > max_elements:

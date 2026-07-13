@@ -15,6 +15,7 @@ enum class BindingKind {
 
 enum class DType {
   kF32,
+  kF16,
 };
 
 enum class CheckMode {
@@ -74,6 +75,11 @@ struct F32NpyLoadResult {
   std::string error;
 };
 
+struct NpyLoadResult {
+  bool loaded = false;
+  std::string error;
+};
+
 struct CloseCompareResult {
   bool passed = false;
   std::size_t compared_elements = 0;
@@ -96,6 +102,8 @@ struct IreeRunLoomCommandResult {
 ParseResult ParseArgs(const std::vector<std::string> &args);
 F32NpyLoadResult LoadF32Npy1D(const std::string &path,
                               std::size_t expected_elements);
+NpyLoadResult ValidateNpyStorage1D(const std::string &path, DType dtype,
+                                   std::size_t expected_elements);
 CloseCompareResult CompareClose(const std::vector<float> &actual,
                                 const std::vector<float> &expected, double atol,
                                 double rtol);
