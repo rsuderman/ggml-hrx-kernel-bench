@@ -136,4 +136,6 @@ def test_generate_loom_descriptor_tests_cmake_registers_hsa_execution_when_enabl
     generated = output_path.read_text(encoding="utf-8")
     assert "kernel-descriptor-execute-llama-cpp-tests-v2-ADD-generated" in generated
     assert "--execute" in generated
+    assert "--progress" in generated
+    assert "--quiet" in generated
     assert 'LABELS "hsa;runtime;loom-descriptor"' in generated

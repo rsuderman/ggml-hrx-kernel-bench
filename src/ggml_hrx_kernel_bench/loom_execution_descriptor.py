@@ -7,7 +7,7 @@ import subprocess
 import sys
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any, Callable, Sequence
 
 from .fixtures import require_numpy
 from .kernel_test_config import load_config
@@ -669,6 +669,34 @@ def _descriptor_entry_path(entry: dict[str, Any], *, manifest_dir: Path) -> Path
     return _resolve_manifest_path(raw, manifest_dir=manifest_dir)
 
 
+def _descriptor_execution_test_name(entry: dict[str, Any], descriptor_path: Path) -> str:
+    route_id = entry.get("route_id")
+    case_id = entry.get("case_id")
+    suite = str(route_id) if isinstance(route_id, str) and route_id else descriptor_path.stem
+    test = str(case_id) if isinstance(case_id, str) and case_id else descriptor_path.stem
+    return f"{suite}.{test}"
+
+
+def _emit_descriptor_execution_summary(
+    *,
+    progress: Callable[[str], None],
+    executed_count: int,
+    passed_count: int,
+    failed_count: int,
+    failed_test_names: Sequence[str],
+) -> None:
+    progress(f"[==========] {executed_count} tests ran.")
+    progress(f"[  PASSED  ] {passed_count} tests.")
+    if failed_count == 0:
+        progress("[  FAILED  ] 0 tests.")
+        return
+    progress(f"[  FAILED  ] {failed_count} tests, listed below:")
+    for test_name in failed_test_names:
+        progress(f"[  FAILED  ] {test_name}")
+    progress("")
+    progress(f"{failed_count} FAILED TESTS")
+
+
 def run_execution_descriptor_manifest(
     *,
     manifest_path: Path,
@@ -679,6 +707,7 @@ def run_execution_descriptor_manifest(
     repo_root: Path,
     execute: bool = False,
     limit: int | None = None,
+    progress: Callable[[str], None] | None = None,
 ) -> dict[str, Any]:
     manifest_path = manifest_path.resolve()
     manifest_dir = manifest_path.parent
@@ -691,6 +720,7 @@ def run_execution_descriptor_manifest(
     passed_count = 0
     failed_count = 0
     skipped_count = 0
+    failed_test_names: list[str] = []
 
     for index, entry in enumerate(payload["entries"]):
         _expect(isinstance(entry, dict), f"entries[{index}] must be an object")
@@ -730,6 +760,9 @@ def run_execution_descriptor_manifest(
         }
         if execute:
             executed_count += 1
+            test_name = _descriptor_execution_test_name(entry, descriptor_path)
+            if progress is not None:
+                progress(f"[ RUN      ] {test_name}")
             result = execute_prepared(prepared)
             run_entry["process_returncode"] = result.returncode
             run_entry["stdout"] = result.stdout
@@ -737,6 +770,7 @@ def run_execution_descriptor_manifest(
             if result.returncode != 0:
                 run_entry["status"] = "process_failed"
                 failed_count += 1
+                failed_test_names.append(test_name)
             elif prepared.output_path.is_file():
                 result_payload = json.loads(prepared.output_path.read_text(encoding="utf-8"))
                 run_status = str(result_payload.get("status") or "missing_status")
@@ -745,10 +779,26 @@ def run_execution_descriptor_manifest(
                     passed_count += 1
                 else:
                     failed_count += 1
+                    failed_test_names.append(test_name)
             else:
                 run_entry["status"] = "missing_output"
                 failed_count += 1
+                failed_test_names.append(test_name)
+            if progress is not None:
+                if run_entry["status"] == "run_passed":
+                    progress(f"[       OK ] {test_name}")
+                else:
+                    progress(f"[  FAILED  ] {test_name}")
         run_entries.append(run_entry)
+
+    if execute and progress is not None:
+        _emit_descriptor_execution_summary(
+            progress=progress,
+            executed_count=executed_count,
+            passed_count=passed_count,
+            failed_count=failed_count,
+            failed_test_names=failed_test_names,
+        )
 
     run_manifest = {
         "schema": "ggml_hrx_kernel_bench.loom_execution_runs.v1",

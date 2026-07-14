@@ -2063,6 +2063,88 @@ def test_run_execution_descriptor_manifest_executes_fake_runner(tmp_path: Path) 
     assert run_manifest["entries"][0]["status"] == "run_passed"
 
 
+def test_run_execution_descriptor_manifest_reports_gtest_style_progress(tmp_path: Path) -> None:
+    descriptor_path = _write_descriptor(tmp_path, _descriptor())
+    manifest_path = tmp_path / "loom-execution-descriptors.json"
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "schema": DESCRIPTOR_MANIFEST_SCHEMA,
+                "source_manifest_path": "generated-kernel-tests.json",
+                "target": "gfx1100",
+                "max_elements": 32,
+                "entry_count": 2,
+                "emitted_count": 2,
+                "skipped_count": 0,
+                "unsupported_count": 0,
+                "filtered_count": 0,
+                "entries": [
+                    {
+                        "status": "emitted",
+                        "descriptor_path": str(descriptor_path),
+                        "kernel": "add_f32",
+                        "route_id": "add_f32_contiguous_1d",
+                        "case_id": "case0",
+                    },
+                    {
+                        "status": "emitted",
+                        "descriptor_path": str(descriptor_path),
+                        "kernel": "add_f32",
+                        "route_id": "add_f32_contiguous_1d",
+                        "case_id": "case1",
+                    },
+                ],
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    runner = tmp_path / "fake-runner.py"
+    runner.write_text(
+        "\n".join(
+            [
+                "#!/usr/bin/env python3",
+                "import json",
+                "import sys",
+                "output = sys.argv[sys.argv.index('--output') + 1]",
+                "status = 'run_failed' if 'case1' in output else 'run_passed'",
+                "open(output, 'w').write(json.dumps({'status': status}) + '\\n')",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    os.chmod(runner, 0o755)
+    progress: list[str] = []
+
+    run_manifest = run_execution_descriptor_manifest(
+        manifest_path=manifest_path,
+        output_dir=tmp_path / "runs",
+        runner=runner,
+        loom_link=None,
+        iree_run_loom=tmp_path / "iree-run-loom",
+        repo_root=Path.cwd(),
+        execute=True,
+        progress=progress.append,
+    )
+
+    assert run_manifest["executed_count"] == 2
+    assert run_manifest["passed_count"] == 1
+    assert run_manifest["failed_count"] == 1
+    assert progress == [
+        "[ RUN      ] add_f32_contiguous_1d.case0",
+        "[       OK ] add_f32_contiguous_1d.case0",
+        "[ RUN      ] add_f32_contiguous_1d.case1",
+        "[  FAILED  ] add_f32_contiguous_1d.case1",
+        "[==========] 2 tests ran.",
+        "[  PASSED  ] 1 tests.",
+        "[  FAILED  ] 1 tests, listed below:",
+        "[  FAILED  ] add_f32_contiguous_1d.case1",
+        "",
+        "1 FAILED TESTS",
+    ]
+
+
 def test_run_loom_execution_descriptors_script_prepares(tmp_path: Path) -> None:
     manifest_path, _ = _write_descriptor_manifest(tmp_path)
     script = Path("tests/infra/run_loom_execution_descriptors.py")

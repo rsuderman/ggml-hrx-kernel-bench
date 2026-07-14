@@ -221,6 +221,8 @@ def main() -> int:
                 '--runner',
                 _cmake_quote(args.runner),
                 '--execute',
+                '--progress',
+                '--quiet',
             ]
             _append_optional_path(execute_command, '--repo-root', args.repo_root)
             _append_optional_text(execute_command, '--tool-dir', args.tool_dir)

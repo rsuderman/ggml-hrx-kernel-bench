@@ -14,6 +14,10 @@ from ggml_hrx_kernel_bench.required_tools import (
 )
 
 
+def _print_progress(line: str) -> None:
+    print(line, flush=True)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="Prepare or execute compact Loom execution descriptors listed in a descriptor manifest."
@@ -27,6 +31,7 @@ def main() -> int:
     parser.add_argument("--repo-root", type=Path, default=Path.cwd())
     parser.add_argument("--limit", type=int)
     parser.add_argument("--execute", action="store_true")
+    parser.add_argument("--progress", action="store_true", help="print gtest-style per-case execution progress")
     parser.add_argument("--quiet", action="store_true", help="do not print the prepare/execute run manifest")
     args = parser.parse_args()
 
@@ -54,6 +59,7 @@ def main() -> int:
         repo_root=args.repo_root,
         execute=args.execute,
         limit=args.limit,
+        progress=_print_progress if args.progress else None,
     )
     if not args.quiet:
         print(json.dumps(manifest, indent=2, sort_keys=True))
