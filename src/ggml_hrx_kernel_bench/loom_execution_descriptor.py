@@ -46,8 +46,60 @@ class GeneratedDescriptorResult:
 
 BINARY_F32_FAMILIES = {"add_f32", "mul_f32", "div_f32", "sub_f32"}
 BINARY_F16_FAMILIES = {"add_f16", "mul_f16", "div_f16", "sub_f16"}
-UNARY_F32_FAMILIES = {"abs_f32", "exp_f32", "neg_f32", "relu_f32", "sqr_f32", "sqrt_f32"}
-UNARY_F16_FAMILIES = {"abs_f16", "exp_f16", "neg_f16", "relu_f16", "sqr_f16", "sqrt_f16"}
+UNARY_F32_FAMILIES = {
+    "abs_f32",
+    "ceil_f32",
+    "cos_f32",
+    "elu_f32",
+    "exp_f32",
+    "expm1_f32",
+    "floor_f32",
+    "gelu_f32",
+    "gelu_erf_f32",
+    "gelu_quick_f32",
+    "hardsigmoid_f32",
+    "hardswish_f32",
+    "leaky_relu_f32",
+    "log_f32",
+    "neg_f32",
+    "relu_f32",
+    "round_f32",
+    "sgn_f32",
+    "sigmoid_f32",
+    "silu_f32",
+    "sin_f32",
+    "softcap_f32",
+    "softplus_f32",
+    "sqr_f32",
+    "sqrt_f32",
+    "step_f32",
+    "tanh_f32",
+    "trunc_f32",
+    "xielu_f32",
+}
+UNARY_F16_FAMILIES = {
+    "abs_f16",
+    "ceil_f16",
+    "cos_f16",
+    "exp_f16",
+    "floor_f16",
+    "gelu_erf_f16",
+    "gelu_quick_f16",
+    "hardsigmoid_f16",
+    "leaky_relu_f16",
+    "log_f16",
+    "neg_f16",
+    "relu_f16",
+    "round_f16",
+    "sgn_f16",
+    "silu_f16",
+    "sin_f16",
+    "softplus_f16",
+    "sqr_f16",
+    "sqrt_f16",
+    "step_f16",
+    "trunc_f16",
+}
 SCALAR_F32_FAMILIES = {"scale_f32", "clamp_f32"}
 NORMALIZATION_F32_FAMILIES = {"rms_norm_f32"}
 GATED_ACTIVATION_F32_FAMILIES = {"swiglu_f32"}

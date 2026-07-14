@@ -5,6 +5,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+from ggml_hrx_kernel_bench.generators import unary
 from ggml_hrx_kernel_bench.materialized_assets import materialize_asset_root
 from ggml_hrx_kernel_bench.oracles import generate_oracle, write_workbench
 from ggml_hrx_kernel_bench.routing.api import Candidate
@@ -37,6 +38,21 @@ def _candidate(
         dispatch={},
         supports={},
         coverage="route_backed",
+    )
+
+
+def _unary_oracle_cases(dtype: str) -> tuple[tuple[str, str, str, str, str], ...]:
+    dtype_tag = dtype.upper()
+    return tuple(
+        (
+            f"{op}_{dtype}",
+            op.upper(),
+            f"@{op}_{dtype}",
+            f"{op}_{dtype}",
+            f"kernels/v2/{op}/contiguous_4d.loom",
+        )
+        for op, spec in unary.UNARY_OPS.items()
+        if (dtype, dtype_tag) in spec.dtypes
     )
 
 
@@ -1759,13 +1775,7 @@ def test_softmax_kqv_oracle_supports_masked_identity_h8_attention_abi(tmp_path: 
 
 @pytest.mark.parametrize(
     ("family", "op", "root_symbol", "export_name", "source_path"),
-    (
-        ("exp_f16", "EXP", "@exp_f16", "exp_f16", "kernels/v2/exp/contiguous_4d.loom"),
-        ("neg_f16", "NEG", "@neg_f16", "neg_f16", "kernels/v2/neg/contiguous_4d.loom"),
-        ("relu_f16", "RELU", "@relu_f16", "relu_f16", "kernels/v2/relu/contiguous_4d.loom"),
-        ("sqr_f16", "SQR", "@sqr_f16", "sqr_f16", "kernels/v2/sqr/contiguous_4d.loom"),
-        ("sqrt_f16", "SQRT", "@sqrt_f16", "sqrt_f16", "kernels/v2/sqrt/contiguous_4d.loom"),
-    ),
+    _unary_oracle_cases("f16"),
 )
 def test_unary_f16_oracle_and_workbench_use_i16_buffers(
     tmp_path: Path,
@@ -1805,13 +1815,7 @@ def test_unary_f16_oracle_and_workbench_use_i16_buffers(
 
 @pytest.mark.parametrize(
     ("family", "op", "root_symbol", "export_name", "source_path"),
-    (
-        ("exp_f32", "EXP", "@exp_f32", "exp_f32", "kernels/v2/exp/contiguous_4d.loom"),
-        ("neg_f32", "NEG", "@neg_f32", "neg_f32", "kernels/v2/neg/contiguous_4d.loom"),
-        ("relu_f32", "RELU", "@relu_f32", "relu_f32", "kernels/v2/relu/contiguous_4d.loom"),
-        ("sqr_f32", "SQR", "@sqr_f32", "sqr_f32", "kernels/v2/sqr/contiguous_4d.loom"),
-        ("sqrt_f32", "SQRT", "@sqrt_f32", "sqrt_f32", "kernels/v2/sqrt/contiguous_4d.loom"),
-    ),
+    _unary_oracle_cases("f32"),
 )
 def test_unary_f32_oracle_and_workbench_use_f32_buffers(
     tmp_path: Path,

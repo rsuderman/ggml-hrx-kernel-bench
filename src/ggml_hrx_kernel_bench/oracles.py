@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Mapping
@@ -1344,9 +1345,30 @@ def _clamp_arrays(np: Any, candidate: Candidate, seed: int) -> dict[str, Any]:
 def _unary_source_values(np: Any, candidate: Candidate, seed: int) -> Any:
     ncols, nrows, _ = _dims(candidate)
     shape = (nrows, ncols)
-    if candidate.family in {"exp_f32", "exp_f16"}:
+    if candidate.family in {
+        "elu_f32",
+        "elu_f16",
+        "exp_f32",
+        "exp_f16",
+        "expm1_f32",
+        "expm1_f16",
+        "gelu_f32",
+        "gelu_f16",
+        "gelu_erf_f32",
+        "gelu_erf_f16",
+        "gelu_quick_f32",
+        "gelu_quick_f16",
+        "sigmoid_f32",
+        "sigmoid_f16",
+        "silu_f32",
+        "silu_f16",
+        "softplus_f32",
+        "softplus_f16",
+        "tanh_f32",
+        "tanh_f16",
+    }:
         return f32_pattern(np, shape, seed=seed, scale=0.25)
-    if candidate.family in {"sqrt_f32", "sqrt_f16"}:
+    if candidate.family in {"log_f32", "log_f16", "sqrt_f32", "sqrt_f16"}:
         return positive_f32_pattern(np, shape, seed=seed, scale=0.25)
     return f32_pattern(np, shape, seed=seed)
 
@@ -1354,24 +1376,119 @@ def _unary_source_values(np: Any, candidate: Candidate, seed: int) -> Any:
 def _unary_apply(np: Any, family: str, values: Any) -> Any:
     if family in {"abs_f32", "abs_f16"}:
         return np.abs(values)
+    if family in {"ceil_f32", "ceil_f16"}:
+        return np.ceil(values)
+    if family in {"cos_f32", "cos_f16"}:
+        return np.cos(values)
+    if family in {"elu_f32", "elu_f16"}:
+        return np.where(values > np.float32(0.0), values, np.exp(values) - np.float32(1.0))
     if family in {"exp_f32", "exp_f16"}:
         return np.exp(values)
+    if family in {"expm1_f32", "expm1_f16"}:
+        return np.exp(values) - np.float32(1.0)
+    if family in {"floor_f32", "floor_f16"}:
+        return np.floor(values)
+    if family in {"gelu_f32", "gelu_f16"}:
+        coef = np.float32(0.044715)
+        sqrt_two_over_pi = np.float32(0.7978845608028654)
+        return np.float32(0.5) * values * (
+            np.float32(1.0)
+            + np.tanh(sqrt_two_over_pi * values * (np.float32(1.0) + coef * values * values))
+        )
+    if family in {"gelu_erf_f32", "gelu_erf_f16"}:
+        sqrt_two_inv = np.float32(0.7071067811865476)
+        erf_values = np.vectorize(math.erf, otypes=[np.float32])(values * sqrt_two_inv)
+        return np.float32(0.5) * values * (np.float32(1.0) + erf_values)
+    if family in {"gelu_quick_f32", "gelu_quick_f16"}:
+        return values / (np.float32(1.0) + np.exp(np.float32(-1.702) * values))
+    if family in {"hardsigmoid_f32", "hardsigmoid_f16"}:
+        return np.minimum(
+            np.float32(1.0),
+            np.maximum(np.float32(0.0), (values + np.float32(3.0)) / np.float32(6.0)),
+        )
+    if family in {"hardswish_f32", "hardswish_f16"}:
+        gate = np.minimum(
+            np.float32(1.0),
+            np.maximum(np.float32(0.0), (values + np.float32(3.0)) / np.float32(6.0)),
+        )
+        return values * gate
+    if family in {"leaky_relu_f32", "leaky_relu_f16"}:
+        return np.where(values >= np.float32(0.0), values, values * np.float32(0.1))
+    if family in {"log_f32", "log_f16"}:
+        return np.log(values)
     if family in {"neg_f32", "neg_f16"}:
         return np.negative(values)
     if family in {"relu_f32", "relu_f16"}:
         return np.maximum(values, np.float32(0.0))
+    if family in {"round_f32", "round_f16"}:
+        return np.where(
+            values >= np.float32(0.0),
+            np.floor(values + np.float32(0.5)),
+            np.ceil(values - np.float32(0.5)),
+        )
+    if family in {"sgn_f32", "sgn_f16"}:
+        return np.sign(values)
+    if family in {"sigmoid_f32", "sigmoid_f16"}:
+        return np.float32(1.0) / (np.float32(1.0) + np.exp(-values))
+    if family in {"silu_f32", "silu_f16"}:
+        return values / (np.float32(1.0) + np.exp(-values))
+    if family in {"sin_f32", "sin_f16"}:
+        return np.sin(values)
+    if family == "softcap_f32":
+        softcap = np.float32(50.0)
+        return softcap * np.tanh(values / softcap)
+    if family in {"softplus_f32", "softplus_f16"}:
+        return np.log1p(np.exp(values))
     if family in {"sqr_f32", "sqr_f16"}:
         return np.square(values)
     if family in {"sqrt_f32", "sqrt_f16"}:
         return np.sqrt(values)
+    if family in {"step_f32", "step_f16"}:
+        return np.where(values > np.float32(0.0), np.float32(1.0), np.float32(0.0))
+    if family in {"tanh_f32", "tanh_f16"}:
+        return np.tanh(values)
+    if family in {"trunc_f32", "trunc_f16"}:
+        return np.trunc(values)
+    if family == "xielu_f32":
+        alpha_n = np.float32(4.0)
+        alpha_p = np.float32(20.0)
+        beta = np.float32(0.5)
+        eps = np.float32(0.0000001)
+        return np.where(
+            values > np.float32(0.0),
+            alpha_p * values * values + beta * values,
+            (np.exp(np.minimum(values, eps)) - np.float32(1.0) - values) * alpha_n
+            + beta * values,
+        )
     raise ValueError(f"unsupported unary family {family}")
 
 
 def _unary_source_buffer(np: Any, candidate: Candidate, length: int, seed: int) -> Any:
     shape = (length,)
-    if candidate.family in {"exp_f32", "exp_f16"}:
+    if candidate.family in {
+        "elu_f32",
+        "elu_f16",
+        "exp_f32",
+        "exp_f16",
+        "expm1_f32",
+        "expm1_f16",
+        "gelu_f32",
+        "gelu_f16",
+        "gelu_erf_f32",
+        "gelu_erf_f16",
+        "gelu_quick_f32",
+        "gelu_quick_f16",
+        "sigmoid_f32",
+        "sigmoid_f16",
+        "silu_f32",
+        "silu_f16",
+        "softplus_f32",
+        "softplus_f16",
+        "tanh_f32",
+        "tanh_f16",
+    }:
         return f32_pattern(np, shape, seed=seed, scale=0.25)
-    if candidate.family in {"sqrt_f32", "sqrt_f16"}:
+    if candidate.family in {"log_f32", "log_f16", "sqrt_f32", "sqrt_f16"}:
         return positive_f32_pattern(np, shape, seed=seed, scale=0.25)
     return f32_pattern(np, shape, seed=seed)
 
@@ -3287,10 +3404,124 @@ ORACLE_SPECS: tuple[OracleSpec, ...] = (
         write_workbench=_write_rope_workbench,
     ),
     OracleSpec(
-        family_ids=("abs_f32", "abs_f16", "exp_f32", "exp_f16", "neg_f32", "neg_f16", "relu_f32", "relu_f16", "sqr_f32", "sqr_f16", "sqrt_f32", "sqrt_f16"),
+        family_ids=(
+            "abs_f32",
+            "abs_f16",
+            "ceil_f32",
+            "ceil_f16",
+            "cos_f32",
+            "cos_f16",
+            "elu_f32",
+            "elu_f16",
+            "exp_f32",
+            "exp_f16",
+            "expm1_f32",
+            "expm1_f16",
+            "floor_f32",
+            "floor_f16",
+            "gelu_f32",
+            "gelu_f16",
+            "gelu_erf_f32",
+            "gelu_erf_f16",
+            "gelu_quick_f32",
+            "gelu_quick_f16",
+            "hardsigmoid_f32",
+            "hardsigmoid_f16",
+            "hardswish_f32",
+            "hardswish_f16",
+            "leaky_relu_f32",
+            "leaky_relu_f16",
+            "log_f32",
+            "log_f16",
+            "neg_f32",
+            "neg_f16",
+            "relu_f32",
+            "relu_f16",
+            "round_f32",
+            "round_f16",
+            "sgn_f32",
+            "sgn_f16",
+            "sigmoid_f32",
+            "sigmoid_f16",
+            "silu_f32",
+            "silu_f16",
+            "sin_f32",
+            "sin_f16",
+            "softcap_f32",
+            "softplus_f32",
+            "softplus_f16",
+            "sqr_f32",
+            "sqr_f16",
+            "sqrt_f32",
+            "sqrt_f16",
+            "step_f32",
+            "step_f16",
+            "tanh_f32",
+            "tanh_f16",
+            "trunc_f32",
+            "trunc_f16",
+            "xielu_f32",
+        ),
         generate=_logical_generate(
             LogicalOracleSpec(
-                ("abs_f32", "abs_f16", "exp_f32", "exp_f16", "neg_f32", "neg_f16", "relu_f32", "relu_f16", "sqr_f32", "sqr_f16", "sqrt_f32", "sqrt_f16"),
+                (
+                    "abs_f32",
+                    "abs_f16",
+                    "ceil_f32",
+                    "ceil_f16",
+                    "cos_f32",
+                    "cos_f16",
+                    "elu_f32",
+                    "elu_f16",
+                    "exp_f32",
+                    "exp_f16",
+                    "expm1_f32",
+                    "expm1_f16",
+                    "floor_f32",
+                    "floor_f16",
+                    "gelu_f32",
+                    "gelu_f16",
+                    "gelu_erf_f32",
+                    "gelu_erf_f16",
+                    "gelu_quick_f32",
+                    "gelu_quick_f16",
+                    "hardsigmoid_f32",
+                    "hardsigmoid_f16",
+                    "hardswish_f32",
+                    "hardswish_f16",
+                    "leaky_relu_f32",
+                    "leaky_relu_f16",
+                    "log_f32",
+                    "log_f16",
+                    "neg_f32",
+                    "neg_f16",
+                    "relu_f32",
+                    "relu_f16",
+                    "round_f32",
+                    "round_f16",
+                    "sgn_f32",
+                    "sgn_f16",
+                    "sigmoid_f32",
+                    "sigmoid_f16",
+                    "silu_f32",
+                    "silu_f16",
+                    "sin_f32",
+                    "sin_f16",
+                    "softcap_f32",
+                    "softplus_f32",
+                    "softplus_f16",
+                    "sqr_f32",
+                    "sqr_f16",
+                    "sqrt_f32",
+                    "sqrt_f16",
+                    "step_f32",
+                    "step_f16",
+                    "tanh_f32",
+                    "tanh_f16",
+                    "trunc_f32",
+                    "trunc_f16",
+                    "xielu_f32",
+                ),
                 "unary_numpy",
                 {"atol": 1e-5, "rtol": 1e-5},
                 _unary_arrays,
