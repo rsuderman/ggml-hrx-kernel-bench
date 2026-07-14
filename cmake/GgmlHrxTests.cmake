@@ -99,6 +99,8 @@ function(add_yaml_route_import_descriptor_tests)
     LIMIT
     RUNNER
     REPO_ROOT
+    IMPORT_TARGET
+    PREPARE_TARGET
   )
   set(multi_value_args EXCLUDE_OPS)
   cmake_parse_arguments(GGML_HRX_YRIDT "${options}" "${one_value_args}" "${multi_value_args}" ${ARGN})
@@ -112,6 +114,12 @@ function(add_yaml_route_import_descriptor_tests)
   if(NOT GGML_HRX_YRIDT_GROUPED_YAML)
     message(FATAL_ERROR "add_yaml_route_import_descriptor_tests requires GROUPED_YAML")
   endif()
+  set_property(
+    DIRECTORY
+    APPEND
+    PROPERTY CMAKE_CONFIGURE_DEPENDS
+      ${GGML_HRX_TESTS_ROOT}/infra/generate_loom_descriptor_tests_cmake.py
+  )
 
   set(descriptor_output_dir ${GGML_HRX_YRIDT_DESCRIPTOR_OUTPUT_DIR})
   if(NOT descriptor_output_dir)
@@ -141,6 +149,14 @@ function(add_yaml_route_import_descriptor_tests)
   if(NOT repo_root)
     set(repo_root ${CMAKE_SOURCE_DIR})
   endif()
+  set(import_target ${GGML_HRX_YRIDT_IMPORT_TARGET})
+  if(NOT import_target)
+    set(import_target kernel-${GGML_HRX_YRIDT_NAME})
+  endif()
+  set(prepare_target ${GGML_HRX_YRIDT_PREPARE_TARGET})
+  if(NOT prepare_target)
+    set(prepare_target kernel-descriptor-prepare-${GGML_HRX_YRIDT_NAME}-generated)
+  endif()
 
   set(generated_tests_include ${CMAKE_CURRENT_BINARY_DIR}/${GGML_HRX_YRIDT_NAME}-loom-descriptor-tests.cmake)
   set(generate_tests_command
@@ -160,6 +176,8 @@ function(add_yaml_route_import_descriptor_tests)
     --max-elements ${max_elements}
     --runner ${runner}
     --repo-root ${repo_root}
+    --build-prepare-target ${prepare_target}
+    --import-target ${import_target}
     --all-ops
   )
   if(GGML_HRX_YRIDT_ROUTING_DIR)

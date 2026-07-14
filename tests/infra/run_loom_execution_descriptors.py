@@ -27,6 +27,7 @@ def main() -> int:
     parser.add_argument("--repo-root", type=Path, default=Path.cwd())
     parser.add_argument("--limit", type=int)
     parser.add_argument("--execute", action="store_true")
+    parser.add_argument("--quiet", action="store_true", help="do not print the prepare/execute run manifest")
     args = parser.parse_args()
 
     loom_link = args.loom_link
@@ -54,7 +55,8 @@ def main() -> int:
         execute=args.execute,
         limit=args.limit,
     )
-    print(json.dumps(manifest, indent=2, sort_keys=True))
+    if not args.quiet:
+        print(json.dumps(manifest, indent=2, sort_keys=True))
     return 0 if manifest["failed_count"] == 0 else 1
 
 

@@ -53,10 +53,8 @@ def test_build_harness_inventory_reports_descriptor_and_legacy_state(tmp_path: P
         "\n".join(
             [
                 "add_test(NAME kernel-descriptor-generate-demo-EXP-generated)",
-                "add_test(NAME kernel-descriptor-prepare-demo-EXP-generated)",
                 "add_test(NAME kernel-descriptor-execute-demo-EXP-generated)",
                 "add_test(NAME kernel-descriptor-generate-demo-ADD-generated)",
-                "add_test(NAME kernel-descriptor-prepare-demo-ADD-generated)",
             ]
         ),
         encoding="utf-8",
@@ -81,7 +79,6 @@ def test_build_harness_inventory_reports_descriptor_and_legacy_state(tmp_path: P
     assert rows["EXP"]["descriptor_skipped_count"] == 1
     assert rows["EXP"]["descriptor_unsupported_count"] == 1
     assert rows["EXP"]["descriptor_generate_registered"] is True
-    assert rows["EXP"]["descriptor_prepare_registered"] is True
     assert rows["EXP"]["descriptor_execute_registered"] is True
     assert rows["EXP"]["legacy_runtime_registered"] is False
     assert rows["EXP"]["descriptor_hsa_status"] == "enabled"
@@ -93,5 +90,5 @@ def test_build_harness_inventory_reports_descriptor_and_legacy_state(tmp_path: P
     assert rows["ADD"]["descriptor_hsa_status"] == "gated"
 
     markdown = inventory_to_markdown(inventory)
-    assert "| EXP | 4 | 0 | 4 | 1 | 1 | generate/prepare/execute | no | enabled |" in markdown
-    assert "| ADD | 1 | 7 | - | - | - | generate/prepare | yes | gated |" in markdown
+    assert "| EXP | 4 | 0 | 4 | 1 | 1 | generate/execute | no | enabled |" in markdown
+    assert "| ADD | 1 | 7 | - | - | - | generate | yes | gated |" in markdown

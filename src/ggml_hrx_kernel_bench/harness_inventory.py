@@ -19,7 +19,6 @@ class HarnessInventoryRow:
     descriptor_unsupported_count: int | None
     descriptor_filtered_count: int | None
     descriptor_generate_registered: bool
-    descriptor_prepare_registered: bool
     descriptor_execute_registered: bool
     legacy_runtime_registered: bool
     descriptor_hsa_status: str
@@ -103,10 +102,6 @@ def build_harness_inventory(
             descriptor_cmake,
             f"kernel-descriptor-generate-{name}-{op_safe_name}-generated",
         )
-        prepare_registered = _contains_test(
-            descriptor_cmake,
-            f"kernel-descriptor-prepare-{name}-{op_safe_name}-generated",
-        )
         execute_registered = _contains_test(
             descriptor_cmake,
             f"kernel-descriptor-execute-{name}-{op_safe_name}-generated",
@@ -117,7 +112,7 @@ def build_harness_inventory(
         )
         if execute_registered:
             hsa_status = "enabled"
-        elif generate_registered or prepare_registered:
+        elif generate_registered:
             hsa_status = "gated"
         else:
             hsa_status = "not_registered"
@@ -131,7 +126,6 @@ def build_harness_inventory(
                 descriptor_unsupported_count=counts[2] if counts is not None else None,
                 descriptor_filtered_count=counts[3] if counts is not None else None,
                 descriptor_generate_registered=generate_registered,
-                descriptor_prepare_registered=prepare_registered,
                 descriptor_execute_registered=execute_registered,
                 legacy_runtime_registered=legacy_registered,
                 descriptor_hsa_status=hsa_status,
@@ -167,7 +161,6 @@ def inventory_to_markdown(inventory: dict[str, Any]) -> str:
             part
             for part, registered in (
                 ("generate", row["descriptor_generate_registered"]),
-                ("prepare", row["descriptor_prepare_registered"]),
                 ("execute", row["descriptor_execute_registered"]),
             )
             if registered

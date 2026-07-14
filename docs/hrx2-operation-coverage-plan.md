@@ -42,8 +42,9 @@ operations, with the remaining unmatched model surface in `FLASH_ATTN_EXT`,
 - [x] Retire the legacy v1/hrx2 routing catalog and kernel tree.
 - [x] Keep llama.cpp and model YAML route-import coverage validated at build
   time.
-- [x] Keep descriptor generate/prepare/execute CTest suites materialized from
-  descriptor route-import artifacts.
+- [x] Keep descriptor generate/execute CTest suites materialized from
+  descriptor route-import artifacts, with descriptor prepare handled by the
+  build graph.
 - [x] Enable descriptor execution through `ggml-hrx-run-loom-simple` as part of
   the default generated harness path.
 - [x] Preserve descriptor `close` tolerances when bridging descriptor execution
@@ -78,8 +79,8 @@ Current retirement inventories:
 
 Validation run on 2026-07-13: `ctest --test-dir build -N -R
 'kernel-run-.*yaml-route-import-v2'` reported zero tests, and targeted model
-descriptor generate/prepare/execute for `ADD`, `CPY`, `GET_ROWS`, `MUL`, and
-`RMS_NORM` passed outside the sandbox.
+descriptor generate/build-prepare/execute coverage for `ADD`, `CPY`,
+`GET_ROWS`, `MUL`, and `RMS_NORM` passed outside the sandbox.
 
 ## Next Candidate Slices
 

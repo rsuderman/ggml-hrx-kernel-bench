@@ -20,7 +20,7 @@ def _load_script_module(relative_path: str, module_name: str):
     return module
 
 
-def test_generate_loom_descriptor_tests_cmake_registers_prepare_only_without_execute_hsa_flag(
+def test_generate_loom_descriptor_tests_cmake_registers_build_prepare_without_prepare_test(
     tmp_path: Path, monkeypatch
 ) -> None:
     module = _load_script_module(
@@ -64,6 +64,10 @@ def test_generate_loom_descriptor_tests_cmake_registers_prepare_only_without_exe
             str(tmp_path / "tools"),
             "--repo-root",
             str(ROOT),
+            "--build-prepare-target",
+            "kernel-descriptor-prepare-llama-cpp-tests-v2-generated",
+            "--import-target",
+            "kernel-llama-cpp-tests-v2",
             "--all-ops",
         ],
     )
@@ -71,12 +75,16 @@ def test_generate_loom_descriptor_tests_cmake_registers_prepare_only_without_exe
     assert module.main() == 0
     generated = output_path.read_text(encoding="utf-8")
     assert "kernel-descriptor-generate-llama-cpp-tests-v2-ADD-generated" in generated
-    assert "kernel-descriptor-prepare-llama-cpp-tests-v2-ADD-generated" in generated
     assert "kernel-descriptor-execute-llama-cpp-tests-v2-ADD-generated" not in generated
     assert "--execute" not in generated
     assert "FIXTURES_SETUP descriptor-llama-cpp-tests-v2-ADD" in generated
-    assert "FIXTURES_REQUIRED descriptor-llama-cpp-tests-v2-ADD" in generated
+    assert "  NAME kernel-descriptor-prepare-llama-cpp-tests-v2-ADD-generated" not in generated
+    assert "FIXTURES_REQUIRED descriptor-llama-cpp-tests-v2-ADD" not in generated
     assert "$<TARGET_FILE:ggml-hrx-run-loom-simple>" in generated
+    assert "add_custom_target(kernel-descriptor-prepare-llama-cpp-tests-v2-generated ALL" in generated
+    assert "add_dependencies(kernel-descriptor-prepare-llama-cpp-tests-v2-generated kernel-llama-cpp-tests-v2)" in generated
+    assert "add_dependencies(kernel-descriptor-prepare-llama-cpp-tests-v2-generated ggml-hrx-run-loom-simple)" in generated
+    assert "--quiet" in generated
 
 
 def test_generate_loom_descriptor_tests_cmake_registers_hsa_execution_when_enabled(

@@ -26,10 +26,16 @@ The build-time import targets are:
 - `kernel-model-llama-3-3-8b-q8-0-yaml-route-import-v2`
 - `kernel-yaml-route-import-v2`
 
+`kernel-yaml-route-import-v2` also depends on the descriptor prepare build
+targets, so building the aggregate YAML route-import target materializes route
+import artifacts, emits compact Loom execution descriptors, and prepares the
+descriptor runner command manifests. HSA execution remains a CTest-only phase
+behind `GGML_HRX_ENABLE_HSA_DESCRIPTOR_TESTS`.
+
 The old generated runtime CTest suites were named with
 `kernel-run-*-yaml-route-import-v2-<OP>-generated`. They have been retired in
-favor of descriptor generate/prepare/execute tests backed by
-`ggml-hrx-run-loom-simple`.
+favor of descriptor generate/execute tests and build-time descriptor prepare
+targets backed by `ggml-hrx-run-loom-simple`.
 
 ## Retirement Objective
 
@@ -41,8 +47,8 @@ Retirement is complete when:
 
 - no generated `kernel-run-*-yaml-route-import-v2-<OP>-generated` tests are
   registered for kernel or model YAML route-import targets
-- descriptor generate/prepare/execute tests are the only generated runtime
-  validation path for route-import artifacts
+- descriptor generate/execute tests and build-time descriptor prepare targets
+  are the only generated runtime validation path for route-import artifacts
 - the old generated-runtime helper code is removed or no longer reachable from
   CMake
 - the harness inventory reports zero legacy runtime registrations
@@ -52,7 +58,8 @@ Retirement is complete when:
 - [x] Add a simple descriptor runner, `ggml-hrx-run-loom-simple`, that can load
   compact execution descriptors and invoke Loom kernels.
 - [x] Generate compact descriptor manifests from route-import artifacts.
-- [x] Register descriptor generate, prepare, and execute tests from CMake.
+- [x] Register descriptor generate and execute tests from CMake, with
+  descriptor prepare wired into the build graph instead of CTest.
 - [x] Enable descriptor execution through the default generated harness path.
 - [x] Gate descriptor execute tests that require HSA resources behind the HSA
   descriptor-test option.
@@ -71,7 +78,7 @@ Retirement is complete when:
   can be selected accidentally.
 - [x] 3. Build a descriptor-vs-legacy harness inventory. For each op, report
   route-import matched counts, descriptor emitted/skipped/unsupported counts,
-  descriptor CTest generate/prepare/execute registration, legacy
+  descriptor CTest generate/execute registration, legacy
   `kernel-run-*` registration, and whether HSA execution is gated or enabled.
   Current reports:
   `/home/rsuderman/codex/ggml-hrx-kernel-bench-harness-inventory-kernels-20260713.{json,md}`
@@ -157,9 +164,9 @@ Retirement is complete when:
   descriptor cases, and zero legacy runtime registrations.
   Validation run on 2026-07-13:
   `ctest --test-dir build -N -R 'kernel-run-.*yaml-route-import-v2'`
-  reported zero tests, and targeted model descriptor
-  generate/prepare/execute for `ADD`, `CPY`, `GET_ROWS`, `MUL`, and
-  `RMS_NORM` passed outside the sandbox.
+  reported zero tests, and targeted model descriptor generate/build-prepare/
+  execute coverage for `ADD`, `CPY`, `GET_ROWS`, `MUL`, and `RMS_NORM` passed
+  outside the sandbox.
 
 ## Expected Outputs
 
