@@ -73,6 +73,16 @@ def _install_native_module(
     monkeypatch.setattr(selection_module, "_native_selector", module)
 
 
+def test_native_module_exposes_generated_abs_route_order() -> None:
+    assert list(selection_module._native_selector.supported_route_ids("ABS")) == [
+        "abs_f16_contiguous_4d",
+        "abs_f32_contiguous_4d",
+        "abs_f16_non_contiguous_4d",
+        "abs_f32_non_contiguous_4d",
+    ]
+    assert list(selection_module._native_selector.supported_route_ids("EXP")) == []
+
+
 def test_native_mode_raises_for_unsupported_op(monkeypatch: pytest.MonkeyPatch) -> None:
     module = _StubNativeModule(())
     _install_native_module(monkeypatch, module)

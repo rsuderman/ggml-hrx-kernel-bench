@@ -37,8 +37,6 @@ if(GGML_HRX_BUILD_V2_NATIVE_SELECTOR)
     PATHS "${GGML_HRX_NANOBIND_CMAKE_DIR}"
     NO_DEFAULT_PATH
   )
-
-  add_subdirectory(native/v2_route_selector)
 endif()
 
 include(GgmlHrxLoomTools)
@@ -69,6 +67,10 @@ add_materialized_asset_target(
   OUTPUT_DIR ${GGML_HRX_ASSET_ROOT}
   METADATA_PATH ${GGML_HRX_ACTIVE_ASSET_ROOT_METADATA_PATH}
 )
+
+if(GGML_HRX_BUILD_V2_NATIVE_SELECTOR)
+  add_subdirectory(native/v2_route_selector)
+endif()
 
 include(CTest)
 

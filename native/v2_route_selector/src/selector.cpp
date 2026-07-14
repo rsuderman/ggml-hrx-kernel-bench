@@ -62,6 +62,8 @@ struct RouteDescriptor {
   std::vector<Constraint> constraints;
 };
 
+using RouteTable = std::map<std::string, std::vector<RouteDescriptor>>;
+
 enum class Evaluation {
   match,
   no_match,
@@ -154,80 +156,9 @@ Constraint equals(std::vector<std::string> names) {
   return result;
 }
 
-const std::vector<RouteDescriptor>& abs_routes() {
-  static const std::vector<RouteDescriptor> routes = {
-      {
-          "abs_f16_contiguous_4d",
-          {
-              {"src0", "F16", "src0_dimensions", "src0_strides"},
-              {"dst", "F16", "dst_dimensions", "dst_strides"},
-          },
-          {
-              {"contiguous_strides", ValueKind::contiguous_strides, "dst_dimensions"},
-              {"leading_dimensions", ValueKind::head, "dst_dimensions", 1},
-              {"trailing_dimensions", ValueKind::tail, "dst_dimensions", 1},
-              {"flattened_trailing_dimensions", ValueKind::product, "trailing_dimensions"},
-              {"total_size", ValueKind::product, "dst_dimensions"},
-          },
-          {
-              scalar_bounds("total_size", 1, 1073741824),
-              rank_range("dst_dimensions", 2, 4),
-              equals({"src0_dimensions", "dst_dimensions"}),
-              equals({"contiguous_strides", "src0_strides", "dst_strides"}),
-          },
-      },
-      {
-          "abs_f32_contiguous_4d",
-          {
-              {"src0", "F32", "src0_dimensions", "src0_strides"},
-              {"dst", "F32", "dst_dimensions", "dst_strides"},
-          },
-          {
-              {"contiguous_strides", ValueKind::contiguous_strides, "dst_dimensions"},
-              {"leading_dimensions", ValueKind::head, "dst_dimensions", 1},
-              {"trailing_dimensions", ValueKind::tail, "dst_dimensions", 1},
-              {"flattened_trailing_dimensions", ValueKind::product, "trailing_dimensions"},
-              {"total_size", ValueKind::product, "dst_dimensions"},
-          },
-          {
-              scalar_bounds("total_size", 1, 1073741824),
-              rank_range("dst_dimensions", 2, 4),
-              equals({"src0_dimensions", "dst_dimensions"}),
-              equals({"contiguous_strides", "src0_strides", "dst_strides"}),
-          },
-      },
-      {
-          "abs_f16_non_contiguous_4d",
-          {
-              {"src0", "F16", "src0_dimensions", "src0_strides"},
-              {"dst", "F16", "dst_dimensions", "dst_strides"},
-          },
-          {
-              {"contiguous_strides", ValueKind::contiguous_strides, "dst_dimensions"},
-              {"total_size", ValueKind::product, "dst_dimensions"},
-          },
-          {
-              exact_length("dst_dimensions", 4),
-              equals({"src0_dimensions", "dst_dimensions"}),
-              equals({"contiguous_strides", "dst_strides"}),
-          },
-      },
-      {
-          "abs_f32_non_contiguous_4d",
-          {
-              {"src0", "F32", "src0_dimensions", "src0_strides"},
-              {"dst", "F32", "dst_dimensions", "dst_strides"},
-          },
-          {
-              {"contiguous_strides", ValueKind::contiguous_strides, "dst_dimensions"},
-              {"total_size", ValueKind::product, "dst_dimensions"},
-          },
-          {
-              exact_length("dst_dimensions", 4),
-              equals({"src0_dimensions", "dst_dimensions"}),
-              equals({"contiguous_strides", "dst_strides"}),
-          },
-      },
+const RouteTable& route_table() {
+  static const RouteTable routes = {
+#include "ggml_hrx_v2_routes.inc.cpp"
   };
   return routes;
 }
@@ -240,22 +171,6 @@ bool route_is_allowed(const Query& query, std::string_view route_id) {
              query.allowed_route_ids->begin(),
              query.allowed_route_ids->end(),
              route_id) != query.allowed_route_ids->end();
-}
-
-bool all_allowed_routes_are_supported(const Query& query) {
-  const auto& routes = abs_routes();
-  if (!query.allowed_route_ids.has_value()) {
-    return true;
-  }
-  for (const auto& allowed : *query.allowed_route_ids) {
-    const auto found = std::find_if(routes.begin(), routes.end(), [&](const auto& route) {
-      return route.id == allowed;
-    });
-    if (found == routes.end()) {
-      return false;
-    }
-  }
-  return true;
 }
 
 Evaluation capture_tensors(
@@ -404,14 +319,14 @@ Evaluation evaluate(const RouteDescriptor& route, const Query& query) {
 }  // namespace
 
 Selection select(std::string_view op, const Query& query) {
-  if (normalize_token(op) != "ABS") {
-    return {SelectionStatus::unsupported, {}};
-  }
-  if (!all_allowed_routes_are_supported(query)) {
+  const auto normalized_op = normalize_token(op);
+  const auto& table = route_table();
+  const auto operation = table.find(normalized_op);
+  if (operation == table.end()) {
     return {SelectionStatus::unsupported, {}};
   }
 
-  const auto& routes = abs_routes();
+  const auto& routes = operation->second;
   for (const auto& route : routes) {
     if (!route_is_allowed(query, route.id)) {
       continue;
@@ -428,12 +343,17 @@ Selection select(std::string_view op, const Query& query) {
 }
 
 std::vector<std::string_view> supported_route_ids(std::string_view op) {
-  if (normalize_token(op) != "ABS") {
+  const auto normalized_op = normalize_token(op);
+  const auto& table = route_table();
+  const auto operation = table.find(normalized_op);
+  if (operation == table.end()) {
     return {};
   }
+
+  const auto& routes = operation->second;
   std::vector<std::string_view> ids;
-  ids.reserve(abs_routes().size());
-  for (const auto& route : abs_routes()) {
+  ids.reserve(routes.size());
+  for (const auto& route : routes) {
     ids.emplace_back(route.id);
   }
   return ids;
