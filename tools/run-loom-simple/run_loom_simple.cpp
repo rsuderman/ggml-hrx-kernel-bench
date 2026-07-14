@@ -585,11 +585,101 @@ std::optional<std::string> BuildNpyStorageBindingSpec(const std::string &path,
   return "&@" + path;
 }
 
+NpyLoadResult ValidateF16ValueExpectedNpy1D(const std::string &path,
+                                            std::size_t expected_elements) {
+  std::ifstream input(path, std::ios::binary);
+  if (!input) {
+    return NpyLoadResult{false, "failed to open npy file: " + path};
+  }
+
+  unsigned char prefix[10] = {};
+  input.read(reinterpret_cast<char *>(prefix), 8);
+  if (input.gcount() != 8 || std::memcmp(prefix, "\x93NUMPY", 6) != 0) {
+    return NpyLoadResult{false, "invalid npy magic: " + path};
+  }
+
+  const unsigned char major = prefix[6];
+  std::size_t header_len = 0;
+  if (major == 1) {
+    input.read(reinterpret_cast<char *>(prefix + 8), 2);
+    if (input.gcount() != 2) {
+      return NpyLoadResult{false, "truncated npy v1 header length: " + path};
+    }
+    header_len = ReadLe16(prefix + 8);
+  } else if (major == 2) {
+    unsigned char len_bytes[4] = {};
+    input.read(reinterpret_cast<char *>(len_bytes), 4);
+    if (input.gcount() != 4) {
+      return NpyLoadResult{false, "truncated npy v2 header length: " + path};
+    }
+    header_len = ReadLe32(len_bytes);
+  } else {
+    return NpyLoadResult{false,
+                         "unsupported npy version: " + std::to_string(major) +
+                             "." + std::to_string(prefix[7])};
+  }
+
+  std::string header(header_len, '\0');
+  input.read(header.data(), static_cast<std::streamsize>(header.size()));
+  if (static_cast<std::size_t>(input.gcount()) != header.size()) {
+    return NpyLoadResult{false, "truncated npy header: " + path};
+  }
+
+  const std::optional<std::string> descr = ExtractHeaderString(header, "descr");
+  if (!descr.has_value()) {
+    return NpyLoadResult{false, "missing descr in npy header: " + path};
+  }
+  if (*descr != "<f2" && *descr != "|f2") {
+    return NpyLoadResult{false, "expected f16 value npy dtype '<f2', saw '" +
+                                    *descr + "'"};
+  }
+  if (!HeaderHasFalse(header, "fortran_order")) {
+    return NpyLoadResult{false,
+                         "only C-contiguous npy arrays are supported: " + path};
+  }
+
+  std::string shape_error;
+  const std::optional<std::size_t> elements =
+      ExtractOneDimShape(header, &shape_error);
+  if (!elements.has_value()) {
+    return NpyLoadResult{false, shape_error + ": " + path};
+  }
+  if (*elements != expected_elements) {
+    return NpyLoadResult{false, "npy element count mismatch for " + path +
+                                    ": expected " +
+                                    std::to_string(expected_elements) +
+                                    ", saw " + std::to_string(*elements)};
+  }
+
+  std::vector<unsigned char> bytes(expected_elements * 2);
+  input.read(reinterpret_cast<char *>(bytes.data()),
+             static_cast<std::streamsize>(bytes.size()));
+  if (static_cast<std::size_t>(input.gcount()) != bytes.size()) {
+    return NpyLoadResult{false, "truncated npy data: " + path};
+  }
+  return NpyLoadResult{true, ""};
+}
+
+NpyLoadResult ValidateNpyExpected1D(const std::string &path, DType dtype,
+                                    std::size_t expected_elements) {
+  const NpyLoadResult storage =
+      ValidateNpyStorage1D(path, dtype, expected_elements);
+  if (storage.loaded || dtype != DType::kF16) {
+    return storage;
+  }
+  const NpyLoadResult value =
+      ValidateF16ValueExpectedNpy1D(path, expected_elements);
+  if (value.loaded) {
+    return value;
+  }
+  return storage;
+}
+
 std::optional<std::string> BuildNpyExpectedBindingSpec(const std::string &path,
                                                        DType dtype,
                                                        std::size_t elements,
                                                        std::string *error) {
-  const NpyLoadResult loaded = ValidateNpyStorage1D(path, dtype, elements);
+  const NpyLoadResult loaded = ValidateNpyExpected1D(path, dtype, elements);
   if (!loaded.loaded) {
     *error = loaded.error;
     return std::nullopt;

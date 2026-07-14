@@ -81,25 +81,40 @@ UNARY_F16_FAMILIES = {
     "abs_f16",
     "ceil_f16",
     "cos_f16",
+    "elu_f16",
     "exp_f16",
+    "expm1_f16",
     "floor_f16",
+    "gelu_f16",
     "gelu_erf_f16",
     "gelu_quick_f16",
     "hardsigmoid_f16",
+    "hardswish_f16",
     "leaky_relu_f16",
     "log_f16",
     "neg_f16",
     "relu_f16",
     "round_f16",
     "sgn_f16",
+    "sigmoid_f16",
     "silu_f16",
     "sin_f16",
     "softplus_f16",
     "sqr_f16",
     "sqrt_f16",
     "step_f16",
+    "tanh_f16",
     "trunc_f16",
 }
+APPROXIMATE_UNARY_F16_FAMILIES = {
+    "elu_f16",
+    "expm1_f16",
+    "gelu_f16",
+    "hardswish_f16",
+    "sigmoid_f16",
+    "tanh_f16",
+}
+APPROXIMATE_UNARY_F16_TOLERANCE = {"atol": 1e-3, "rtol": 1e-3}
 SCALAR_F32_FAMILIES = {"scale_f32", "clamp_f32"}
 NORMALIZATION_F32_FAMILIES = {"rms_norm_f32"}
 GATED_ACTIVATION_F32_FAMILIES = {"swiglu_f32"}
@@ -311,12 +326,15 @@ def _descriptor_relative_path(path: Path, *, descriptor_dir: Path | None) -> str
         return str(resolved)
 
 
-def _load_array_element_count(path: Path, *, dtype: str) -> int:
+def _load_array_element_count(path: Path, *, allowed_dtypes: set[str]) -> int:
     np = require_numpy()
     array = np.load(path, allow_pickle=False)
     _expect(array.ndim == 1, f"{path} must be one-dimensional")
-    expected_storage_dtype = NPY_STORAGE_DTYPE_BY_DESCRIPTOR_DTYPE[dtype]
-    _expect(str(array.dtype) == expected_storage_dtype, f"{path} must be a {expected_storage_dtype} npy array")
+    actual_dtype = str(array.dtype)
+    _expect(
+        actual_dtype in allowed_dtypes,
+        f"{path} must be one of {sorted(allowed_dtypes)} npy array dtypes, saw {actual_dtype}",
+    )
     return int(array.shape[0])
 
 
@@ -395,6 +413,37 @@ def _required_abi_fixtures(entries: list[dict[str, Any]]) -> set[str]:
     return required
 
 
+def _uses_approximate_unary_f16_expected(family: str, entry: dict[str, Any]) -> bool:
+    return family in APPROXIMATE_UNARY_F16_FAMILIES and entry["kind"] == "output" and str(entry["dtype"]) == "f16"
+
+
+def _materialize_approximate_unary_f16_expected_arrays(
+    *,
+    entries: list[dict[str, Any]],
+    arrays: dict[str, Path],
+    family: str,
+) -> dict[str, Path]:
+    if family not in APPROXIMATE_UNARY_F16_FAMILIES:
+        return arrays
+    np = require_numpy()
+    result = dict(arrays)
+    for entry in entries:
+        if not _uses_approximate_unary_f16_expected(family, entry):
+            continue
+        expect_fixture = str(entry["expect"]["fixture"])
+        source_path = arrays[expect_fixture]
+        expected_bits = np.load(source_path, allow_pickle=False)
+        _expect(
+            expected_bits.ndim == 1 and str(expected_bits.dtype) == "int16",
+            f"{source_path} must be a one-dimensional int16 f16 storage npy array",
+        )
+        expected_values = expected_bits.view(np.float16)
+        value_path = source_path.with_name(f"{source_path.stem}.f16-values.npy")
+        np.save(value_path, expected_values, allow_pickle=False)
+        result[expect_fixture] = value_path
+    return result
+
+
 def _descriptor_scalars_from_execution_abi(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
     scalars: list[dict[str, Any]] = []
     for entry in entries:
@@ -415,6 +464,7 @@ def _descriptor_bindings_from_execution_abi(
     *,
     entries: list[dict[str, Any]],
     arrays: dict[str, Path],
+    family: str,
     tolerance: dict[str, float],
     descriptor_dir: Path | None,
 ) -> list[dict[str, Any]]:
@@ -433,11 +483,26 @@ def _descriptor_bindings_from_execution_abi(
         if entry["kind"] == "output":
             expect = entry["expect"]
             expect_fixture = str(expect["fixture"])
+            output_tolerance = tolerance
+            if (
+                family in APPROXIMATE_UNARY_F16_FAMILIES
+                and str(entry["dtype"]) == "f16"
+            ):
+                output_tolerance = {
+                    "atol": max(
+                        float(tolerance.get("atol", 1e-5)),
+                        APPROXIMATE_UNARY_F16_TOLERANCE["atol"],
+                    ),
+                    "rtol": max(
+                        float(tolerance.get("rtol", 1e-5)),
+                        APPROXIMATE_UNARY_F16_TOLERANCE["rtol"],
+                    ),
+                }
             binding["expect"] = {
                 "mode": "close",
                 "path": _descriptor_relative_path(arrays[expect_fixture], descriptor_dir=descriptor_dir),
-                "atol": float(tolerance.get("atol", 1e-5)),
-                "rtol": float(tolerance.get("rtol", 1e-5)),
+                "atol": float(output_tolerance.get("atol", 1e-5)),
+                "rtol": float(output_tolerance.get("rtol", 1e-5)),
             }
         bindings.append(binding)
     return bindings
@@ -536,15 +601,32 @@ def descriptor_from_generated_case(
             status="unsupported",
             reason=f"oracle did not produce required arrays: {missing_arrays}",
         )
-    abi_fixture_dtypes: dict[str, str] = {}
+    descriptor_arrays = _materialize_approximate_unary_f16_expected_arrays(
+        entries=abi_entries,
+        arrays=arrays,
+        family=str(candidate.family),
+    )
+    abi_fixture_allowed_dtypes: dict[str, set[str]] = {}
     for entry in abi_entries:
         if entry["kind"] == "scalar":
             continue
-        abi_fixture_dtypes[str(entry["fixture"])] = str(entry["dtype"])
+        abi_fixture_allowed_dtypes[str(entry["fixture"])] = {
+            NPY_STORAGE_DTYPE_BY_DESCRIPTOR_DTYPE[str(entry["dtype"])]
+        }
         if entry["kind"] == "output":
-            abi_fixture_dtypes[str(entry["expect"]["fixture"])] = str(entry["dtype"])
+            expect_fixture = str(entry["expect"]["fixture"])
+            if _uses_approximate_unary_f16_expected(str(candidate.family), entry):
+                abi_fixture_allowed_dtypes[expect_fixture] = {"float16"}
+            else:
+                abi_fixture_allowed_dtypes[expect_fixture] = {
+                    NPY_STORAGE_DTYPE_BY_DESCRIPTOR_DTYPE[str(entry["dtype"])]
+                }
     array_element_counts = {
-        name: _load_array_element_count(arrays[name], dtype=abi_fixture_dtypes[name]) for name in required_arrays
+        name: _load_array_element_count(
+            descriptor_arrays[name],
+            allowed_dtypes=abi_fixture_allowed_dtypes[name],
+        )
+        for name in required_arrays
     }
     if array_element_counts:
         largest_array = max(array_element_counts.values())
@@ -564,7 +646,8 @@ def descriptor_from_generated_case(
         "scalars": _descriptor_scalars_from_execution_abi(abi_entries),
         "bindings": _descriptor_bindings_from_execution_abi(
             entries=abi_entries,
-            arrays=arrays,
+            arrays=descriptor_arrays,
+            family=str(candidate.family),
             tolerance=tolerance,
             descriptor_dir=descriptor_dir,
         ),

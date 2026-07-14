@@ -1,8 +1,8 @@
 {
   "schema": "ggml_hrx_kernel_bench.import_test_coverage.v1",
   "operation_count": 115,
-  "total_pass_case_count": 967,
-  "total_fail_case_count": 10230,
+  "total_pass_case_count": 991,
+  "total_fail_case_count": 10206,
   "operations": [
     {
       "op": "ABS",
@@ -146,8 +146,8 @@
     },
     {
       "op": "ELU",
-      "pass_case_count": 4,
-      "fail_case_count": 4
+      "pass_case_count": 8,
+      "fail_case_count": 0
     },
     {
       "op": "EXP",
@@ -156,8 +156,8 @@
     },
     {
       "op": "EXPM1",
-      "pass_case_count": 4,
-      "fail_case_count": 4
+      "pass_case_count": 8,
+      "fail_case_count": 0
     },
     {
       "op": "FILL",
@@ -201,8 +201,8 @@
     },
     {
       "op": "GELU",
-      "pass_case_count": 4,
-      "fail_case_count": 4
+      "pass_case_count": 8,
+      "fail_case_count": 0
     },
     {
       "op": "GELU_ERF",
@@ -241,8 +241,8 @@
     },
     {
       "op": "HARDSWISH",
-      "pass_case_count": 4,
-      "fail_case_count": 4
+      "pass_case_count": 8,
+      "fail_case_count": 0
     },
     {
       "op": "IM2COL",
@@ -446,8 +446,8 @@
     },
     {
       "op": "SIGMOID",
-      "pass_case_count": 4,
-      "fail_case_count": 4
+      "pass_case_count": 8,
+      "fail_case_count": 0
     },
     {
       "op": "SILU",
@@ -541,8 +541,8 @@
     },
     {
       "op": "TANH",
-      "pass_case_count": 4,
-      "fail_case_count": 4
+      "pass_case_count": 8,
+      "fail_case_count": 0
     },
     {
       "op": "TIMESTEP_EMBEDDING",

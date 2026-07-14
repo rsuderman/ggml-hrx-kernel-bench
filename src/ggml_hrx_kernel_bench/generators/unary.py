@@ -59,7 +59,6 @@ UNARY_OPS: dict[str, UnaryOp] = {
         ),
         (CONTIGUOUS, NON_CONTIGUOUS),
         preamble="  %zero = scalar.constant 0.0 : f32\n  %one = scalar.constant 1.0 : f32\n",
-        dtypes=F32_DTYPES,
     ),
     "exp": UnaryOp(
         "    %result = scalar.expf<afn> %value : f32", (CONTIGUOUS, NON_CONTIGUOUS)
@@ -73,7 +72,6 @@ UNARY_OPS: dict[str, UnaryOp] = {
         ),
         (CONTIGUOUS, NON_CONTIGUOUS),
         preamble="  %one = scalar.constant 1.0 : f32\n",
-        dtypes=F32_DTYPES,
     ),
     "floor": UnaryOp("    %result = scalar.floorf %value : f32", (CONTIGUOUS, NON_CONTIGUOUS)),
     "gelu": UnaryOp(
@@ -97,7 +95,6 @@ UNARY_OPS: dict[str, UnaryOp] = {
             "  %coef = scalar.constant 0.044715 : f32\n"
             "  %sqrt_two_over_pi = scalar.constant 0.7978845608028654 : f32\n"
         ),
-        dtypes=F32_DTYPES,
     ),
     "gelu_erf": UnaryOp(
         "\n".join(
@@ -162,7 +159,6 @@ UNARY_OPS: dict[str, UnaryOp] = {
             "  %three = scalar.constant 3.0 : f32\n"
             "  %six = scalar.constant 6.0 : f32\n"
         ),
-        dtypes=F32_DTYPES,
     ),
     "leaky_relu": UnaryOp(
         "\n".join(
@@ -226,7 +222,6 @@ UNARY_OPS: dict[str, UnaryOp] = {
         ),
         (CONTIGUOUS, NON_CONTIGUOUS),
         preamble="  %one = scalar.constant 1.0 : f32\n",
-        dtypes=F32_DTYPES,
     ),
     "silu": UnaryOp("    %result = scalar.siluf %value : f32", (CONTIGUOUS, NON_CONTIGUOUS)),
     "sin": UnaryOp("    %result = scalar.sinf<afn> %value : f32", (CONTIGUOUS,)),
@@ -261,7 +256,6 @@ UNARY_OPS: dict[str, UnaryOp] = {
     "tanh": UnaryOp(
         "    %result = scalar.tanhf<afn> %value : f32",
         (CONTIGUOUS, NON_CONTIGUOUS),
-        dtypes=F32_DTYPES,
     ),
     "trunc": UnaryOp("    %result = scalar.truncf %value : f32", (CONTIGUOUS, NON_CONTIGUOUS)),
     "xielu": UnaryOp(

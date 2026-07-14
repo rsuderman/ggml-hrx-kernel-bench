@@ -1654,6 +1654,37 @@ def test_descriptor_from_generated_abs_f16_case_uses_int16_storage(tmp_path: Pat
     assert f"1:output:f16:4:{tmp_path / descriptor['bindings'][1]['path']}" in command
 
 
+def test_descriptor_from_generated_approximate_unary_f16_case_uses_close_tolerance(
+    tmp_path: Path,
+) -> None:
+    assets = materialize_asset_root(tmp_path / "assets", force=True)
+    result = descriptor_from_generated_case(
+        config_data=_generated_unary_f16_config("tanh_f16"),
+        case_id="d0-4-d1-1-d2-1-d3-1",
+        case_values=[4, 1, 1, 1],
+        kernel_dir=assets / "kernels" / "v2",
+        routing_dir=assets / "catalog" / "v2",
+        target="gfx1100",
+        max_elements=32,
+        oracle_fixture_dir=tmp_path / "oracle-fixtures",
+        descriptor_dir=tmp_path,
+    )
+
+    assert result.status == "emitted", result.reason
+    assert result.descriptor is not None
+    descriptor = result.descriptor
+    assert descriptor["root"] == "@tanh_f16"
+    expect = descriptor["bindings"][1]["expect"]
+    assert expect["path"].endswith("expected.f16-values.npy")
+    original_expected = np.load(tmp_path / "oracle-fixtures" / "expected.npy")
+    descriptor_expected = np.load(tmp_path / expect["path"])
+    assert original_expected.dtype == np.int16
+    assert descriptor_expected.dtype == np.float16
+    assert np.array_equal(descriptor_expected, original_expected.view(np.float16))
+    assert expect["atol"] == 1e-3
+    assert expect["rtol"] == 1e-3
+
+
 def test_descriptor_from_generated_get_rows_f32_case_uses_i32_indices(tmp_path: Path) -> None:
     assets = materialize_asset_root(tmp_path / "assets", force=True)
     result = descriptor_from_generated_case(

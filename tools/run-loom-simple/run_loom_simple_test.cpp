@@ -948,6 +948,55 @@ void TestGgmlHrxRunLoomBridgeBuildsF16NpyBackedCommand() {
          "f16 bridge command exact tolerance");
 }
 
+void TestGgmlHrxRunLoomBridgeBuildsF16ValueExpectedCommand() {
+  const std::filesystem::path dir = TempDir();
+  WriteI16Npy(dir / "src0.npy", {0x3C00, 0x4000, 0x4200, 0x4400});
+  WriteI16Npy(dir / "dst_init.npy", {0, 0, 0, 0});
+  WriteI16Npy(dir / "expected.npy", {0x3C00, 0x4000, 0x4200, 0x4400}, "<f2");
+  auto args = std::vector<std::string>{
+      "--kernel",
+      "linked.loom",
+      "--root",
+      "@tanh_f16",
+      "--target",
+      "gfx1100",
+      "--ggml-hrx-run-loom",
+      "/tmp/ggml-hrx-run-loom",
+      "--binding",
+      "0:input:f16:4:" + (dir / "src0.npy").string(),
+      "--binding",
+      "1:output:f16:4:" + (dir / "dst_init.npy").string(),
+      "--expect",
+      "1:close:" + (dir / "expected.npy").string() + ":0.001:0.001",
+      "--output",
+      "result.json",
+  };
+  const auto parsed = ParseArgs(args);
+  Expect(parsed.invocation.has_value(),
+         "f16 value expected bridge command parses");
+  if (!parsed.invocation.has_value()) {
+    return;
+  }
+  const auto command = BuildGgmlHrxRunLoomCommand(*parsed.invocation);
+  Expect(command.args.has_value(), "f16 value expected bridge command builds");
+  if (!command.args.has_value()) {
+    std::cerr << "bridge error: " << command.error << "\n";
+    return;
+  }
+  Expect(std::find(command.args->begin(), command.args->end(),
+                   "--kernel-input-buffer=&@" + (dir / "src0.npy").string()) !=
+             command.args->end(),
+         "f16 value expected bridge command input spec");
+  Expect(std::find(command.args->begin(), command.args->end(),
+                   "--expected-kernel-buffer=@" +
+                       (dir / "expected.npy").string()) != command.args->end(),
+         "f16 value expected bridge command expected spec");
+  Expect(std::find(command.args->begin(), command.args->end(),
+                   "--expected-kernel-buffer-tolerance=0.001,0.001") !=
+             command.args->end(),
+         "f16 value expected bridge command tolerance");
+}
+
 void TestGgmlHrxRunLoomBridgeBuildsBF16NpyBackedCommand() {
   const std::filesystem::path dir = TempDir();
   WriteI16Npy(dir / "src0.npy", {0x3F80, 0x4000, 0x4040, 0x4080});
@@ -1309,6 +1358,7 @@ int main() {
   TestGgmlHrxRunLoomBridgeBuildsNpyBackedCommand();
   TestGgmlHrxRunLoomBridgeBuildsBF16NpyBackedCommand();
   TestGgmlHrxRunLoomBridgeBuildsF16NpyBackedCommand();
+  TestGgmlHrxRunLoomBridgeBuildsF16ValueExpectedCommand();
   TestGgmlHrxRunLoomBridgeBuildsI32NpyBackedCommand();
   TestGgmlHrxRunLoomBridgeBuildsPackedQuantNpyBackedCommand();
   TestGgmlHrxRunLoomBridgeAcceptsNonSplatTensor();
