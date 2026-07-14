@@ -25,7 +25,7 @@ struct ProcessResult {
 };
 
 struct BridgeRenderResult {
-  IreeRunLoomCommandResult command;
+  GgmlHrxRunLoomCommandResult command;
   std::optional<ProcessResult> loom_link_execution;
   std::optional<ProcessResult> target_source_materialization;
   std::optional<ProcessResult> run_execution;
@@ -693,12 +693,12 @@ ProcessResult MaterializeTargetedKernelSource(const Invocation &invocation,
 
 BridgeRenderResult BuildBridgeRenderResult(const Invocation &invocation) {
   BridgeRenderResult result;
-  result.command = BuildIreeRunLoomCommand(invocation);
+  result.command = BuildGgmlHrxRunLoomCommand(invocation);
   if (!result.command.args.has_value()) {
     result.status = "blocked";
     return result;
   }
-  if (!invocation.execute_iree_run_loom_command) {
+  if (!invocation.execute_ggml_hrx_run_loom_command) {
     result.status = "ready";
     return result;
   }
@@ -777,9 +777,9 @@ ParseResult ParseArgs(const std::vector<std::string> &args) {
       if (auto value = require_value("--linked-kernel-output")) {
         invocation.linked_kernel_output = *value;
       }
-    } else if (flag == "--iree-run-loom") {
-      if (auto value = require_value("--iree-run-loom")) {
-        invocation.iree_run_loom_path = *value;
+    } else if (flag == "--ggml-hrx-run-loom") {
+      if (auto value = require_value("--ggml-hrx-run-loom")) {
+        invocation.ggml_hrx_run_loom_path = *value;
       }
     } else if (flag == "--workgroup-count") {
       if (auto value = require_value("--workgroup-count")) {
@@ -787,11 +787,11 @@ ParseResult ParseArgs(const std::vector<std::string> &args) {
           invocation.workgroup_count = *workgroup_count;
         }
       }
-    } else if (flag == "--emit-iree-run-loom-command") {
-      invocation.emit_iree_run_loom_command = true;
-    } else if (flag == "--execute-iree-run-loom-command") {
-      invocation.emit_iree_run_loom_command = true;
-      invocation.execute_iree_run_loom_command = true;
+    } else if (flag == "--emit-ggml-hrx-run-loom-command") {
+      invocation.emit_ggml_hrx_run_loom_command = true;
+    } else if (flag == "--execute-ggml-hrx-run-loom-command") {
+      invocation.emit_ggml_hrx_run_loom_command = true;
+      invocation.execute_ggml_hrx_run_loom_command = true;
     } else if (flag == "--config") {
       if (auto value = require_value("--config")) {
         if (auto config = ParseConfig(*value, &errors)) {
@@ -1047,14 +1047,15 @@ CloseCompareResult CompareClose(const std::vector<float> &actual,
   return result;
 }
 
-IreeRunLoomCommandResult BuildIreeRunLoomCommand(const Invocation &invocation) {
+GgmlHrxRunLoomCommandResult
+BuildGgmlHrxRunLoomCommand(const Invocation &invocation) {
   std::optional<std::vector<std::string>> loom_link_args;
   std::string kernel_path = invocation.kernel_path;
   if (!invocation.configs.empty() && invocation.linked_kernel_output.empty()) {
-    return IreeRunLoomCommandResult{
+    return GgmlHrxRunLoomCommandResult{
         std::nullopt, std::nullopt,
         "config-bound kernels require --linked-kernel-output so the bridge can "
-        "stage a loom-link command before iree-run-loom"};
+        "stage a loom-link command before ggml-hrx-run-loom"};
   }
   if (!invocation.configs.empty()) {
     std::vector<std::string> link_args;
@@ -1073,9 +1074,9 @@ IreeRunLoomCommandResult BuildIreeRunLoomCommand(const Invocation &invocation) {
   }
   kernel_path = TargetedKernelPath(invocation, kernel_path);
   if (invocation.expectations.empty()) {
-    return IreeRunLoomCommandResult{
+    return GgmlHrxRunLoomCommandResult{
         std::nullopt, std::nullopt,
-        "iree-run-loom command emission requires --expect"};
+        "ggml-hrx-run-loom command emission requires --expect"};
   }
   std::unordered_map<int, const Expectation *> expectations_by_position;
   for (const Expectation &expectation : invocation.expectations) {
@@ -1083,7 +1084,7 @@ IreeRunLoomCommandResult BuildIreeRunLoomCommand(const Invocation &invocation) {
   }
 
   std::vector<std::string> args;
-  args.push_back(invocation.iree_run_loom_path);
+  args.push_back(invocation.ggml_hrx_run_loom_path);
   args.push_back(kernel_path);
   const std::string backend = BackendForTarget(invocation.target);
   args.push_back("--backend=" + backend);
@@ -1105,7 +1106,7 @@ IreeRunLoomCommandResult BuildIreeRunLoomCommand(const Invocation &invocation) {
     std::optional<std::string> binding_spec = BuildNpyStorageBindingSpec(
         binding.path, binding.dtype, binding.elements, &error);
     if (!binding_spec.has_value()) {
-      return IreeRunLoomCommandResult{std::nullopt, std::nullopt, error};
+      return GgmlHrxRunLoomCommandResult{std::nullopt, std::nullopt, error};
     }
     args.push_back("--kernel-input-buffer=" + *binding_spec);
 
@@ -1121,7 +1122,7 @@ IreeRunLoomCommandResult BuildIreeRunLoomCommand(const Invocation &invocation) {
     std::optional<std::string> expected_spec = BuildNpyExpectedBindingSpec(
         expected_path, binding.dtype, binding.elements, &error);
     if (!expected_spec.has_value()) {
-      return IreeRunLoomCommandResult{std::nullopt, std::nullopt, error};
+      return GgmlHrxRunLoomCommandResult{std::nullopt, std::nullopt, error};
     }
     expected_specs.push_back(*expected_spec);
     expected_tolerances.push_back(FormatDouble(expected_atol) + "," +
@@ -1134,7 +1135,7 @@ IreeRunLoomCommandResult BuildIreeRunLoomCommand(const Invocation &invocation) {
     args.push_back("--expected-kernel-buffer-tolerance=" + expected_tolerance);
   }
 
-  return IreeRunLoomCommandResult{loom_link_args, args, ""};
+  return GgmlHrxRunLoomCommandResult{loom_link_args, args, ""};
 }
 
 std::string ToString(BindingKind kind) {
@@ -1187,14 +1188,15 @@ std::string BackendForTarget(const std::string &target) {
 
 std::string RenderResultJson(const Invocation &invocation) {
   std::optional<BridgeRenderResult> bridge_result;
-  if (invocation.emit_iree_run_loom_command) {
+  if (invocation.emit_ggml_hrx_run_loom_command) {
     bridge_result = BuildBridgeRenderResult(invocation);
   }
 
   std::ostringstream os;
   os << "{\n";
   os << "  \"status\": \""
-     << (bridge_result.has_value() && invocation.execute_iree_run_loom_command
+     << (bridge_result.has_value() &&
+                 invocation.execute_ggml_hrx_run_loom_command
              ? bridge_result->status
              : "not_run")
      << "\",\n";
@@ -1240,7 +1242,8 @@ std::string RenderResultJson(const Invocation &invocation) {
   for (std::size_t i = 0; i < invocation.expectations.size(); ++i) {
     const Expectation &expectation = invocation.expectations[i];
     std::string check_status = "not_run";
-    if (bridge_result.has_value() && invocation.execute_iree_run_loom_command) {
+    if (bridge_result.has_value() &&
+        invocation.execute_ggml_hrx_run_loom_command) {
       if (bridge_result->status == "run_passed") {
         check_status = "passed";
       } else if (bridge_result->status == "run_failed") {
@@ -1262,9 +1265,9 @@ std::string RenderResultJson(const Invocation &invocation) {
   if (!invocation.expectations.empty()) {
     os << "  ";
   }
-  if (invocation.emit_iree_run_loom_command) {
+  if (invocation.emit_ggml_hrx_run_loom_command) {
     os << "],\n";
-    os << "  \"iree_run_loom_bridge\": {\n";
+    os << "  \"ggml_hrx_run_loom_bridge\": {\n";
     os << "    \"status\": \"" << bridge_result->status << "\"";
     if (bridge_result->command.args.has_value()) {
       os << ",\n";

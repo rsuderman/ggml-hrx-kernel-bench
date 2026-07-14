@@ -801,9 +801,9 @@ def test_prepare_execution_materializes_inline_f32_fixtures(tmp_path: Path) -> N
         output_path=tmp_path / "result.json",
         runner=tmp_path / "runner",
         loom_link=tmp_path / "loom-link",
-        iree_run_loom=tmp_path / "iree-run-loom",
+        ggml_hrx_run_loom=tmp_path / "ggml-hrx-run-loom",
         repo_root=Path.cwd(),
-        execute_iree_run_loom=True,
+        execute_ggml_hrx_run_loom=True,
     )
 
     assert np.load(tmp_path / "fixtures" / "src0.npy").tolist() == [1.0, 2.0, 3.0, 4.0]
@@ -814,28 +814,28 @@ def test_prepare_execution_materializes_inline_f32_fixtures(tmp_path: Path) -> N
         12.0,
     ]
     assert prepared.command[:2] == [str(tmp_path / "runner"), "--kernel"]
-    assert "--execute-iree-run-loom-command" in prepared.command
+    assert "--execute-ggml-hrx-run-loom-command" in prepared.command
     assert "--loom-link" in prepared.command
-    assert "--iree-run-loom" in prepared.command
+    assert "--ggml-hrx-run-loom" in prepared.command
     assert "--linked-kernel-output" in prepared.command
     assert "--binding" in prepared.command
     assert "--expect" in prepared.command
     assert "2:close:" in " ".join(prepared.command)
 
 
-def test_prepare_execution_requires_iree_run_loom_for_execution(tmp_path: Path) -> None:
+def test_prepare_execution_requires_ggml_hrx_run_loom_for_execution(tmp_path: Path) -> None:
     descriptor_path = _write_descriptor(tmp_path)
 
-    with pytest.raises(RuntimeError, match="execute requires an explicit iree-run-loom path"):
+    with pytest.raises(RuntimeError, match="execute requires an explicit ggml-hrx-run-loom path"):
         prepare_execution(
             descriptor_path=descriptor_path,
             fixture_dir=tmp_path / "fixtures",
             output_path=tmp_path / "result.json",
             runner=tmp_path / "runner",
             loom_link=tmp_path / "loom-link",
-            iree_run_loom=None,
+            ggml_hrx_run_loom=None,
             repo_root=Path.cwd(),
-            execute_iree_run_loom=True,
+            execute_ggml_hrx_run_loom=True,
         )
 
 
@@ -867,7 +867,7 @@ def test_prepare_execution_uses_descriptor_relative_fixture_paths(tmp_path: Path
         output_path=tmp_path / "result.json",
         runner="runner",
         loom_link=None,
-        iree_run_loom=None,
+        ggml_hrx_run_loom=None,
         repo_root=Path.cwd(),
     )
 
@@ -909,7 +909,7 @@ def test_prepare_execution_emits_scalar_flags(tmp_path: Path) -> None:
         output_path=tmp_path / "result.json",
         runner="runner",
         loom_link=None,
-        iree_run_loom=None,
+        ggml_hrx_run_loom=None,
         repo_root=Path.cwd(),
     )
 
@@ -942,7 +942,7 @@ def test_execute_prepared_invokes_runner(tmp_path: Path) -> None:
         output_path=tmp_path / "result.json",
         runner=sys.executable,
         loom_link=None,
-        iree_run_loom=None,
+        ggml_hrx_run_loom=None,
         repo_root=Path.cwd(),
     )
     command = list(prepared.command)
@@ -987,7 +987,7 @@ def test_infra_script_prints_command_without_execution(tmp_path: Path) -> None:
     assert result.returncode == 0, result.stderr
     payload = json.loads(result.stdout)
     assert payload["command"][0] == "runner"
-    assert "--execute-iree-run-loom-command" not in payload["command"]
+    assert "--execute-ggml-hrx-run-loom-command" not in payload["command"]
 
 
 def test_descriptor_from_generated_add_case_emits_compact_payload(tmp_path: Path) -> None:
@@ -1164,7 +1164,7 @@ def test_descriptor_from_generated_cont_f32_case_uses_unary_buffer_abi(tmp_path:
         output_path=tmp_path / "result.json",
         runner="runner",
         loom_link=None,
-        iree_run_loom=None,
+        ggml_hrx_run_loom=None,
         repo_root=tmp_path,
     )
     command = prepared.command
@@ -1222,7 +1222,7 @@ def test_descriptor_from_generated_copy_case_uses_cast_storage_dtypes(
         output_path=tmp_path / "result.json",
         runner="runner",
         loom_link=None,
-        iree_run_loom=None,
+        ggml_hrx_run_loom=None,
         repo_root=tmp_path,
     )
     command = prepared.command
@@ -1328,7 +1328,7 @@ def test_descriptor_from_generated_mul_mat_float_case_uses_kernel_abi(
         output_path=tmp_path / "result.json",
         runner="runner",
         loom_link=None,
-        iree_run_loom=None,
+        ggml_hrx_run_loom=None,
         repo_root=tmp_path,
     )
     command = prepared.command
@@ -1416,7 +1416,7 @@ def test_descriptor_from_generated_mul_mat_quantized_case_uses_int8_storage(
         output_path=tmp_path / "result.json",
         runner="runner",
         loom_link=None,
-        iree_run_loom=None,
+        ggml_hrx_run_loom=None,
         repo_root=tmp_path,
     )
     command = prepared.command
@@ -1498,7 +1498,7 @@ def test_descriptor_from_generated_soft_max_f32_case_materializes_row_fixtures(
         output_path=tmp_path / "result.json",
         runner="runner",
         loom_link=None,
-        iree_run_loom=None,
+        ggml_hrx_run_loom=None,
         repo_root=tmp_path,
     )
     command = prepared.command
@@ -1558,7 +1558,7 @@ def test_descriptor_from_generated_rope_f32_case_uses_scalar_and_position_abi(
         output_path=tmp_path / "result.json",
         runner="runner",
         loom_link=None,
-        iree_run_loom=None,
+        ggml_hrx_run_loom=None,
         repo_root=tmp_path,
     )
     command = prepared.command
@@ -1606,7 +1606,7 @@ def test_descriptor_from_generated_add_f16_case_uses_int16_storage(tmp_path: Pat
         output_path=tmp_path / "result.json",
         runner="runner",
         loom_link=None,
-        iree_run_loom=None,
+        ggml_hrx_run_loom=None,
         repo_root=tmp_path,
     )
     command = prepared.command
@@ -1646,7 +1646,7 @@ def test_descriptor_from_generated_abs_f16_case_uses_int16_storage(tmp_path: Pat
         output_path=tmp_path / "result.json",
         runner="runner",
         loom_link=None,
-        iree_run_loom=None,
+        ggml_hrx_run_loom=None,
         repo_root=tmp_path,
     )
     command = prepared.command
@@ -1687,7 +1687,7 @@ def test_descriptor_from_generated_get_rows_f32_case_uses_i32_indices(tmp_path: 
         output_path=tmp_path / "result.json",
         runner="runner",
         loom_link=None,
-        iree_run_loom=None,
+        ggml_hrx_run_loom=None,
         repo_root=tmp_path,
     )
     command = prepared.command
@@ -1731,7 +1731,7 @@ def test_descriptor_from_generated_get_rows_q8_0_case_uses_packed_storage(
         output_path=tmp_path / "result.json",
         runner="runner",
         loom_link=None,
-        iree_run_loom=None,
+        ggml_hrx_run_loom=None,
         repo_root=tmp_path,
     )
     command = prepared.command
@@ -1774,7 +1774,7 @@ def test_descriptor_from_generated_set_rows_f32_case_uses_i32_indices(tmp_path: 
         output_path=tmp_path / "result.json",
         runner="runner",
         loom_link=None,
-        iree_run_loom=None,
+        ggml_hrx_run_loom=None,
         repo_root=tmp_path,
     )
     command = prepared.command
@@ -1816,7 +1816,7 @@ def test_descriptor_from_generated_cont_set_rows_f32_f16_case_uses_i32_indices(
         output_path=tmp_path / "result.json",
         runner="runner",
         loom_link=None,
-        iree_run_loom=None,
+        ggml_hrx_run_loom=None,
         repo_root=tmp_path,
     )
     command = prepared.command
@@ -1907,7 +1907,7 @@ def test_write_generated_execution_descriptors_writes_manifest_and_descriptor(tm
         output_path=tmp_path / "result.json",
         runner="runner",
         loom_link=None,
-        iree_run_loom=None,
+        ggml_hrx_run_loom=None,
         repo_root=Path.cwd(),
     )
     assert "--workgroup-count" in prepared.command
@@ -2016,7 +2016,7 @@ def test_run_execution_descriptor_manifest_prepares_commands(tmp_path: Path) -> 
         output_dir=tmp_path / "runs",
         runner="runner",
         loom_link="loom-link",
-        iree_run_loom="iree-run-loom",
+        ggml_hrx_run_loom="ggml-hrx-run-loom",
         repo_root=Path.cwd(),
     )
 
@@ -2024,7 +2024,7 @@ def test_run_execution_descriptor_manifest_prepares_commands(tmp_path: Path) -> 
     assert run_manifest["executed_count"] == 0
     assert run_manifest["failed_count"] == 0
     assert run_manifest["entries"][0]["descriptor_path"] == str(descriptor_path.resolve())
-    assert "--execute-iree-run-loom-command" not in run_manifest["entries"][0]["command"]
+    assert "--execute-ggml-hrx-run-loom-command" not in run_manifest["entries"][0]["command"]
     assert (tmp_path / "runs" / "loom-execution-runs.json").is_file()
 
 
@@ -2045,14 +2045,14 @@ def test_run_execution_descriptor_manifest_executes_fake_runner(tmp_path: Path) 
         encoding="utf-8",
     )
     os.chmod(runner, 0o755)
-    iree_run_loom = tmp_path / "iree-run-loom"
+    ggml_hrx_run_loom = tmp_path / "ggml-hrx-run-loom"
 
     run_manifest = run_execution_descriptor_manifest(
         manifest_path=manifest_path,
         output_dir=tmp_path / "runs",
         runner=runner,
         loom_link=None,
-        iree_run_loom=iree_run_loom,
+        ggml_hrx_run_loom=ggml_hrx_run_loom,
         repo_root=Path.cwd(),
         execute=True,
     )
@@ -2122,7 +2122,7 @@ def test_run_execution_descriptor_manifest_reports_gtest_style_progress(tmp_path
         output_dir=tmp_path / "runs",
         runner=runner,
         loom_link=None,
-        iree_run_loom=tmp_path / "iree-run-loom",
+        ggml_hrx_run_loom=tmp_path / "ggml-hrx-run-loom",
         repo_root=Path.cwd(),
         execute=True,
         progress=progress.append,

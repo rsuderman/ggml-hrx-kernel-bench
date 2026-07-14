@@ -9,12 +9,13 @@ from pathlib import Path
 REQUIRED_TOOL_NAMES = (
     "loom-link",
     "loom-compile",
-    "iree-run-loom",
+    "ggml-hrx-run-loom",
     "iree-test-loom",
     "iree-benchmark-loom",
 )
 TOOL_DIR_ENV_VAR = "GGML_HRX_TOOL_DIR"
-IREE_RUN_LOOM_EXPECTED_BUFFER_TOLERANCE_FLAG = "--expected-kernel-buffer-tolerance"
+GGML_HRX_RUN_LOOM_TOOL_NAME = "ggml-hrx-run-loom"
+GGML_HRX_RUN_LOOM_EXPECTED_BUFFER_TOLERANCE_FLAG = "--expected-kernel-buffer-tolerance"
 
 
 def configured_tool_dir(tool_dir: str | None = None) -> str | None:
@@ -55,7 +56,7 @@ def require_tool(tool_name: str, *, tool_dir: str | None = None) -> str:
     return path
 
 
-def iree_run_loom_supports_expected_buffer_tolerance(
+def ggml_hrx_run_loom_supports_expected_buffer_tolerance(
     tool_path: str | Path,
     *,
     timeout: float = 10.0,
@@ -68,22 +69,28 @@ def iree_run_loom_supports_expected_buffer_tolerance(
         stderr=subprocess.STDOUT,
         timeout=timeout,
     )
-    return IREE_RUN_LOOM_EXPECTED_BUFFER_TOLERANCE_FLAG in result.stdout
+    return GGML_HRX_RUN_LOOM_EXPECTED_BUFFER_TOLERANCE_FLAG in result.stdout
 
 
-def require_iree_run_loom_expected_buffer_tolerance(
+def require_ggml_hrx_run_loom_expected_buffer_tolerance(
     *,
     tool_dir: str | None = None,
     tool_path: str | Path | None = None,
 ) -> str:
-    path = str(tool_path) if tool_path is not None else require_tool("iree-run-loom", tool_dir=tool_dir)
+    path = (
+        str(tool_path)
+        if tool_path is not None
+        else require_tool(GGML_HRX_RUN_LOOM_TOOL_NAME, tool_dir=tool_dir)
+    )
     try:
-        supports_flag = iree_run_loom_supports_expected_buffer_tolerance(path)
+        supports_flag = ggml_hrx_run_loom_supports_expected_buffer_tolerance(path)
     except (OSError, subprocess.SubprocessError) as exc:
-        raise RuntimeError(f"failed to query iree-run-loom capabilities at {path}: {exc}") from exc
+        raise RuntimeError(
+            f"failed to query {GGML_HRX_RUN_LOOM_TOOL_NAME} capabilities at {path}: {exc}"
+        ) from exc
     if not supports_flag:
         raise RuntimeError(
-            "iree-run-loom does not support "
-            f"{IREE_RUN_LOOM_EXPECTED_BUFFER_TOLERANCE_FLAG}: {path}"
+            f"{GGML_HRX_RUN_LOOM_TOOL_NAME} does not support "
+            f"{GGML_HRX_RUN_LOOM_EXPECTED_BUFFER_TOLERANCE_FLAG}: {path}"
         )
     return path

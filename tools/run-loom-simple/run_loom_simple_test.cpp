@@ -15,7 +15,7 @@ namespace {
 
 using ggml_hrx::run_loom_simple::BackendForTarget;
 using ggml_hrx::run_loom_simple::BindingKind;
-using ggml_hrx::run_loom_simple::BuildIreeRunLoomCommand;
+using ggml_hrx::run_loom_simple::BuildGgmlHrxRunLoomCommand;
 using ggml_hrx::run_loom_simple::CompareClose;
 using ggml_hrx::run_loom_simple::DType;
 using ggml_hrx::run_loom_simple::LoadF32Npy1D;
@@ -557,16 +557,16 @@ void TestRenderNotRunJson() {
          "JSON has expectation binding");
 }
 
-void TestParsesIreeRunLoomBridgeFlags() {
+void TestParsesGgmlHrxRunLoomBridgeFlags() {
   auto args = ValidArgsWithoutConfig();
   args.push_back("--loom-link");
   args.push_back("/tmp/loom-link");
   args.push_back("--linked-kernel-output");
   args.push_back("/tmp/linked.loom");
-  args.push_back("--iree-run-loom");
-  args.push_back("/tmp/iree-run-loom");
-  args.push_back("--emit-iree-run-loom-command");
-  args.push_back("--execute-iree-run-loom-command");
+  args.push_back("--ggml-hrx-run-loom");
+  args.push_back("/tmp/ggml-hrx-run-loom");
+  args.push_back("--emit-ggml-hrx-run-loom-command");
+  args.push_back("--execute-ggml-hrx-run-loom-command");
   const auto parsed = ParseArgs(args);
   Expect(parsed.invocation.has_value(), "bridge flags parse");
   if (!parsed.invocation.has_value()) {
@@ -576,11 +576,11 @@ void TestParsesIreeRunLoomBridgeFlags() {
          "loom-link tool path parsed");
   Expect(parsed.invocation->linked_kernel_output == "/tmp/linked.loom",
          "linked kernel output parsed");
-  Expect(parsed.invocation->iree_run_loom_path == "/tmp/iree-run-loom",
+  Expect(parsed.invocation->ggml_hrx_run_loom_path == "/tmp/ggml-hrx-run-loom",
          "bridge tool path parsed");
-  Expect(parsed.invocation->emit_iree_run_loom_command,
+  Expect(parsed.invocation->emit_ggml_hrx_run_loom_command,
          "bridge emission flag parsed");
-  Expect(parsed.invocation->execute_iree_run_loom_command,
+  Expect(parsed.invocation->execute_ggml_hrx_run_loom_command,
          "bridge execution flag parsed");
 }
 
@@ -767,19 +767,19 @@ void TestCompareCloseRejectsNaN() {
   Expect(result.first_failing_index.has_value(), "nan failure index");
 }
 
-void TestIreeRunLoomBridgeRejectsConfigWithoutLinkedOutput() {
+void TestGgmlHrxRunLoomBridgeRejectsConfigWithoutLinkedOutput() {
   const auto parsed = ParseArgs(ValidArgs());
   Expect(parsed.invocation.has_value(), "valid command parses for bridge");
   if (!parsed.invocation.has_value()) {
     return;
   }
-  const auto command = BuildIreeRunLoomCommand(*parsed.invocation);
+  const auto command = BuildGgmlHrxRunLoomCommand(*parsed.invocation);
   Expect(!command.args.has_value(), "bridge rejects unstaged config bindings");
   Expect(command.error.find("--linked-kernel-output") != std::string::npos,
          "bridge linked output rejection error");
 }
 
-void TestIreeRunLoomBridgeStagesConfigKernel() {
+void TestGgmlHrxRunLoomBridgeStagesConfigKernel() {
   const std::filesystem::path dir = TempDir();
   WriteF32Npy(dir / "src0.npy", {1.0f, 2.0f, 3.0f, 4.0f});
   WriteF32Npy(dir / "dst_init.npy", {0.0f, 0.0f, 0.0f, 0.0f});
@@ -797,8 +797,8 @@ void TestIreeRunLoomBridgeStagesConfigKernel() {
       "/tmp/loom-link",
       "--linked-kernel-output",
       (dir / "linked.loom").string(),
-      "--iree-run-loom",
-      "/tmp/iree-run-loom",
+      "--ggml-hrx-run-loom",
+      "/tmp/ggml-hrx-run-loom",
       "--binding",
       "0:input:f32:4:" + (dir / "src0.npy").string(),
       "--binding",
@@ -813,7 +813,7 @@ void TestIreeRunLoomBridgeStagesConfigKernel() {
   if (!parsed.invocation.has_value()) {
     return;
   }
-  const auto command = BuildIreeRunLoomCommand(*parsed.invocation);
+  const auto command = BuildGgmlHrxRunLoomCommand(*parsed.invocation);
   Expect(command.loom_link_args.has_value(), "link command is staged");
   Expect(command.args.has_value(), "staged bridge command builds");
   if (!command.loom_link_args.has_value() || !command.args.has_value()) {
@@ -834,7 +834,7 @@ void TestIreeRunLoomBridgeStagesConfigKernel() {
          "run command uses targeted linked kernel");
 }
 
-void TestIreeRunLoomBridgeBuildsNpyBackedCommand() {
+void TestGgmlHrxRunLoomBridgeBuildsNpyBackedCommand() {
   const std::filesystem::path dir = TempDir();
   WriteF32Npy(dir / "src0.npy", {1.0f, 2.0f, 3.0f, 4.0f});
   WriteF32Npy(dir / "dst_init.npy", {0.0f, 0.0f, 0.0f, 0.0f});
@@ -848,8 +848,8 @@ void TestIreeRunLoomBridgeBuildsNpyBackedCommand() {
       "gfx1100",
       "--workgroup-count",
       "4,1,1",
-      "--iree-run-loom",
-      "/tmp/iree-run-loom",
+      "--ggml-hrx-run-loom",
+      "/tmp/ggml-hrx-run-loom",
       "--binding",
       "0:input:f32:4:" + (dir / "src0.npy").string(),
       "--binding",
@@ -864,7 +864,7 @@ void TestIreeRunLoomBridgeBuildsNpyBackedCommand() {
   if (!parsed.invocation.has_value()) {
     return;
   }
-  const auto command = BuildIreeRunLoomCommand(*parsed.invocation);
+  const auto command = BuildGgmlHrxRunLoomCommand(*parsed.invocation);
   Expect(command.args.has_value(), "npy bridge command builds");
   if (!command.args.has_value()) {
     std::cerr << "bridge error: " << command.error << "\n";
@@ -872,13 +872,13 @@ void TestIreeRunLoomBridgeBuildsNpyBackedCommand() {
   }
   Expect(!command.loom_link_args.has_value(),
          "no link command for pre-linked kernels");
-  Expect((*command.args)[0] == "/tmp/iree-run-loom", "bridge command tool");
+  Expect((*command.args)[0] == "/tmp/ggml-hrx-run-loom", "bridge command tool");
   Expect(std::find(command.args->begin(), command.args->end(),
                    "--backend=amdgpu-hal") != command.args->end(),
          "bridge command backend");
   Expect(std::find(command.args->begin(), command.args->end(),
                    "--target=gfx1100") == command.args->end(),
-         "bridge command does not require iree-run-loom target support");
+         "bridge command does not require ggml-hrx-run-loom target support");
   Expect(std::find(command.args->begin(), command.args->end(),
                    "--workgroup-count=4,1,1") != command.args->end(),
          "bridge command workgroup count");
@@ -900,27 +900,35 @@ void TestIreeRunLoomBridgeBuildsNpyBackedCommand() {
          "bridge command output tolerance");
 }
 
-void TestIreeRunLoomBridgeBuildsF16NpyBackedCommand() {
+void TestGgmlHrxRunLoomBridgeBuildsF16NpyBackedCommand() {
   const std::filesystem::path dir = TempDir();
   WriteI16Npy(dir / "src0.npy", {0x3C00, 0x4000, 0x4200, 0x4400});
   WriteI16Npy(dir / "dst_init.npy", {0, 0, 0, 0});
   WriteI16Npy(dir / "expected.npy", {0x3C00, 0x4000, 0x4200, 0x4400});
   auto args = std::vector<std::string>{
-      "--kernel",        "linked.loom",
-      "--root",          "@add_f16",
-      "--target",        "gfx1100",
-      "--iree-run-loom", "/tmp/iree-run-loom",
-      "--binding",       "0:input:f16:4:" + (dir / "src0.npy").string(),
-      "--binding",       "1:output:f16:4:" + (dir / "dst_init.npy").string(),
-      "--expect",        "1:close:" + (dir / "expected.npy").string() + ":0:0",
-      "--output",        "result.json",
+      "--kernel",
+      "linked.loom",
+      "--root",
+      "@add_f16",
+      "--target",
+      "gfx1100",
+      "--ggml-hrx-run-loom",
+      "/tmp/ggml-hrx-run-loom",
+      "--binding",
+      "0:input:f16:4:" + (dir / "src0.npy").string(),
+      "--binding",
+      "1:output:f16:4:" + (dir / "dst_init.npy").string(),
+      "--expect",
+      "1:close:" + (dir / "expected.npy").string() + ":0:0",
+      "--output",
+      "result.json",
   };
   const auto parsed = ParseArgs(args);
   Expect(parsed.invocation.has_value(), "f16 npy bridge command parses");
   if (!parsed.invocation.has_value()) {
     return;
   }
-  const auto command = BuildIreeRunLoomCommand(*parsed.invocation);
+  const auto command = BuildGgmlHrxRunLoomCommand(*parsed.invocation);
   Expect(command.args.has_value(), "f16 npy bridge command builds");
   if (!command.args.has_value()) {
     std::cerr << "bridge error: " << command.error << "\n";
@@ -940,27 +948,35 @@ void TestIreeRunLoomBridgeBuildsF16NpyBackedCommand() {
          "f16 bridge command exact tolerance");
 }
 
-void TestIreeRunLoomBridgeBuildsBF16NpyBackedCommand() {
+void TestGgmlHrxRunLoomBridgeBuildsBF16NpyBackedCommand() {
   const std::filesystem::path dir = TempDir();
   WriteI16Npy(dir / "src0.npy", {0x3F80, 0x4000, 0x4040, 0x4080});
   WriteI16Npy(dir / "dst_init.npy", {0, 0, 0, 0});
   WriteI16Npy(dir / "expected.npy", {0x3F80, 0x4000, 0x4040, 0x4080});
   auto args = std::vector<std::string>{
-      "--kernel",        "linked.loom",
-      "--root",          "@copy_bf16_bf16",
-      "--target",        "gfx1100",
-      "--iree-run-loom", "/tmp/iree-run-loom",
-      "--binding",       "0:input:bf16:4:" + (dir / "src0.npy").string(),
-      "--binding",       "1:output:bf16:4:" + (dir / "dst_init.npy").string(),
-      "--expect",        "1:close:" + (dir / "expected.npy").string() + ":0:0",
-      "--output",        "result.json",
+      "--kernel",
+      "linked.loom",
+      "--root",
+      "@copy_bf16_bf16",
+      "--target",
+      "gfx1100",
+      "--ggml-hrx-run-loom",
+      "/tmp/ggml-hrx-run-loom",
+      "--binding",
+      "0:input:bf16:4:" + (dir / "src0.npy").string(),
+      "--binding",
+      "1:output:bf16:4:" + (dir / "dst_init.npy").string(),
+      "--expect",
+      "1:close:" + (dir / "expected.npy").string() + ":0:0",
+      "--output",
+      "result.json",
   };
   const auto parsed = ParseArgs(args);
   Expect(parsed.invocation.has_value(), "bf16 npy bridge command parses");
   if (!parsed.invocation.has_value()) {
     return;
   }
-  const auto command = BuildIreeRunLoomCommand(*parsed.invocation);
+  const auto command = BuildGgmlHrxRunLoomCommand(*parsed.invocation);
   Expect(command.args.has_value(), "bf16 npy bridge command builds");
   if (!command.args.has_value()) {
     std::cerr << "bridge error: " << command.error << "\n";
@@ -980,7 +996,7 @@ void TestIreeRunLoomBridgeBuildsBF16NpyBackedCommand() {
          "bf16 bridge command exact tolerance");
 }
 
-void TestIreeRunLoomBridgeBuildsI32NpyBackedCommand() {
+void TestGgmlHrxRunLoomBridgeBuildsI32NpyBackedCommand() {
   const std::filesystem::path dir = TempDir();
   WriteF32Npy(dir / "src0.npy", {1.0f, 2.0f, 3.0f, 4.0f});
   WriteI32Npy(dir / "indices.npy", {0, 1});
@@ -993,8 +1009,8 @@ void TestIreeRunLoomBridgeBuildsI32NpyBackedCommand() {
       "@get_rows_f32",
       "--target",
       "gfx1100",
-      "--iree-run-loom",
-      "/tmp/iree-run-loom",
+      "--ggml-hrx-run-loom",
+      "/tmp/ggml-hrx-run-loom",
       "--binding",
       "0:input:f32:4:" + (dir / "src0.npy").string(),
       "--binding",
@@ -1011,7 +1027,7 @@ void TestIreeRunLoomBridgeBuildsI32NpyBackedCommand() {
   if (!parsed.invocation.has_value()) {
     return;
   }
-  const auto command = BuildIreeRunLoomCommand(*parsed.invocation);
+  const auto command = BuildGgmlHrxRunLoomCommand(*parsed.invocation);
   Expect(command.args.has_value(), "i32 npy bridge command builds");
   if (!command.args.has_value()) {
     std::cerr << "bridge error: " << command.error << "\n";
@@ -1023,7 +1039,7 @@ void TestIreeRunLoomBridgeBuildsI32NpyBackedCommand() {
          "i32 bridge command input spec");
 }
 
-void TestIreeRunLoomBridgeBuildsPackedQuantNpyBackedCommand() {
+void TestGgmlHrxRunLoomBridgeBuildsPackedQuantNpyBackedCommand() {
   const std::filesystem::path dir = TempDir();
   WriteI8Npy(dir / "src0.npy", {1, -2, 3, -4});
   WriteF32Npy(dir / "src1.npy", {1.0f, 2.0f, 3.0f, 4.0f});
@@ -1036,8 +1052,8 @@ void TestIreeRunLoomBridgeBuildsPackedQuantNpyBackedCommand() {
       "@mul_mat_q4_k_f32_direct",
       "--target",
       "gfx1100",
-      "--iree-run-loom",
-      "/tmp/iree-run-loom",
+      "--ggml-hrx-run-loom",
+      "/tmp/ggml-hrx-run-loom",
       "--binding",
       "0:input:q4_k:4:" + (dir / "src0.npy").string(),
       "--binding",
@@ -1054,7 +1070,7 @@ void TestIreeRunLoomBridgeBuildsPackedQuantNpyBackedCommand() {
   if (!parsed.invocation.has_value()) {
     return;
   }
-  const auto command = BuildIreeRunLoomCommand(*parsed.invocation);
+  const auto command = BuildGgmlHrxRunLoomCommand(*parsed.invocation);
   Expect(command.args.has_value(), "packed quant npy bridge command builds");
   if (!command.args.has_value()) {
     std::cerr << "bridge error: " << command.error << "\n";
@@ -1074,7 +1090,7 @@ void TestIreeRunLoomBridgeBuildsPackedQuantNpyBackedCommand() {
          "packed quant bridge command output tolerance");
 }
 
-void TestIreeRunLoomBridgeAcceptsNonSplatTensor() {
+void TestGgmlHrxRunLoomBridgeAcceptsNonSplatTensor() {
   const std::filesystem::path dir = TempDir();
   WriteF32Npy(dir / "src0.npy", {1.0f, 2.0f, 1.0f, 1.0f});
   WriteF32Npy(dir / "dst_init.npy", {0.0f, 0.0f, 0.0f, 0.0f});
@@ -1093,14 +1109,14 @@ void TestIreeRunLoomBridgeAcceptsNonSplatTensor() {
   if (!parsed.invocation.has_value()) {
     return;
   }
-  const auto command = BuildIreeRunLoomCommand(*parsed.invocation);
+  const auto command = BuildGgmlHrxRunLoomCommand(*parsed.invocation);
   Expect(command.args.has_value(), "non-splat npy bridge command accepted");
   if (!command.args.has_value()) {
     std::cerr << "bridge error: " << command.error << "\n";
   }
 }
 
-void TestIreeRunLoomBridgeBuildsScalarCommand() {
+void TestGgmlHrxRunLoomBridgeBuildsScalarCommand() {
   const std::filesystem::path dir = TempDir();
   WriteF32Npy(dir / "src0.npy", {1.0f, 2.0f, 3.0f, 4.0f});
   WriteF32Npy(dir / "dst_init.npy", {0.0f, 0.0f, 0.0f, 0.0f});
@@ -1120,7 +1136,7 @@ void TestIreeRunLoomBridgeBuildsScalarCommand() {
   if (!parsed.invocation.has_value()) {
     return;
   }
-  const auto command = BuildIreeRunLoomCommand(*parsed.invocation);
+  const auto command = BuildGgmlHrxRunLoomCommand(*parsed.invocation);
   Expect(command.args.has_value(), "scalar bridge command builds");
   if (!command.args.has_value()) {
     std::cerr << "bridge error: " << command.error << "\n";
@@ -1144,8 +1160,8 @@ void TestExecuteBridgeRunsNoConfigCommand() {
   WriteF32Npy(dir / "src0.npy", {1.0f, 2.0f, 3.0f, 4.0f});
   WriteF32Npy(dir / "dst_init.npy", {0.0f, 0.0f, 0.0f, 0.0f});
   WriteF32Npy(dir / "expected.npy", {2.0f, 3.0f, 4.0f, 5.0f});
-  WriteExecutableScript(dir / "iree-run-loom", "echo run-tool \"$@\"\n"
-                                               "exit 0\n");
+  WriteExecutableScript(dir / "ggml-hrx-run-loom", "echo run-tool \"$@\"\n"
+                                                   "exit 0\n");
 
   auto args = std::vector<std::string>{
       "--kernel",
@@ -1154,8 +1170,8 @@ void TestExecuteBridgeRunsNoConfigCommand() {
       "@add_f32",
       "--target",
       "gfx1100",
-      "--iree-run-loom",
-      (dir / "iree-run-loom").string(),
+      "--ggml-hrx-run-loom",
+      (dir / "ggml-hrx-run-loom").string(),
       "--binding",
       "0:input:f32:4:" + (dir / "src0.npy").string(),
       "--binding",
@@ -1164,7 +1180,7 @@ void TestExecuteBridgeRunsNoConfigCommand() {
       "1:close:" + (dir / "expected.npy").string() + ":1e-5:1e-5",
       "--output",
       (dir / "result.json").string(),
-      "--execute-iree-run-loom-command",
+      "--execute-ggml-hrx-run-loom-command",
   };
   const auto parsed = ParseArgs(args);
   Expect(parsed.invocation.has_value(), "executable bridge command parses");
@@ -1201,8 +1217,9 @@ void TestExecuteBridgeStopsOnLinkFailure() {
   WriteF32Npy(dir / "expected.npy", {2.0f, 3.0f, 4.0f, 5.0f});
   WriteExecutableScript(dir / "loom-link", "echo link-failed \"$@\"\n"
                                            "exit 7\n");
-  WriteExecutableScript(dir / "iree-run-loom", "echo run-should-not-execute\n"
-                                               "exit 0\n");
+  WriteExecutableScript(dir / "ggml-hrx-run-loom",
+                        "echo run-should-not-execute\n"
+                        "exit 0\n");
 
   auto args = std::vector<std::string>{
       "--kernel",
@@ -1217,8 +1234,8 @@ void TestExecuteBridgeStopsOnLinkFailure() {
       (dir / "loom-link").string(),
       "--linked-kernel-output",
       (dir / "linked.loom").string(),
-      "--iree-run-loom",
-      (dir / "iree-run-loom").string(),
+      "--ggml-hrx-run-loom",
+      (dir / "ggml-hrx-run-loom").string(),
       "--binding",
       "0:input:f32:4:" + (dir / "src0.npy").string(),
       "--binding",
@@ -1227,7 +1244,7 @@ void TestExecuteBridgeStopsOnLinkFailure() {
       "1:close:" + (dir / "expected.npy").string() + ":1e-5:1e-5",
       "--output",
       "result.json",
-      "--execute-iree-run-loom-command",
+      "--execute-ggml-hrx-run-loom-command",
   };
   const auto parsed = ParseArgs(args);
   Expect(parsed.invocation.has_value(), "link-failure bridge command parses");
@@ -1266,7 +1283,7 @@ int main() {
   TestRejectsExpectForInputBinding();
   TestParsesMultipleExpectations();
   TestRenderNotRunJson();
-  TestParsesIreeRunLoomBridgeFlags();
+  TestParsesGgmlHrxRunLoomBridgeFlags();
   TestLoadsF32NpyV1();
   TestLoadsF32NpyV2();
   TestValidatesBF16StorageNpy();
@@ -1287,15 +1304,15 @@ int main() {
   TestCompareClosePassesWithinTolerance();
   TestCompareCloseFailsOutsideTolerance();
   TestCompareCloseRejectsNaN();
-  TestIreeRunLoomBridgeRejectsConfigWithoutLinkedOutput();
-  TestIreeRunLoomBridgeStagesConfigKernel();
-  TestIreeRunLoomBridgeBuildsNpyBackedCommand();
-  TestIreeRunLoomBridgeBuildsBF16NpyBackedCommand();
-  TestIreeRunLoomBridgeBuildsF16NpyBackedCommand();
-  TestIreeRunLoomBridgeBuildsI32NpyBackedCommand();
-  TestIreeRunLoomBridgeBuildsPackedQuantNpyBackedCommand();
-  TestIreeRunLoomBridgeAcceptsNonSplatTensor();
-  TestIreeRunLoomBridgeBuildsScalarCommand();
+  TestGgmlHrxRunLoomBridgeRejectsConfigWithoutLinkedOutput();
+  TestGgmlHrxRunLoomBridgeStagesConfigKernel();
+  TestGgmlHrxRunLoomBridgeBuildsNpyBackedCommand();
+  TestGgmlHrxRunLoomBridgeBuildsBF16NpyBackedCommand();
+  TestGgmlHrxRunLoomBridgeBuildsF16NpyBackedCommand();
+  TestGgmlHrxRunLoomBridgeBuildsI32NpyBackedCommand();
+  TestGgmlHrxRunLoomBridgeBuildsPackedQuantNpyBackedCommand();
+  TestGgmlHrxRunLoomBridgeAcceptsNonSplatTensor();
+  TestGgmlHrxRunLoomBridgeBuildsScalarCommand();
   TestExecuteBridgeRunsNoConfigCommand();
   TestExecuteBridgeStopsOnLinkFailure();
 

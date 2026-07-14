@@ -1,5 +1,79 @@
 include_guard(GLOBAL)
 
+function(_ggml_hrx_add_local_run_loom_target out_target hrx_source_dir)
+  set(_ggml_hrx_local_target ggml_hrx_run_loom)
+  if(TARGET ${_ggml_hrx_local_target})
+    set(${out_target} ${_ggml_hrx_local_target} PARENT_SCOPE)
+    return()
+  endif()
+
+  if(NOT CMAKE_C_COMPILER_LOADED)
+    enable_language(C)
+  endif()
+
+  set(_ggml_hrx_platform_deps loom::tooling::execution::execution_provider)
+  set(_ggml_hrx_platform_defs)
+  if(TARGET loom::tooling::target::amdgpu::execution::provider)
+    list(APPEND _ggml_hrx_platform_defs GGML_HRX_RUN_LOOM_HAVE_AMDGPU=1)
+    list(APPEND _ggml_hrx_platform_deps
+      loom::tooling::target::amdgpu::execution::provider
+    )
+  endif()
+  if(TARGET loom::tooling::execution::ireevm::provider)
+    list(APPEND _ggml_hrx_platform_defs GGML_HRX_RUN_LOOM_HAVE_IREE_VM=1)
+    list(APPEND _ggml_hrx_platform_deps loom::tooling::execution::ireevm::provider)
+  endif()
+  if(TARGET loom::tooling::target::spirv::execution::provider)
+    list(APPEND _ggml_hrx_platform_defs GGML_HRX_RUN_LOOM_HAVE_SPIRV=1)
+    list(APPEND _ggml_hrx_platform_deps
+      loom::tooling::target::spirv::execution::provider
+    )
+  endif()
+
+  add_executable(${_ggml_hrx_local_target}
+    "${CMAKE_SOURCE_DIR}/tools/ggml-hrx-run-loom/ggml_hrx_run_loom.c"
+    "${CMAKE_SOURCE_DIR}/tools/ggml-hrx-run-loom/ggml_hrx_run_loom_main.c"
+    "${CMAKE_SOURCE_DIR}/tools/ggml-hrx-run-loom/ggml_hrx_hal_invocation.c"
+    "${CMAKE_SOURCE_DIR}/tools/ggml-hrx-run-loom/ggml_hrx_run_loom_tolerance.c"
+  )
+  target_compile_definitions(${_ggml_hrx_local_target} PRIVATE
+    ${_ggml_hrx_platform_defs}
+  )
+  target_include_directories(${_ggml_hrx_local_target} PRIVATE
+    "${CMAKE_SOURCE_DIR}"
+  )
+  target_link_libraries(${_ggml_hrx_local_target} PRIVATE
+    iree::base
+    iree::base::tooling::flags
+    iree::hal
+    iree::io::file_handle
+    iree::tooling::buffer_view_matchers
+    iree::tooling::value_io
+    loom::error::diagnostic
+    loom::ir
+    loom::sanitizer::options
+    loom::target::launch
+    loom::target::provider
+    loom::target::types
+    loom::tooling::cli::help
+    loom::tooling::compile::pipeline
+    loom::tooling::context
+    loom::tooling::execution::compile_options
+    loom::tooling::execution::compile_report_capture
+    loom::tooling::execution::execution_backend
+    loom::tooling::execution::hal::artifact
+    loom::tooling::execution::hal::runtime
+    loom::tooling::execution::one_shot
+    loom::tooling::execution::session
+    loom::tooling::io::file
+    ${_ggml_hrx_platform_deps}
+  )
+  set_target_properties(${_ggml_hrx_local_target} PROPERTIES
+    OUTPUT_NAME ggml-hrx-run-loom
+  )
+  set(${out_target} ${_ggml_hrx_local_target} PARENT_SCOPE)
+endfunction()
+
 function(_ggml_hrx_add_local_iree_test_loom_target out_target hrx_source_dir)
   set(_ggml_hrx_local_target ggml_hrx_iree_test_loom)
   if(TARGET ${_ggml_hrx_local_target})
@@ -103,7 +177,7 @@ endfunction()
 function(ggml_hrx_configure_loom_tools)
   option(
     GGML_HRX_BUILD_LOOM_TOOLS
-    "Build loom-link, loom-compile, iree-run-loom, iree-test-loom, and iree-benchmark-loom from an hrx-systems source tree."
+    "Build loom-link, loom-compile, ggml-hrx-run-loom, iree-test-loom, and iree-benchmark-loom from an hrx-systems source tree."
     ON
   )
 
@@ -196,18 +270,22 @@ function(ggml_hrx_configure_loom_tools)
       _ggml_hrx_local_iree_test_loom_target
       "${_ggml_hrx_hrx_systems_source_dir}"
     )
+    _ggml_hrx_add_local_run_loom_target(
+      _ggml_hrx_local_run_loom_target
+      "${_ggml_hrx_hrx_systems_source_dir}"
+    )
 
     set(_ggml_hrx_stage_tool_targets
       loom_tools_loom-link_loom-link
       loom_tools_loom-compile_loom-compile
-      loom_tools_iree-run-loom_iree-run-loom
+      ${_ggml_hrx_local_run_loom_target}
       ${_ggml_hrx_local_iree_test_loom_target}
       loom_tools_iree-benchmark-loom_iree-benchmark-loom
     )
     set(_ggml_hrx_staged_tool_paths
       ${GGML_HRX_BUILT_TOOL_DIR}/loom-link${CMAKE_EXECUTABLE_SUFFIX}
       ${GGML_HRX_BUILT_TOOL_DIR}/loom-compile${CMAKE_EXECUTABLE_SUFFIX}
-      ${GGML_HRX_BUILT_TOOL_DIR}/iree-run-loom${CMAKE_EXECUTABLE_SUFFIX}
+      ${GGML_HRX_BUILT_TOOL_DIR}/ggml-hrx-run-loom${CMAKE_EXECUTABLE_SUFFIX}
       ${GGML_HRX_BUILT_TOOL_DIR}/iree-test-loom${CMAKE_EXECUTABLE_SUFFIX}
       ${GGML_HRX_BUILT_TOOL_DIR}/iree-benchmark-loom${CMAKE_EXECUTABLE_SUFFIX}
     )
@@ -222,8 +300,8 @@ function(ggml_hrx_configure_loom_tools)
         $<TARGET_FILE:loom_tools_loom-compile_loom-compile>
         ${GGML_HRX_BUILT_TOOL_DIR}/loom-compile${CMAKE_EXECUTABLE_SUFFIX}
       COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        $<TARGET_FILE:loom_tools_iree-run-loom_iree-run-loom>
-        ${GGML_HRX_BUILT_TOOL_DIR}/iree-run-loom${CMAKE_EXECUTABLE_SUFFIX}
+        $<TARGET_FILE:${_ggml_hrx_local_run_loom_target}>
+        ${GGML_HRX_BUILT_TOOL_DIR}/ggml-hrx-run-loom${CMAKE_EXECUTABLE_SUFFIX}
       COMMAND ${CMAKE_COMMAND} -E copy_if_different
         $<TARGET_FILE:${_ggml_hrx_local_iree_test_loom_target}>
         ${GGML_HRX_BUILT_TOOL_DIR}/iree-test-loom${CMAKE_EXECUTABLE_SUFFIX}
@@ -234,7 +312,7 @@ function(ggml_hrx_configure_loom_tools)
         ${_ggml_hrx_stage_tool_targets}
         $<TARGET_FILE:loom_tools_loom-link_loom-link>
         $<TARGET_FILE:loom_tools_loom-compile_loom-compile>
-        $<TARGET_FILE:loom_tools_iree-run-loom_iree-run-loom>
+        $<TARGET_FILE:${_ggml_hrx_local_run_loom_target}>
         $<TARGET_FILE:${_ggml_hrx_local_iree_test_loom_target}>
         $<TARGET_FILE:loom_tools_iree-benchmark-loom_iree-benchmark-loom>
       COMMENT "Staging loom tools in ${GGML_HRX_BUILT_TOOL_DIR}"
@@ -259,7 +337,7 @@ function(ggml_hrx_configure_loom_tools)
       GGML_HRX_TOOL_DIR
       "${_ggml_hrx_tool_dir_default}"
       CACHE STRING
-      "PATH-style search list containing loom-link, loom-compile, iree-run-loom, iree-test-loom, and iree-benchmark-loom"
+      "PATH-style search list containing loom-link, loom-compile, ggml-hrx-run-loom, iree-test-loom, and iree-benchmark-loom"
       FORCE
     )
   else()
@@ -267,7 +345,7 @@ function(ggml_hrx_configure_loom_tools)
       GGML_HRX_TOOL_DIR
       "${_ggml_hrx_tool_dir_default}"
       CACHE STRING
-      "PATH-style search list containing loom-link, loom-compile, iree-run-loom, iree-test-loom, and iree-benchmark-loom"
+      "PATH-style search list containing loom-link, loom-compile, ggml-hrx-run-loom, iree-test-loom, and iree-benchmark-loom"
     )
   endif()
 

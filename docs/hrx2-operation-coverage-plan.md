@@ -48,8 +48,8 @@ operations, with the remaining unmatched model surface in `FLASH_ATTN_EXT`,
 - [x] Enable descriptor execution through `ggml-hrx-run-loom-simple` as part of
   the default generated harness path.
 - [x] Preserve descriptor `close` tolerances when bridging descriptor execution
-  to `iree-run-loom` expected-buffer checks.
-- [ ] Land or otherwise carry the paired HRX `iree-run-loom` support for
+  to `ggml-hrx-run-loom` expected-buffer checks.
+- [ ] Land or otherwise carry the paired HRX `ggml-hrx-run-loom` support for
   `--expected-kernel-buffer-tolerance` with the bench harness changes.
 - [ ] Add HRX-side unit coverage for tolerant HAL expected-buffer comparison,
   so approximate descriptor execution is protected below the bench runner.

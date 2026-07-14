@@ -57,10 +57,10 @@ struct Invocation {
   std::string output_path;
   std::string loom_link_path = "loom-link";
   std::string linked_kernel_output;
-  std::string iree_run_loom_path = "iree-run-loom";
+  std::string ggml_hrx_run_loom_path = "ggml-hrx-run-loom";
   std::string workgroup_count;
-  bool emit_iree_run_loom_command = false;
-  bool execute_iree_run_loom_command = false;
+  bool emit_ggml_hrx_run_loom_command = false;
+  bool execute_ggml_hrx_run_loom_command = false;
   std::vector<std::pair<std::string, std::string>> configs;
   std::vector<ScalarArg> scalars;
   std::vector<Binding> bindings;
@@ -99,7 +99,7 @@ struct CloseCompareResult {
   std::string error;
 };
 
-struct IreeRunLoomCommandResult {
+struct GgmlHrxRunLoomCommandResult {
   std::optional<std::vector<std::string>> loom_link_args;
   std::optional<std::vector<std::string>> args;
   std::string error;
@@ -113,7 +113,8 @@ NpyLoadResult ValidateNpyStorage1D(const std::string &path, DType dtype,
 CloseCompareResult CompareClose(const std::vector<float> &actual,
                                 const std::vector<float> &expected, double atol,
                                 double rtol);
-IreeRunLoomCommandResult BuildIreeRunLoomCommand(const Invocation &invocation);
+GgmlHrxRunLoomCommandResult
+BuildGgmlHrxRunLoomCommand(const Invocation &invocation);
 
 std::string ToString(BindingKind kind);
 std::string ToString(DType dtype);

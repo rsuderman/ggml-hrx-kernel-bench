@@ -64,7 +64,7 @@ Retirement is complete when:
 - [x] Gate descriptor execute tests that require HSA resources behind the HSA
   descriptor-test option.
 - [x] Preserve descriptor `close` tolerances when bridging descriptor execution
-  to `iree-run-loom` expected-buffer checks.
+  to `ggml-hrx-run-loom` expected-buffer checks.
 - [x] Validate the new path with targeted `EXP` and `SQRT` descriptor execution
   smoke tests.
 - [ ] 1. Add HRX-side unit tests for tolerant HAL expected-buffer comparison.
@@ -72,7 +72,7 @@ Retirement is complete when:
   floating-point expected buffer that fails outside tolerance, and the zero
   tolerance path that remains exact. This is dependency-owned HRX work and
   should not be implemented in this repository's checkout.
-- [x] 2. Verify the paired HRX `iree-run-loom`
+- [x] 2. Verify the paired HRX `ggml-hrx-run-loom`
   `--expected-kernel-buffer-tolerance` support is present in every environment
   that runs the new harness. Add a lightweight capability check if stale tools
   can be selected accidentally.

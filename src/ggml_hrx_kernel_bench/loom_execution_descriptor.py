@@ -13,7 +13,7 @@ from .fixtures import require_numpy
 from .kernel_test_config import load_config
 from .oracles import generate_oracle
 from .required_tools import (
-    require_iree_run_loom_expected_buffer_tolerance,
+    require_ggml_hrx_run_loom_expected_buffer_tolerance,
     require_tool,
     resolve_tool,
 )
@@ -703,7 +703,7 @@ def run_execution_descriptor_manifest(
     output_dir: Path,
     runner: Path | str,
     loom_link: Path | str | None,
-    iree_run_loom: Path | str | None,
+    ggml_hrx_run_loom: Path | str | None,
     repo_root: Path,
     execute: bool = False,
     limit: int | None = None,
@@ -741,10 +741,10 @@ def run_execution_descriptor_manifest(
             output_path=case_dir / "run.json",
             runner=runner,
             loom_link=loom_link,
-            iree_run_loom=iree_run_loom,
+            ggml_hrx_run_loom=ggml_hrx_run_loom,
             repo_root=repo_root,
             linked_kernel_output=case_dir / "linked.loom",
-            execute_iree_run_loom=execute,
+            execute_ggml_hrx_run_loom=execute,
         )
         prepared_count += 1
         run_entry: dict[str, Any] = {
@@ -859,10 +859,10 @@ def prepare_execution(
     output_path: Path,
     runner: Path | str,
     loom_link: Path | str | None,
-    iree_run_loom: Path | str | None,
+    ggml_hrx_run_loom: Path | str | None,
     repo_root: Path,
     linked_kernel_output: Path | None = None,
-    execute_iree_run_loom: bool = False,
+    execute_ggml_hrx_run_loom: bool = False,
 ) -> PreparedLoomExecution:
     descriptor_path = descriptor_path.resolve()
     descriptor_dir = descriptor_path.parent
@@ -911,8 +911,8 @@ def prepare_execution(
     elif loom_link is not None:
         command.extend(["--loom-link", str(loom_link)])
 
-    if iree_run_loom is not None:
-        command.extend(["--iree-run-loom", str(iree_run_loom)])
+    if ggml_hrx_run_loom is not None:
+        command.extend(["--ggml-hrx-run-loom", str(ggml_hrx_run_loom)])
 
     for scalar in data.get("scalars", []):
         command.extend(
@@ -956,9 +956,9 @@ def prepare_execution(
                 ]
             )
 
-    if execute_iree_run_loom:
-        _expect(iree_run_loom is not None, "execute requires an explicit iree-run-loom path")
-        command.append("--execute-iree-run-loom-command")
+    if execute_ggml_hrx_run_loom:
+        _expect(ggml_hrx_run_loom is not None, "execute requires an explicit ggml-hrx-run-loom path")
+        command.append("--execute-ggml-hrx-run-loom-command")
 
     return PreparedLoomExecution(
         descriptor_path=descriptor_path,
@@ -997,9 +997,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--fixture-dir", type=Path, required=True)
     parser.add_argument("--output", type=Path)
     parser.add_argument("--runner", default="ggml-hrx-run-loom-simple")
-    parser.add_argument("--tool-dir", help="optional PATH-style search list containing loom-link and iree-run-loom")
+    parser.add_argument("--tool-dir", help="optional PATH-style search list containing loom-link and ggml-hrx-run-loom")
     parser.add_argument("--loom-link", type=Path)
-    parser.add_argument("--iree-run-loom", type=Path)
+    parser.add_argument("--ggml-hrx-run-loom", type=Path)
     parser.add_argument("--repo-root", type=Path, default=Path.cwd())
     parser.add_argument("--linked-kernel-output", type=Path)
     parser.add_argument("--print-command", action="store_true")
@@ -1013,19 +1013,19 @@ def main(argv: list[str] | None = None) -> int:
     descriptor_path = args.descriptor_path.resolve()
     fixture_dir = args.fixture_dir.resolve()
     loom_link = args.loom_link
-    iree_run_loom = args.iree_run_loom
+    ggml_hrx_run_loom = args.ggml_hrx_run_loom
     if loom_link is None:
         resolved = resolve_tool("loom-link", tool_dir=args.tool_dir)
         loom_link = Path(resolved) if resolved else None
-    if iree_run_loom is None:
+    if ggml_hrx_run_loom is None:
         resolved = (
-            require_tool("iree-run-loom", tool_dir=args.tool_dir)
+            require_tool("ggml-hrx-run-loom", tool_dir=args.tool_dir)
             if args.execute
-            else resolve_tool("iree-run-loom", tool_dir=args.tool_dir)
+            else resolve_tool("ggml-hrx-run-loom", tool_dir=args.tool_dir)
         )
-        iree_run_loom = Path(resolved) if resolved else None
-    if iree_run_loom is not None:
-        require_iree_run_loom_expected_buffer_tolerance(tool_path=iree_run_loom)
+        ggml_hrx_run_loom = Path(resolved) if resolved else None
+    if ggml_hrx_run_loom is not None:
+        require_ggml_hrx_run_loom_expected_buffer_tolerance(tool_path=ggml_hrx_run_loom)
 
     prepared = prepare_execution(
         descriptor_path=descriptor_path,
@@ -1033,10 +1033,10 @@ def main(argv: list[str] | None = None) -> int:
         output_path=(args.output or _default_output_path(descriptor_path, fixture_dir)),
         runner=args.runner,
         loom_link=loom_link,
-        iree_run_loom=iree_run_loom,
+        ggml_hrx_run_loom=ggml_hrx_run_loom,
         repo_root=args.repo_root,
         linked_kernel_output=args.linked_kernel_output,
-        execute_iree_run_loom=args.execute,
+        execute_ggml_hrx_run_loom=args.execute,
     )
     if args.print_command or not args.execute:
         print(json.dumps({"command": prepared.command}, indent=2, sort_keys=True))

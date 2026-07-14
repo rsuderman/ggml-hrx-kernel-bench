@@ -9,7 +9,7 @@ from unittest import mock
 import bootstrap  # noqa: F401
 
 from ggml_hrx_kernel_bench.required_tools import (
-    require_iree_run_loom_expected_buffer_tolerance,
+    require_ggml_hrx_run_loom_expected_buffer_tolerance,
     require_tool,
 )
 
@@ -24,8 +24,8 @@ class RequiredToolAvailabilityTest(unittest.TestCase):
     def test_iree_test_loom_available(self) -> None:
         self.assertTrue(require_tool("iree-test-loom"))
 
-    def test_iree_run_loom_available(self) -> None:
-        self.assertTrue(require_tool("iree-run-loom"))
+    def test_ggml_hrx_run_loom_available(self) -> None:
+        self.assertTrue(require_tool("ggml-hrx-run-loom"))
 
     def test_iree_benchmark_loom_available(self) -> None:
         self.assertTrue(require_tool("iree-benchmark-loom"))
@@ -62,19 +62,19 @@ class RequiredToolAvailabilityTest(unittest.TestCase):
                 ):
                     require_tool("loom-link")
 
-    def test_iree_run_loom_tolerance_capability_accepts_supported_tool(self) -> None:
+    def test_ggml_hrx_run_loom_tolerance_capability_accepts_supported_tool(self) -> None:
         completed = subprocess.CompletedProcess(
-            args=["/tmp/iree-run-loom", "--help"],
+            args=["/tmp/ggml-hrx-run-loom", "--help"],
             returncode=0,
             stdout="usage\n  --expected-kernel-buffer-tolerance=atol,rtol\n",
         )
         with mock.patch("subprocess.run", return_value=completed) as run:
             self.assertEqual(
-                require_iree_run_loom_expected_buffer_tolerance(tool_path="/tmp/iree-run-loom"),
-                "/tmp/iree-run-loom",
+                require_ggml_hrx_run_loom_expected_buffer_tolerance(tool_path="/tmp/ggml-hrx-run-loom"),
+                "/tmp/ggml-hrx-run-loom",
             )
         run.assert_called_once_with(
-            ["/tmp/iree-run-loom", "--help"],
+            ["/tmp/ggml-hrx-run-loom", "--help"],
             check=False,
             text=True,
             stdout=subprocess.PIPE,
@@ -82,9 +82,9 @@ class RequiredToolAvailabilityTest(unittest.TestCase):
             timeout=10.0,
         )
 
-    def test_iree_run_loom_tolerance_capability_rejects_stale_tool(self) -> None:
+    def test_ggml_hrx_run_loom_tolerance_capability_rejects_stale_tool(self) -> None:
         completed = subprocess.CompletedProcess(
-            args=["/tmp/iree-run-loom", "--help"],
+            args=["/tmp/ggml-hrx-run-loom", "--help"],
             returncode=0,
             stdout="usage\n",
         )
@@ -93,15 +93,15 @@ class RequiredToolAvailabilityTest(unittest.TestCase):
                 RuntimeError,
                 "does not support --expected-kernel-buffer-tolerance",
             ):
-                require_iree_run_loom_expected_buffer_tolerance(tool_path="/tmp/iree-run-loom")
+                require_ggml_hrx_run_loom_expected_buffer_tolerance(tool_path="/tmp/ggml-hrx-run-loom")
 
-    def test_iree_run_loom_tolerance_capability_reports_probe_failure(self) -> None:
+    def test_ggml_hrx_run_loom_tolerance_capability_reports_probe_failure(self) -> None:
         with mock.patch("subprocess.run", side_effect=OSError("permission denied")):
             with self.assertRaisesRegex(
                 RuntimeError,
-                "failed to query iree-run-loom capabilities",
+                "failed to query ggml-hrx-run-loom capabilities",
             ):
-                require_iree_run_loom_expected_buffer_tolerance(tool_path="/tmp/iree-run-loom")
+                require_ggml_hrx_run_loom_expected_buffer_tolerance(tool_path="/tmp/ggml-hrx-run-loom")
 
 
 if __name__ == "__main__":
