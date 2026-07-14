@@ -14,6 +14,7 @@ enum class BindingKind {
 };
 
 enum class DType {
+  kBF16,
   kF32,
   kF16,
   kI32,

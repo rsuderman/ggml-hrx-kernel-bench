@@ -1520,11 +1520,13 @@ def test_yaml_route_import_matches_default_rank4_rope_descriptor(tmp_path: Path)
     assert route_matches["rows"][4]["matched_route_ids"] == ["rope_neox_f32_n64_h128_t2_contiguous_4d"]
     assert route_matches["rows"][5]["matched_route_ids"] == ["rope_neox_f32_n64_h128_t2_contiguous_4d"]
     route_shapes: dict[str, list[dict[str, int]]] = {}
+    route_abis: dict[str, dict[str, object]] = {}
     for raw_path in summary["generated_config_paths"]:
         config = json.loads(Path(raw_path).read_text())
         route_shapes.setdefault(config["route_id"], []).extend(
             dict(zip(config["params"], case_values, strict=True)) for case_values in config["cases"]
         )
+        route_abis.setdefault(config["route_id"], config["execution_abi"])
     normal_shapes = route_shapes["rope_f32_normal_n128_h32_t2_contiguous_4d"]
     neox_shapes = route_shapes["rope_neox_f32_n64_h128_t2_contiguous_4d"]
     normal_shape = next(shape for shape in normal_shapes if "src0_d1_stride" not in shape)
@@ -1573,6 +1575,56 @@ def test_yaml_route_import_matches_default_rank4_rope_descriptor(tmp_path: Path)
     assert neox_padded_shape["rope.src0_token_stride"] == 65536
     assert neox_padded_shape["rope.dst_head_stride"] == 64
     assert neox_padded_shape["rope.dst_token_stride"] == 8192
+    expected_abi = [
+        {
+            "position": 0,
+            "role": "theta_scale",
+            "kind": "scalar",
+            "dtype": "f32",
+            "value": 0.75,
+        },
+        {
+            "position": 1,
+            "role": "freq_scale",
+            "kind": "scalar",
+            "dtype": "f32",
+            "value": 1.1,
+        },
+        {
+            "position": 2,
+            "role": "attn_factor",
+            "kind": "scalar",
+            "dtype": "f32",
+            "value": 0.9,
+        },
+        {
+            "position": 3,
+            "role": "src0",
+            "kind": "input",
+            "dtype": "f32",
+            "fixture": "src0",
+        },
+        {
+            "position": 4,
+            "role": "src1",
+            "kind": "input",
+            "dtype": "i32",
+            "fixture": "positions",
+        },
+        {
+            "position": 5,
+            "role": "dst",
+            "kind": "output",
+            "dtype": "f32",
+            "fixture": "dst_init",
+            "expect": {
+                "fixture": "expected",
+                "mode": "close",
+            },
+        },
+    ]
+    assert route_abis["rope_f32_normal_n128_h32_t2_contiguous_4d"]["entries"] == expected_abi
+    assert route_abis["rope_neox_f32_n64_h128_t2_contiguous_4d"]["entries"] == expected_abi
 
 @pytest.mark.parametrize(
     ("route_id", "k", "workgroup_count"),

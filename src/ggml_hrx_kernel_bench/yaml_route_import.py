@@ -38,6 +38,16 @@ STATIC_SCALAR_ABI_BY_FAMILY: dict[str, tuple[dict[str, Any], ...]] = {
     "soft_max_f32": (
         {"role": "scale", "dtype": "f32", "value": 0.75},
     ),
+    "rope_f32": (
+        {"role": "theta_scale", "dtype": "f32", "value": 0.75},
+        {"role": "freq_scale", "dtype": "f32", "value": 1.1},
+        {"role": "attn_factor", "dtype": "f32", "value": 0.9},
+    ),
+    "rope_neox_f32": (
+        {"role": "theta_scale", "dtype": "f32", "value": 0.75},
+        {"role": "freq_scale", "dtype": "f32", "value": 1.1},
+        {"role": "attn_factor", "dtype": "f32", "value": 0.9},
+    ),
 }
 ATTRIBUTE_SCALAR_ABI_BY_FAMILY: dict[str, tuple[dict[str, Any], ...]] = {
     "rms_norm_f32": (
@@ -48,6 +58,8 @@ FIXTURE_BY_FAMILY_ROLE: dict[tuple[str, str], str] = {
     ("get_rows_f32", "src1"): "indices",
     ("rms_norm_f32", "src0"): "src",
     ("soft_max_f32", "mask"): "mask",
+    ("rope_f32", "src1"): "positions",
+    ("rope_neox_f32", "src1"): "positions",
 }
 INPUT_ROLES_BY_FAMILY: dict[str, frozenset[str]] = {
     "soft_max_f32": frozenset({"mask"}),

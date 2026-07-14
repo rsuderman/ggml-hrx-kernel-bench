@@ -102,6 +102,9 @@ std::optional<BindingKind> ParseBindingKind(std::string_view value) {
 }
 
 std::optional<DType> ParseDType(std::string_view value) {
+  if (value == "bf16") {
+    return DType::kBF16;
+  }
   if (value == "f32") {
     return DType::kF32;
   }
@@ -943,9 +946,11 @@ NpyLoadResult ValidateNpyStorage1D(const std::string &path, DType dtype,
   if (!descr.has_value()) {
     return NpyLoadResult{false, "missing descr in npy header: " + path};
   }
-  if (dtype == DType::kF16 && *descr != "<i2" && *descr != "|i2") {
-    return NpyLoadResult{false, "expected f16 storage npy dtype '<i2', saw '" +
-                                    *descr + "'"};
+  if ((dtype == DType::kBF16 || dtype == DType::kF16) &&
+      *descr != "<i2" && *descr != "|i2") {
+    return NpyLoadResult{
+        false, "expected " + ToString(dtype) +
+                   " storage npy dtype '<i2', saw '" + *descr + "'"};
   }
   if (dtype == DType::kI32 && *descr != "<i4" && *descr != "|i4") {
     return NpyLoadResult{false,
@@ -969,7 +974,8 @@ NpyLoadResult ValidateNpyStorage1D(const std::string &path, DType dtype,
                                     ", saw " + std::to_string(*elements)};
   }
 
-  const std::size_t element_bytes = dtype == DType::kF16 ? 2 : 4;
+  const std::size_t element_bytes =
+      dtype == DType::kBF16 || dtype == DType::kF16 ? 2 : 4;
   std::vector<unsigned char> bytes(expected_elements * element_bytes);
   input.read(reinterpret_cast<char *>(bytes.data()),
              static_cast<std::streamsize>(bytes.size()));
@@ -1119,6 +1125,8 @@ std::string ToString(BindingKind kind) {
 
 std::string ToString(DType dtype) {
   switch (dtype) {
+  case DType::kBF16:
+    return "bf16";
   case DType::kF32:
     return "f32";
   case DType::kF16:

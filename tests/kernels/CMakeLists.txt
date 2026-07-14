@@ -26,6 +26,7 @@ add_yaml_route_import_runtime_tests(
     ADD
     CLAMP
     CONT
+    CPY
     DIV
     EXP
     GET_ROWS
@@ -33,6 +34,7 @@ add_yaml_route_import_runtime_tests(
     NEG
     RELU
     RMS_NORM
+    ROPE
     SCALE
     SET_ROWS
     SOFT_MAX

@@ -393,6 +393,23 @@ void TestParsesF16BindingDType() {
          "f16 dtype recorded");
 }
 
+void TestParsesBF16BindingDType() {
+  auto args = ValidArgsWithoutConfig();
+  for (std::size_t i = 0; i + 1 < args.size(); ++i) {
+    if (args[i] == "--binding") {
+      args[i + 1] = "0:input:bf16:4:fixtures/src0.npy";
+      break;
+    }
+  }
+  const auto parsed = ParseArgs(args);
+  Expect(parsed.invocation.has_value(), "bf16 dtype parses");
+  if (!parsed.invocation.has_value()) {
+    return;
+  }
+  Expect(parsed.invocation->bindings[0].dtype == DType::kBF16,
+         "bf16 dtype recorded");
+}
+
 void TestParsesI32BindingDType() {
   auto args = ValidArgsWithoutConfig();
   for (std::size_t i = 0; i + 1 < args.size(); ++i) {
@@ -541,6 +558,25 @@ void TestValidatesF16StorageNpy() {
   WriteI16Npy(path, {0x3C00, 0x4000, -0x4200});
   const auto loaded = ValidateNpyStorage1D(path.string(), DType::kF16, 3);
   Expect(loaded.loaded, "validates f16 int16-backed npy");
+}
+
+void TestValidatesBF16StorageNpy() {
+  const std::filesystem::path dir = TempDir();
+  const std::filesystem::path path = dir / "values-bf16-storage.npy";
+  WriteI16Npy(path, {0x3F80, 0x4000, -0x4100});
+  const auto loaded = ValidateNpyStorage1D(path.string(), DType::kBF16, 3);
+  Expect(loaded.loaded, "validates bf16 int16-backed npy");
+}
+
+void TestRejectsBF16StorageDTypeMismatch() {
+  const std::filesystem::path dir = TempDir();
+  const std::filesystem::path path = dir / "values-f32.npy";
+  WriteF32Npy(path, {1.0f, 2.0f});
+  const auto loaded = ValidateNpyStorage1D(path.string(), DType::kBF16, 2);
+  Expect(!loaded.loaded, "bf16 storage dtype mismatch rejected");
+  Expect(loaded.error.find("expected bf16 storage npy dtype") !=
+             std::string::npos,
+         "bf16 storage dtype mismatch error");
 }
 
 void TestRejectsF16StorageDTypeMismatch() {
@@ -830,6 +866,46 @@ void TestIreeRunLoomBridgeBuildsF16NpyBackedCommand() {
          "f16 bridge command exact tolerance");
 }
 
+void TestIreeRunLoomBridgeBuildsBF16NpyBackedCommand() {
+  const std::filesystem::path dir = TempDir();
+  WriteI16Npy(dir / "src0.npy", {0x3F80, 0x4000, 0x4040, 0x4080});
+  WriteI16Npy(dir / "dst_init.npy", {0, 0, 0, 0});
+  WriteI16Npy(dir / "expected.npy", {0x3F80, 0x4000, 0x4040, 0x4080});
+  auto args = std::vector<std::string>{
+      "--kernel",        "linked.loom",
+      "--root",          "@copy_bf16_bf16",
+      "--target",        "gfx1100",
+      "--iree-run-loom", "/tmp/iree-run-loom",
+      "--binding",       "0:input:bf16:4:" + (dir / "src0.npy").string(),
+      "--binding",       "1:output:bf16:4:" + (dir / "dst_init.npy").string(),
+      "--expect",        "1:close:" + (dir / "expected.npy").string() + ":0:0",
+      "--output",        "result.json",
+  };
+  const auto parsed = ParseArgs(args);
+  Expect(parsed.invocation.has_value(), "bf16 npy bridge command parses");
+  if (!parsed.invocation.has_value()) {
+    return;
+  }
+  const auto command = BuildIreeRunLoomCommand(*parsed.invocation);
+  Expect(command.args.has_value(), "bf16 npy bridge command builds");
+  if (!command.args.has_value()) {
+    std::cerr << "bridge error: " << command.error << "\n";
+    return;
+  }
+  Expect(std::find(command.args->begin(), command.args->end(),
+                   "--kernel-input-buffer=&@" + (dir / "src0.npy").string()) !=
+             command.args->end(),
+         "bf16 bridge command input spec");
+  Expect(std::find(command.args->begin(), command.args->end(),
+                   "--expected-kernel-buffer=@" +
+                       (dir / "expected.npy").string()) != command.args->end(),
+         "bf16 bridge command expected spec");
+  Expect(std::find(command.args->begin(), command.args->end(),
+                   "--expected-kernel-buffer-tolerance=0,0") !=
+             command.args->end(),
+         "bf16 bridge command exact tolerance");
+}
+
 void TestIreeRunLoomBridgeBuildsI32NpyBackedCommand() {
   const std::filesystem::path dir = TempDir();
   WriteF32Npy(dir / "src0.npy", {1.0f, 2.0f, 3.0f, 4.0f});
@@ -1057,6 +1133,7 @@ int main() {
   TestRejectsDuplicateBindingPosition();
   TestParsesScalarCommand();
   TestRejectsUnsupportedDType();
+  TestParsesBF16BindingDType();
   TestParsesF16BindingDType();
   TestParsesI32BindingDType();
   TestRejectsUnsupportedKind();
@@ -1066,6 +1143,8 @@ int main() {
   TestParsesIreeRunLoomBridgeFlags();
   TestLoadsF32NpyV1();
   TestLoadsF32NpyV2();
+  TestValidatesBF16StorageNpy();
+  TestRejectsBF16StorageDTypeMismatch();
   TestValidatesF16StorageNpy();
   TestRejectsF16StorageDTypeMismatch();
   TestValidatesI32StorageNpy();
@@ -1083,6 +1162,7 @@ int main() {
   TestIreeRunLoomBridgeRejectsConfigWithoutLinkedOutput();
   TestIreeRunLoomBridgeStagesConfigKernel();
   TestIreeRunLoomBridgeBuildsNpyBackedCommand();
+  TestIreeRunLoomBridgeBuildsBF16NpyBackedCommand();
   TestIreeRunLoomBridgeBuildsF16NpyBackedCommand();
   TestIreeRunLoomBridgeBuildsI32NpyBackedCommand();
   TestIreeRunLoomBridgeAcceptsNonSplatTensor();

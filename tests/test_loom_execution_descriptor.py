@@ -465,6 +465,44 @@ def _generated_cont_config() -> dict[str, object]:
     }
 
 
+def _copy_execution_abi(route_id: str, *, src_dtype: str, dst_dtype: str) -> dict[str, object]:
+    return {
+        "schema": ROUTE_EXECUTION_ABI_SCHEMA,
+        "route_id": route_id,
+        "entries": [
+            {
+                "position": 0,
+                "role": "src0",
+                "kind": "input",
+                "dtype": src_dtype,
+                "fixture": "src0",
+            },
+            {
+                "position": 1,
+                "role": "dst",
+                "kind": "output",
+                "dtype": dst_dtype,
+                "fixture": "dst_init",
+                "expect": {
+                    "fixture": "expected",
+                    "mode": "close",
+                },
+            },
+        ],
+    }
+
+
+def _generated_copy_config(src_dtype: str, dst_dtype: str, *, route_suffix: str = "contiguous_1d") -> dict[str, object]:
+    route_id = f"copy_{src_dtype}_{dst_dtype}_{route_suffix}"
+    return {
+        "kernel": f"copy_{src_dtype}_{dst_dtype}",
+        "params": ["d0", "d1", "d2", "d3"],
+        "cases": [[4, 1, 1, 1]],
+        "route_id": route_id,
+        "execution_abi": _copy_execution_abi(route_id, src_dtype=src_dtype, dst_dtype=dst_dtype),
+    }
+
+
 def _generated_swiglu_config() -> dict[str, object]:
     route_id = "swiglu_f32_packed_contiguous_4d"
     return {
@@ -531,6 +569,92 @@ def _generated_soft_max_config(*, masked: bool = False) -> dict[str, object]:
         "cases": [[4, 2, 1, 1]],
         "route_id": route_id,
         "execution_abi": _soft_max_f32_execution_abi(route_id, masked=masked),
+    }
+
+
+def _rope_f32_execution_abi(route_id: str) -> dict[str, object]:
+    return {
+        "schema": ROUTE_EXECUTION_ABI_SCHEMA,
+        "route_id": route_id,
+        "entries": [
+            {
+                "position": 0,
+                "role": "theta_scale",
+                "kind": "scalar",
+                "dtype": "f32",
+                "value": 0.75,
+            },
+            {
+                "position": 1,
+                "role": "freq_scale",
+                "kind": "scalar",
+                "dtype": "f32",
+                "value": 1.1,
+            },
+            {
+                "position": 2,
+                "role": "attn_factor",
+                "kind": "scalar",
+                "dtype": "f32",
+                "value": 0.9,
+            },
+            {
+                "position": 3,
+                "role": "src0",
+                "kind": "input",
+                "dtype": "f32",
+                "fixture": "src0",
+            },
+            {
+                "position": 4,
+                "role": "src1",
+                "kind": "input",
+                "dtype": "i32",
+                "fixture": "positions",
+            },
+            {
+                "position": 5,
+                "role": "dst",
+                "kind": "output",
+                "dtype": "f32",
+                "fixture": "dst_init",
+                "expect": {
+                    "fixture": "expected",
+                    "mode": "close",
+                },
+            },
+        ],
+    }
+
+
+def _generated_rope_config(*, neox: bool = False) -> dict[str, object]:
+    route_id = "rope_neox_f32_n64_h128_t2_contiguous_4d" if neox else "rope_f32_normal_n128_h32_t2_contiguous_4d"
+    return {
+        "kernel": "rope_neox_f32" if neox else "rope_f32",
+        "params": [
+            "d0",
+            "d1",
+            "d2",
+            "d3",
+            "src1_d0",
+            "src1_d1",
+            "rope.ncols",
+            *([] if neox else ["rope.n_dims"]),
+            "rope.nheads",
+            "rope.ntokens",
+            "rope.src0_head_stride",
+            "rope.src0_token_stride",
+            "rope.dst_head_stride",
+            "rope.dst_token_stride",
+            "rope.pos_token_stride",
+        ],
+        "cases": [
+            [64, 1, 2, 1, 1, 1, 64, 1, 2, 64, 64, 64, 64, 1]
+            if neox
+            else [128, 32, 2, 1, 1, 1, 128, 128, 32, 2, 128, 4096, 128, 4096, 1]
+        ],
+        "route_id": route_id,
+        "execution_abi": _rope_f32_execution_abi(route_id),
     }
 
 
@@ -956,6 +1080,64 @@ def test_descriptor_from_generated_cont_f32_case_uses_unary_buffer_abi(tmp_path:
     assert f"1:output:f32:30:{tmp_path / descriptor['bindings'][1]['path']}" in command
 
 
+@pytest.mark.parametrize(
+    ("src_dtype", "dst_dtype", "src_storage_dtype", "dst_storage_dtype"),
+    [
+        ("f32", "f32", np.float32, np.float32),
+        ("f32", "bf16", np.float32, np.int16),
+        ("bf16", "f32", np.int16, np.float32),
+        ("f16", "bf16", np.int16, np.int16),
+    ],
+)
+def test_descriptor_from_generated_copy_case_uses_cast_storage_dtypes(
+    tmp_path: Path,
+    src_dtype: str,
+    dst_dtype: str,
+    src_storage_dtype: object,
+    dst_storage_dtype: object,
+) -> None:
+    assets = materialize_asset_root(tmp_path / "assets", force=True)
+    result = descriptor_from_generated_case(
+        config_data=_generated_copy_config(src_dtype, dst_dtype),
+        case_id="d0-4-d1-1-d2-1-d3-1",
+        case_values=[4, 1, 1, 1],
+        kernel_dir=assets / "kernels" / "v2",
+        routing_dir=assets / "catalog" / "v2",
+        target="gfx1100",
+        max_elements=32,
+        oracle_fixture_dir=tmp_path / "oracle-fixtures",
+        descriptor_dir=tmp_path,
+    )
+
+    assert result.status == "emitted", result.reason
+    assert result.descriptor is not None
+    descriptor = result.descriptor
+    assert descriptor["root"] == f"@copy_{src_dtype}_{dst_dtype}_contiguous_1d"
+    assert [binding["name"] for binding in descriptor["bindings"]] == ["src0", "dst"]
+    assert [binding["dtype"] for binding in descriptor["bindings"]] == [src_dtype, dst_dtype]
+    assert descriptor["metadata"]["element_counts"] == {"dst": 4, "src0": 4}
+    src0 = np.load(tmp_path / descriptor["bindings"][0]["path"])
+    dst_init = np.load(tmp_path / descriptor["bindings"][1]["path"])
+    expected = np.load(tmp_path / descriptor["bindings"][1]["expect"]["path"])
+    assert src0.dtype == src_storage_dtype
+    assert dst_init.dtype == dst_storage_dtype
+    assert expected.dtype == dst_storage_dtype
+
+    descriptor_path = _write_descriptor(tmp_path, descriptor)
+    prepared = prepare_execution(
+        descriptor_path=descriptor_path,
+        fixture_dir=tmp_path / "fixtures",
+        output_path=tmp_path / "result.json",
+        runner="runner",
+        loom_link=None,
+        iree_run_loom=None,
+        repo_root=tmp_path,
+    )
+    command = prepared.command
+    assert f"0:input:{src_dtype}:4:{tmp_path / descriptor['bindings'][0]['path']}" in command
+    assert f"1:output:{dst_dtype}:4:{tmp_path / descriptor['bindings'][1]['path']}" in command
+
+
 def test_descriptor_from_generated_swiglu_f32_case_uses_packed_input(tmp_path: Path) -> None:
     assets = materialize_asset_root(tmp_path / "assets", force=True)
     result = descriptor_from_generated_case(
@@ -1042,6 +1224,62 @@ def test_descriptor_from_generated_soft_max_f32_case_materializes_row_fixtures(
         assert f"3:output:f32:8:{tmp_path / descriptor['bindings'][2]['path']}" in command
     else:
         assert f"2:output:f32:8:{tmp_path / descriptor['bindings'][1]['path']}" in command
+
+
+@pytest.mark.parametrize(("neox", "expected_root"), [(False, "@hrx2_rope_normal_f32"), (True, "@hrx2_rope_neox_f32")])
+def test_descriptor_from_generated_rope_f32_case_uses_scalar_and_position_abi(
+    tmp_path: Path,
+    neox: bool,
+    expected_root: str,
+) -> None:
+    assets = materialize_asset_root(tmp_path / "assets", force=True)
+    case_values = _generated_rope_config(neox=neox)["cases"][0]
+    result = descriptor_from_generated_case(
+        config_data=_generated_rope_config(neox=neox),
+        case_id="rope-small",
+        case_values=case_values,
+        kernel_dir=assets / "kernels" / "v2",
+        routing_dir=assets / "catalog" / "v2",
+        target="gfx1100",
+        max_elements=32768,
+        oracle_fixture_dir=tmp_path / "oracle-fixtures",
+        descriptor_dir=tmp_path,
+    )
+
+    assert result.status == "emitted", result.reason
+    assert result.descriptor is not None
+    descriptor = result.descriptor
+    assert descriptor["root"] == expected_root
+    assert descriptor["scalars"] == [
+        {"name": "theta_scale", "position": 0, "dtype": "f32", "value": 0.75},
+        {"name": "freq_scale", "position": 1, "dtype": "f32", "value": 1.1},
+        {"name": "attn_factor", "position": 2, "dtype": "f32", "value": 0.9},
+    ]
+    assert [binding["name"] for binding in descriptor["bindings"]] == ["src0", "src1", "dst"]
+    assert [binding["position"] for binding in descriptor["bindings"]] == [3, 4, 5]
+    assert [binding["dtype"] for binding in descriptor["bindings"]] == ["f32", "i32", "f32"]
+    positions = np.load(tmp_path / descriptor["bindings"][1]["path"])
+    expected = np.load(tmp_path / descriptor["bindings"][2]["expect"]["path"])
+    assert positions.dtype == np.int32
+    assert positions.tolist() == [1, 2]
+    assert expected.dtype == np.float32
+
+    descriptor_path = _write_descriptor(tmp_path, descriptor)
+    prepared = prepare_execution(
+        descriptor_path=descriptor_path,
+        fixture_dir=tmp_path / "fixtures",
+        output_path=tmp_path / "result.json",
+        runner="runner",
+        loom_link=None,
+        iree_run_loom=None,
+        repo_root=tmp_path,
+    )
+    command = prepared.command
+    assert "0:f32:0.75" in command
+    assert "1:f32:1.1" in command
+    assert "2:f32:0.9" in command
+    assert f"4:input:i32:{positions.size}:{tmp_path / descriptor['bindings'][1]['path']}" in command
+    assert f"5:output:f32:{expected.size}:{tmp_path / descriptor['bindings'][2]['path']}" in command
 
 
 def test_descriptor_from_generated_add_f16_case_uses_int16_storage(tmp_path: Path) -> None:
