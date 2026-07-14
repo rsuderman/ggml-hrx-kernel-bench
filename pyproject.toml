@@ -12,7 +12,7 @@ license = {text = "Apache-2.0"}
 authors = [
   {name = "GGML HRX Contributors"}
 ]
-dependencies = ["PyYAML>=6.0"]
+dependencies = ["nanobind>=2.13", "PyYAML>=6.0"]
 
 [project.optional-dependencies]
 numpy = ["numpy>=1.26"]
