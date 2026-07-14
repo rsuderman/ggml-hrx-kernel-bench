@@ -9,7 +9,10 @@ custom Python mapping registries or op-specific route-resolution code.
 
 - Entry point: `src/ggml_hrx_kernel_bench/yaml_route_import.py`
 - Build-time checker: `tests/infra/check_yaml_route_import.py`
-- Runtime test materializer: `tests/infra/generate_kernel_runtime_tests_cmake.py`
+- Descriptor test materializer:
+  `tests/infra/generate_loom_descriptor_tests_cmake.py`
+- Descriptor execution runner:
+  `tests/infra/run_loom_execution_descriptors.py`
 - Llama.cpp input: `tests/kernels/data/llamacpp_test.v2.yaml`
 - Model input: `tests/models/data/Llama-3.3-8B-Instruct.Q8_0.v2.yaml`
 - Llama.cpp expected coverage:
@@ -23,8 +26,26 @@ The build-time import targets are:
 - `kernel-model-llama-3-3-8b-q8-0-yaml-route-import-v2`
 - `kernel-yaml-route-import-v2`
 
-The generated runtime CTest suites are named with
-`kernel-run-*-yaml-route-import-v2-<OP>-generated`.
+The old generated runtime CTest suites were named with
+`kernel-run-*-yaml-route-import-v2-<OP>-generated`. They have been retired in
+favor of descriptor generate/prepare/execute tests backed by
+`ggml-hrx-run-loom-simple`.
+
+## Retirement Objective
+
+The objective is to remove the old generated-runtime testing tool and its
+`kernel-run-*` CTest registrations. Do not add unrelated operation coverage
+unless it directly eliminates a dependency on the old tool.
+
+Retirement is complete when:
+
+- no generated `kernel-run-*-yaml-route-import-v2-<OP>-generated` tests are
+  registered for kernel or model YAML route-import targets
+- descriptor generate/prepare/execute tests are the only generated runtime
+  validation path for route-import artifacts
+- the old generated-runtime helper code is removed or no longer reachable from
+  CMake
+- the harness inventory reports zero legacy runtime registrations
 
 ## Descriptor Harness Migration TODO
 
@@ -59,7 +80,7 @@ The generated runtime CTest suites are named with
   The kernel inventory covers 115 ops, with 115 descriptor execute tests and
   115 legacy runtime tests registered. The model inventory covers 10 ops, with
   9 descriptor execute tests and 8 legacy runtime tests registered.
-- [ ] 4. Migrate supported ops from legacy generated-runtime execution to
+- [x] 4. Migrate supported ops from legacy generated-runtime execution to
   descriptor execution. Start with ops already validated through descriptor
   execution, such as `EXP`, `SQRT`, and model `SET_ROWS`, then move through
   low-risk pointwise and indexed families.
@@ -106,24 +127,39 @@ The generated runtime CTest suites are named with
     q4_k/q5_k/q6_k/q8_0 buffer descriptor families, correcting descriptor
     dispatch order for matmul workgroups, and passing targeted descriptor HSA
     execution.
-  - [ ] Continue with the next low-risk pointwise/indexed descriptor-validated
-    slice.
   Latest step-4 inventories:
   `/home/rsuderman/codex/ggml-hrx-kernel-bench-harness-inventory-kernels-step4l-20260713.{json,md}`
   and
   `/home/rsuderman/codex/ggml-hrx-kernel-bench-harness-inventory-model-step4-20260713.{json,md}`.
   The kernel suite now has 94 legacy runtime registrations remaining, and no
   op with emitted descriptor cases still has legacy runtime registration.
-- [ ] 5. Simplify or narrow legacy generated-runtime registration once the
-  inventory shows descriptor coverage is sufficient for an op. Keep legacy
-  runtime only for ops the descriptor harness cannot yet represent.
-- [ ] 6. Expand descriptor execution coverage beyond the current validated set.
-  Prefer small f32 approximate pointwise slices first, then compact model-level
-  cases. Every widened executing surface requires targeted HSA runtime
-  validation outside the sandboxed harness path.
-- [ ] 7. Update this TODO as migration items land. Replace broad coverage and
-  legacy-runtime tasks with concrete remaining op lists once the inventory
-  exists.
+- [x] 5. Stop registering empty legacy generated-runtime tests. For ops with
+  zero generated manifest entries, remove the old `kernel-run-*` CTest
+  registration instead of keeping a no-op legacy test as a placeholder.
+- [x] 6. For any remaining legacy test with generated manifest entries, either
+  validate and move it to descriptor execution or record the blocker that keeps
+  it on the old tool. The retirement inventory has no remaining legacy tests.
+- [x] 7. Remove the old generated-runtime CMake path once the legacy
+  registration count reaches zero. This includes the CMake helper that creates
+  `kernel-run-*` tests for route-import artifacts and any stale build target
+  dependency that exists only for the old path.
+- [x] 8. Remove or archive the old generated-runtime Python runner only after
+  CMake no longer references it and descriptor execution covers the intended
+  route-import validation path.
+- [x] 9. Refresh the harness inventory and workflow docs after each retirement
+  step. Current retirement inventories:
+  `/home/rsuderman/codex/ggml-hrx-kernel-bench-harness-inventory-kernels-old-tool-retirement-20260713.{json,md}`
+  and
+  `/home/rsuderman/codex/ggml-hrx-kernel-bench-harness-inventory-model-old-tool-retirement-20260713.{json,md}`.
+  The kernel inventory covers 115 ops, with 115 descriptor execute tests, 401
+  emitted descriptor cases, and zero legacy runtime registrations. The model
+  inventory covers 10 ops, with 9 descriptor execute tests, 14 emitted
+  descriptor cases, and zero legacy runtime registrations.
+  Validation run on 2026-07-13:
+  `ctest --test-dir build -N -R 'kernel-run-.*yaml-route-import-v2'`
+  reported zero tests, and targeted model descriptor
+  generate/prepare/execute for `ADD`, `CPY`, `GET_ROWS`, `MUL`, and
+  `RMS_NORM` passed outside the sandbox.
 
 ## Expected Outputs
 

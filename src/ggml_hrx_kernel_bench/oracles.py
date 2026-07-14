@@ -1592,6 +1592,7 @@ def _get_rows_arrays(np: Any, candidate: Candidate, seed: int) -> dict[str, Any]
         "arrays": {
             "src0": src,
             "indices": indices,
+            "src1": indices,
             "dst_init": f32_pattern(np, (elems,), seed=seed + 1, scale=0.25),
             "expected": expected.reshape(elems),
         },

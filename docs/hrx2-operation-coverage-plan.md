@@ -1,8 +1,12 @@
 # V2 Operation Coverage Plan
 
 This document tracks the remaining grouped-YAML descriptor route-import work.
-Use it as the task list for returning to coverage parity without reintroducing
-the deleted custom importer.
+The current execution objective is to remove the old generated-runtime testing
+tool. Coverage expansion is only in scope when it is required to eliminate a
+remaining `kernel-run-*` dependency. As of the current retirement pass, the old
+generated-runtime tool is no longer registered by CMake; keep future work on
+descriptor route-import coverage unless the old path is deliberately
+reintroduced for investigation.
 
 ## Current Baseline
 
@@ -38,8 +42,8 @@ operations, with the remaining unmatched model surface in `FLASH_ATTN_EXT`,
 - [x] Retire the legacy v1/hrx2 routing catalog and kernel tree.
 - [x] Keep llama.cpp and model YAML route-import coverage validated at build
   time.
-- [x] Keep generated runtime CTest suites materialized from descriptor
-  route-import artifacts.
+- [x] Keep descriptor generate/prepare/execute CTest suites materialized from
+  descriptor route-import artifacts.
 - [x] Enable descriptor execution through `ggml-hrx-run-loom-simple` as part of
   the default generated harness path.
 - [x] Preserve descriptor `close` tolerances when bridging descriptor execution
@@ -48,39 +52,42 @@ operations, with the remaining unmatched model surface in `FLASH_ATTN_EXT`,
   `--expected-kernel-buffer-tolerance` with the bench harness changes.
 - [ ] Add HRX-side unit coverage for tolerant HAL expected-buffer comparison,
   so approximate descriptor execution is protected below the bench runner.
-- [ ] Refresh coverage from the current YAML artifacts after the tolerant
-  descriptor-execution changes land.
-- [ ] Re-triage unmatched llama.cpp cases from current route-import artifacts.
-- [ ] Re-triage unmatched model cases from current route-import artifacts.
-- [ ] Pick the next narrow op/dtype/layout slice from the refreshed unmatched
-  set.
-- [ ] Validate any widened executing kernel surface with targeted generated
-  runtime tests.
+- [x] Refresh the harness inventory after each old-tool retirement step and
+  drive the legacy runtime registration count to zero.
+- [x] Remove no-op old generated-runtime registrations for ops whose
+  `generated-kernel-tests.json` manifests contain zero entries.
+- [x] For any old generated-runtime registration with non-empty generated
+  entries, move the case to descriptor execution or record the exact blocker.
+- [x] Validate any widened descriptor execution surface with targeted HSA
+  descriptor tests outside the sandboxed harness path.
 - [x] Add and validate the model `SET_ROWS` f32-to-f16 slice through descriptor
   route import and generated descriptor execution.
-- [ ] Expand descriptor execution coverage to additional f32 approximate
-  families now that `close` tolerances are preserved through the runner.
-- [ ] Simplify or retire redundant legacy generated-runtime execution paths once
-  descriptor execution has enough operation coverage to be the primary runtime
-  validation utility.
+- [x] Remove the old generated-runtime CMake registration path once the
+  inventory reports zero legacy runtime registrations.
+- [x] Remove or archive the old generated-runtime Python runner after CMake no
+  longer references it.
+
+Current retirement inventories:
+
+- `/home/rsuderman/codex/ggml-hrx-kernel-bench-harness-inventory-kernels-old-tool-retirement-20260713.{json,md}`:
+  115 ops, 115 descriptor execute registrations, 401 emitted descriptor cases,
+  and zero legacy runtime registrations.
+- `/home/rsuderman/codex/ggml-hrx-kernel-bench-harness-inventory-model-old-tool-retirement-20260713.{json,md}`:
+  10 ops, 9 descriptor execute registrations, 14 emitted descriptor cases, and
+  zero legacy runtime registrations.
+
+Validation run on 2026-07-13: `ctest --test-dir build -N -R
+'kernel-run-.*yaml-route-import-v2'` reported zero tests, and targeted model
+descriptor generate/prepare/execute for `ADD`, `CPY`, `GET_ROWS`, `MUL`, and
+`RMS_NORM` passed outside the sandbox.
 
 ## Next Candidate Slices
 
-Prefer small model-level gaps before broad llama.cpp gaps when the work is
-otherwise equivalent. `SET_ROWS` was validated on 2026-07-13 and is no longer a
-model gap.
-
-- `SWIGLU`: two unmatched model cases; compact surface, but may require checking
-  activation-specific ABI and route assumptions.
-- `ROPE`: four unmatched model cases; only revisit after confirming whether the
-  current route predicates intentionally exclude this model mode.
-- `FLASH_ATTN_EXT`: two unmatched model cases; keep later unless the goal is to
-  tackle attention-specific route and kernel surface.
-
-For llama.cpp coverage, start from the operations with existing partial support
-before tackling large unsupported families. Good first candidates are partial
-elementwise or movement ops such as `ADD`, `MUL`, `DIV`, `SUB`, `CPY`, `CONT`,
-`GET_ROWS`, `RMS_NORM`, `ROPE`, `SET_ROWS`, `SOFT_MAX`, and `SWIGLU`.
+Do not pick a new operation merely to improve coverage while retiring the old
+testing tool. First remove stale legacy registrations that have empty generated
+manifests. Only pick an op slice when an old generated-runtime registration has
+non-empty generated entries and cannot be removed until descriptor execution is
+validated for that slice.
 
 ## Triage Requirements
 

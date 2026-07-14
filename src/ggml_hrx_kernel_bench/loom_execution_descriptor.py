@@ -54,6 +54,12 @@ GATED_ACTIVATION_F32_FAMILIES = {"swiglu_f32"}
 SOFTMAX_F32_FAMILIES = {"soft_max_f32"}
 ROPE_F32_FAMILIES = {"rope_f32", "rope_neox_f32"}
 INDEX_F32_FAMILIES = {"get_rows_f32", "set_rows_f32", "cont_set_rows_f32"}
+INDEX_QUANTIZED_FAMILIES = {
+    "get_rows_q4_k_f32",
+    "get_rows_q5_k_f32",
+    "get_rows_q6_k_f32",
+    "get_rows_q8_0_f32",
+}
 COPY_F32_FAMILIES = {"cont_f32"}
 COPY_CAST_FAMILIES = {
     "copy_bf16_bf16",
@@ -90,6 +96,7 @@ SUPPORTED_BUFFER_FAMILIES = (
     | BINARY_F16_FAMILIES
     | UNARY_F16_FAMILIES
     | INDEX_F32_FAMILIES
+    | INDEX_QUANTIZED_FAMILIES
     | COPY_CAST_FAMILIES
     | MATMUL_FAMILIES
 )
@@ -400,7 +407,7 @@ def descriptor_from_generated_case(
     if family not in SUPPORTED_BUFFER_FAMILIES:
         return GeneratedDescriptorResult(
             status="unsupported",
-            reason=f"only bf16/f32/f16/i32 buffer generated descriptors are currently supported, saw {family!r}",
+            reason=f"generated buffer descriptors are not enabled for family {family!r}",
         )
     abi_entries, abi_error = _execution_abi_entries(config_data)
     if abi_entries is None:
@@ -435,7 +442,7 @@ def descriptor_from_generated_case(
     ):
         return GeneratedDescriptorResult(
             status="unsupported",
-            reason="only bf16/f32/f16/i32 tensor descriptors are currently supported",
+            reason=f"only {', '.join(sorted(SUPPORTED_BUFFER_DTYPES))} tensor descriptors are currently supported",
         )
     element_counts = {name: _storage_elements(tensor) for name, tensor in tensors.items()}
     largest = max(element_counts.values())

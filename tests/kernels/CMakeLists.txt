@@ -15,36 +15,6 @@ add_yaml_route_import_target(
     ${GGML_HRX_RUNTIME_ASSET_TARGET}
 )
 
-add_yaml_route_import_runtime_tests(
-  NAME llama-cpp-yaml-route-import-v2
-  GENERATED_IMPORT_DIR ${GGML_HRX_LLAMA_CPP_YAML_ROUTE_IMPORT_DIR_V2}
-  GROUPED_YAML ${GGML_HRX_GROUPED_YAML}
-  ROUTING_DIR ${GGML_HRX_ROUTING_DIR_V2}
-  KERNEL_DIR ${GGML_HRX_KERNEL_DIR_V2}
-  EXCLUDE_OPS
-    ABS
-    ADD
-    CLAMP
-    CONT
-    CPY
-    DIV
-    EXP
-    GET_ROWS
-    MUL
-    MUL_MAT
-    NEG
-    RELU
-    RMS_NORM
-    ROPE
-    SCALE
-    SET_ROWS
-    SOFT_MAX
-    SQR
-    SQRT
-    SUB
-    SWIGLU
-)
-
 if(GGML_HRX_ENABLE_HSA_DESCRIPTOR_TESTS)
   set(_ggml_hrx_descriptor_hsa_arg ENABLE_HSA_EXECUTION)
 else()
