@@ -18,6 +18,10 @@ enum class DType {
   kF32,
   kF16,
   kI32,
+  kQ4K,
+  kQ5K,
+  kQ6K,
+  kQ8_0,
 };
 
 enum class CheckMode {

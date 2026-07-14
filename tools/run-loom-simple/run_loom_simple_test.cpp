@@ -214,6 +214,36 @@ void WriteI32Npy(const std::filesystem::path &path,
   }
 }
 
+void WriteI8Npy(const std::filesystem::path &path,
+                const std::vector<std::int8_t> &values,
+                const std::string &descr = "|i1") {
+  std::ofstream output(path, std::ios::binary);
+  std::string header = "{'descr': '" + descr +
+                       "', 'fortran_order': False, 'shape': (" +
+                       std::to_string(values.size()) + ",), }";
+  const std::size_t prefix_size = 10;
+  const std::size_t newline_size = 1;
+  const std::size_t remainder =
+      (prefix_size + header.size() + newline_size) % 16;
+  const std::size_t padding = remainder == 0 ? 0 : 16 - remainder;
+  header.append(padding, ' ');
+  header.push_back('\n');
+
+  output.write("\x93NUMPY", 6);
+  const unsigned char version[2] = {1, 0};
+  output.write(reinterpret_cast<const char *>(version), 2);
+  const std::uint16_t len = static_cast<std::uint16_t>(header.size());
+  const unsigned char bytes[2] = {
+      static_cast<unsigned char>(len & 0xFF),
+      static_cast<unsigned char>((len >> 8) & 0xFF),
+  };
+  output.write(reinterpret_cast<const char *>(bytes), 2);
+  output.write(header.data(), static_cast<std::streamsize>(header.size()));
+  for (const std::int8_t value : values) {
+    output.write(reinterpret_cast<const char *>(&value), sizeof(value));
+  }
+}
+
 void WriteExecutableScript(const std::filesystem::path &path,
                            const std::string &body) {
   std::ofstream output(path);
@@ -366,13 +396,13 @@ void TestRejectsUnsupportedDType() {
   auto args = ValidArgs();
   for (std::size_t i = 0; i + 1 < args.size(); ++i) {
     if (args[i] == "--binding") {
-      args[i + 1] = "0:input:q8_0:4096:fixtures/src0.npy";
+      args[i + 1] = "0:input:f64:4096:fixtures/src0.npy";
       break;
     }
   }
   const auto parsed = ParseArgs(args);
   Expect(!parsed.invocation.has_value(), "unsupported dtype rejected");
-  Expect(HasErrorContaining(parsed.errors, "unsupported dtype: q8_0"),
+  Expect(HasErrorContaining(parsed.errors, "unsupported dtype: f64"),
          "unsupported dtype error");
 }
 
@@ -425,6 +455,31 @@ void TestParsesI32BindingDType() {
   }
   Expect(parsed.invocation->bindings[0].dtype == DType::kI32,
          "i32 dtype recorded");
+}
+
+void TestParsesPackedQuantBindingDTypes() {
+  const std::vector<std::pair<std::string, DType>> cases = {
+      {"q4_k", DType::kQ4K},
+      {"q5_k", DType::kQ5K},
+      {"q6_k", DType::kQ6K},
+      {"q8_0", DType::kQ8_0},
+  };
+  for (const auto &[text, dtype] : cases) {
+    auto args = ValidArgsWithoutConfig();
+    for (std::size_t i = 0; i + 1 < args.size(); ++i) {
+      if (args[i] == "--binding") {
+        args[i + 1] = "0:input:" + text + ":4:fixtures/src0.npy";
+        break;
+      }
+    }
+    const auto parsed = ParseArgs(args);
+    Expect(parsed.invocation.has_value(), text + " dtype parses");
+    if (!parsed.invocation.has_value()) {
+      continue;
+    }
+    Expect(parsed.invocation->bindings[0].dtype == dtype,
+           text + " dtype recorded");
+  }
 }
 
 void TestRejectsUnsupportedKind() {
@@ -606,6 +661,25 @@ void TestRejectsI32StorageDTypeMismatch() {
   Expect(!loaded.loaded, "i32 storage dtype mismatch rejected");
   Expect(loaded.error.find("expected i32 npy dtype") != std::string::npos,
          "i32 storage dtype mismatch error");
+}
+
+void TestValidatesPackedQuantStorageNpy() {
+  const std::filesystem::path dir = TempDir();
+  const std::filesystem::path path = dir / "packed.npy";
+  WriteI8Npy(path, {1, -2, 3, -4});
+  const auto loaded = ValidateNpyStorage1D(path.string(), DType::kQ4K, 4);
+  Expect(loaded.loaded, "validates packed quant int8-backed npy");
+}
+
+void TestRejectsPackedQuantStorageDTypeMismatch() {
+  const std::filesystem::path dir = TempDir();
+  const std::filesystem::path path = dir / "packed-i16.npy";
+  WriteI16Npy(path, {1, 2});
+  const auto loaded = ValidateNpyStorage1D(path.string(), DType::kQ8_0, 2);
+  Expect(!loaded.loaded, "packed quant storage dtype mismatch rejected");
+  Expect(loaded.error.find("expected q8_0 storage npy dtype") !=
+             std::string::npos,
+         "packed quant storage dtype mismatch error");
 }
 
 void TestRejectsMissingNpyFile() {
@@ -949,6 +1023,57 @@ void TestIreeRunLoomBridgeBuildsI32NpyBackedCommand() {
          "i32 bridge command input spec");
 }
 
+void TestIreeRunLoomBridgeBuildsPackedQuantNpyBackedCommand() {
+  const std::filesystem::path dir = TempDir();
+  WriteI8Npy(dir / "src0.npy", {1, -2, 3, -4});
+  WriteF32Npy(dir / "src1.npy", {1.0f, 2.0f, 3.0f, 4.0f});
+  WriteF32Npy(dir / "dst_init.npy", {0.0f, 0.0f});
+  WriteF32Npy(dir / "expected.npy", {1.0f, 2.0f});
+  auto args = std::vector<std::string>{
+      "--kernel",
+      "linked.loom",
+      "--root",
+      "@mul_mat_q4_k_f32_direct",
+      "--target",
+      "gfx1100",
+      "--iree-run-loom",
+      "/tmp/iree-run-loom",
+      "--binding",
+      "0:input:q4_k:4:" + (dir / "src0.npy").string(),
+      "--binding",
+      "1:input:f32:4:" + (dir / "src1.npy").string(),
+      "--binding",
+      "2:output:f32:2:" + (dir / "dst_init.npy").string(),
+      "--expect",
+      "2:close:" + (dir / "expected.npy").string() + ":0.08:0.02",
+      "--output",
+      "result.json",
+  };
+  const auto parsed = ParseArgs(args);
+  Expect(parsed.invocation.has_value(), "packed quant bridge command parses");
+  if (!parsed.invocation.has_value()) {
+    return;
+  }
+  const auto command = BuildIreeRunLoomCommand(*parsed.invocation);
+  Expect(command.args.has_value(), "packed quant npy bridge command builds");
+  if (!command.args.has_value()) {
+    std::cerr << "bridge error: " << command.error << "\n";
+    return;
+  }
+  Expect(std::find(command.args->begin(), command.args->end(),
+                   "--kernel-input-buffer=&@" + (dir / "src0.npy").string()) !=
+             command.args->end(),
+         "packed quant bridge command input spec");
+  Expect(std::find(command.args->begin(), command.args->end(),
+                   "--expected-kernel-buffer=@" +
+                       (dir / "expected.npy").string()) != command.args->end(),
+         "packed quant bridge command expected spec");
+  Expect(std::find(command.args->begin(), command.args->end(),
+                   "--expected-kernel-buffer-tolerance=0.08,0.02") !=
+             command.args->end(),
+         "packed quant bridge command output tolerance");
+}
+
 void TestIreeRunLoomBridgeAcceptsNonSplatTensor() {
   const std::filesystem::path dir = TempDir();
   WriteF32Npy(dir / "src0.npy", {1.0f, 2.0f, 1.0f, 1.0f});
@@ -1136,6 +1261,7 @@ int main() {
   TestParsesBF16BindingDType();
   TestParsesF16BindingDType();
   TestParsesI32BindingDType();
+  TestParsesPackedQuantBindingDTypes();
   TestRejectsUnsupportedKind();
   TestRejectsExpectForInputBinding();
   TestParsesMultipleExpectations();
@@ -1149,6 +1275,8 @@ int main() {
   TestRejectsF16StorageDTypeMismatch();
   TestValidatesI32StorageNpy();
   TestRejectsI32StorageDTypeMismatch();
+  TestValidatesPackedQuantStorageNpy();
+  TestRejectsPackedQuantStorageDTypeMismatch();
   TestRejectsMissingNpyFile();
   TestRejectsInvalidNpyMagic();
   TestRejectsNpyDTypeMismatch();
@@ -1165,6 +1293,7 @@ int main() {
   TestIreeRunLoomBridgeBuildsBF16NpyBackedCommand();
   TestIreeRunLoomBridgeBuildsF16NpyBackedCommand();
   TestIreeRunLoomBridgeBuildsI32NpyBackedCommand();
+  TestIreeRunLoomBridgeBuildsPackedQuantNpyBackedCommand();
   TestIreeRunLoomBridgeAcceptsNonSplatTensor();
   TestIreeRunLoomBridgeBuildsScalarCommand();
   TestExecuteBridgeRunsNoConfigCommand();

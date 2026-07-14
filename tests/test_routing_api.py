@@ -633,6 +633,43 @@ def test_v2_soft_max_dispatch_uses_flattened_trailing_rows(route_id: str) -> Non
     assert candidate.dispatch["workgroup_count"] == [64, 1, 1]
 
 
+@pytest.mark.parametrize(
+    ("route_id", "shape", "expected_workgroup_count"),
+    [
+        (
+            "mul_mat_f32_f32_contiguous_4d",
+            {"d0": 16, "d1": 1, "d2": 1, "d3": 1, "src0_d0": 256, "src0_d1": 16, "src1_d0": 256},
+            [16, 1, 1],
+        ),
+        (
+            "mul_mat_q8_0_f32_contiguous_4d",
+            {"d0": 1, "d1": 64, "d2": 1, "d3": 1, "src0_d0": 256, "src0_d1": 1, "src1_d0": 256},
+            [1, 64, 1],
+        ),
+        (
+            "mul_mat_f16_f32_tiled_batched_4d",
+            {"d0": 16, "d1": 1, "d2": 1, "d3": 2, "src0_d0": 256, "src0_d1": 16, "src0_d3": 1, "src1_d0": 256},
+            [8, 2, 1],
+        ),
+    ],
+)
+def test_v2_mul_mat_dispatch_uses_kernel_launch_order(
+    route_id: str,
+    shape: dict[str, int],
+    expected_workgroup_count: list[int],
+) -> None:
+    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
+    route = next(current for current in routes_for_op(catalog, "MUL_MAT") if current.id == route_id)
+
+    candidate = candidate_from_shape(
+        kernel_dir=ACTUAL_V2_KERNEL_DIR,
+        route=route,
+        shape=shape,
+    )
+
+    assert candidate.dispatch["workgroup_count"] == expected_workgroup_count
+
+
 def test_v2_default_cont_candidate_derives_rank_polymorphic_shape_bindings() -> None:
     router = create_router(version="v2", kernel_dir=ACTUAL_V2_KERNEL_DIR, routing_dir=ACTUAL_V2_ROUTING_DIR)
 

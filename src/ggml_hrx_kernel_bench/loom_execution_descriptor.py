@@ -66,6 +66,15 @@ COPY_CAST_FAMILIES = {
     "copy_f32_f16",
     "copy_f32_f32",
 }
+MATMUL_FAMILIES = {
+    "mul_mat_f16_f32_batched",
+    "mul_mat_f16_f32_tiled_batched",
+    "mul_mat_f32_f32",
+    "mul_mat_q4_k_f32",
+    "mul_mat_q5_k_f32",
+    "mul_mat_q6_k_f32",
+    "mul_mat_q8_0_f32",
+}
 SUPPORTED_F32_BUFFER_FAMILIES = (
     BINARY_F32_FAMILIES
     | UNARY_F32_FAMILIES
@@ -82,13 +91,18 @@ SUPPORTED_BUFFER_FAMILIES = (
     | UNARY_F16_FAMILIES
     | INDEX_F32_FAMILIES
     | COPY_CAST_FAMILIES
+    | MATMUL_FAMILIES
 )
-SUPPORTED_BUFFER_DTYPES = {"bf16", "f32", "f16", "i32"}
+SUPPORTED_BUFFER_DTYPES = {"bf16", "f32", "f16", "i32", "q4_k", "q5_k", "q6_k", "q8_0"}
 NPY_STORAGE_DTYPE_BY_DESCRIPTOR_DTYPE = {
     "bf16": "int16",
     "f32": "float32",
     "f16": "int16",
     "i32": "int32",
+    "q4_k": "int8",
+    "q5_k": "int8",
+    "q6_k": "int8",
+    "q8_0": "int8",
 }
 
 
@@ -171,7 +185,10 @@ def validate_descriptor(data: object) -> None:
         kind = binding.get("kind")
         _expect(kind in ("input", "output"), f"bindings[{index}].kind must be input or output")
         dtype = binding.get("dtype")
-        _expect(dtype in SUPPORTED_BUFFER_DTYPES, f"bindings[{index}].dtype must be bf16, f32, f16, or i32")
+        _expect(
+            dtype in SUPPORTED_BUFFER_DTYPES,
+            f"bindings[{index}].dtype must be one of {', '.join(sorted(SUPPORTED_BUFFER_DTYPES))}",
+        )
         has_values = "values" in binding
         has_path = "path" in binding
         _expect(has_values != has_path, f"bindings[{index}] must provide exactly one of values or path")

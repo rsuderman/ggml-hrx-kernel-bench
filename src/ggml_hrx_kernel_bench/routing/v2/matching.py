@@ -607,6 +607,17 @@ def route_dispatch(
             total_size = resolved
     if total_size is not None:
         workgroup_count = [_ceil_div(total_size, lane_count), 1, 1]
+    elif route.family.startswith("mul_mat"):
+        rows_per_workgroup = int(route.launch.get("rows_per_workgroup", 1) or 1)
+        cols_per_workgroup = int(route.launch.get("cols_per_workgroup", 1) or 1)
+        rows = int(normalized_shape.get("rows", normalized_shape.get("d0", 1)))
+        cols = int(normalized_shape.get("cols", normalized_shape.get("d1", 1)))
+        outer = cols * int(normalized_shape.get("d2", 1)) * int(normalized_shape.get("d3", 1))
+        workgroup_count = [
+            _ceil_div(rows, rows_per_workgroup),
+            _ceil_div(outer, cols_per_workgroup),
+            1,
+        ]
     else:
         rows_per_workgroup = int(route.launch.get("rows_per_workgroup", 1) or 1)
         cols_per_workgroup = int(route.launch.get("cols_per_workgroup", 1) or 1)

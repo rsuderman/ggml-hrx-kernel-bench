@@ -114,6 +114,18 @@ std::optional<DType> ParseDType(std::string_view value) {
   if (value == "i32") {
     return DType::kI32;
   }
+  if (value == "q4_k") {
+    return DType::kQ4K;
+  }
+  if (value == "q5_k") {
+    return DType::kQ5K;
+  }
+  if (value == "q6_k") {
+    return DType::kQ6K;
+  }
+  if (value == "q8_0") {
+    return DType::kQ8_0;
+  }
   return std::nullopt;
 }
 
@@ -556,6 +568,11 @@ std::uint32_t ReadLe32(const unsigned char *bytes) {
          (static_cast<std::uint32_t>(bytes[3]) << 24);
 }
 
+bool IsPackedQuantDType(DType dtype) {
+  return dtype == DType::kQ4K || dtype == DType::kQ5K || dtype == DType::kQ6K ||
+         dtype == DType::kQ8_0;
+}
+
 std::optional<std::string> BuildNpyStorageBindingSpec(const std::string &path,
                                                       DType dtype,
                                                       std::size_t elements,
@@ -946,15 +963,20 @@ NpyLoadResult ValidateNpyStorage1D(const std::string &path, DType dtype,
   if (!descr.has_value()) {
     return NpyLoadResult{false, "missing descr in npy header: " + path};
   }
-  if ((dtype == DType::kBF16 || dtype == DType::kF16) &&
-      *descr != "<i2" && *descr != "|i2") {
-    return NpyLoadResult{
-        false, "expected " + ToString(dtype) +
-                   " storage npy dtype '<i2', saw '" + *descr + "'"};
+  if ((dtype == DType::kBF16 || dtype == DType::kF16) && *descr != "<i2" &&
+      *descr != "|i2") {
+    return NpyLoadResult{false, "expected " + ToString(dtype) +
+                                    " storage npy dtype '<i2', saw '" + *descr +
+                                    "'"};
   }
   if (dtype == DType::kI32 && *descr != "<i4" && *descr != "|i4") {
     return NpyLoadResult{false,
                          "expected i32 npy dtype '<i4', saw '" + *descr + "'"};
+  }
+  if (IsPackedQuantDType(dtype) && *descr != "|i1" && *descr != "<i1") {
+    return NpyLoadResult{false, "expected " + ToString(dtype) +
+                                    " storage npy dtype '|i1', saw '" + *descr +
+                                    "'"};
   }
   if (!HeaderHasFalse(header, "fortran_order")) {
     return NpyLoadResult{false,
@@ -975,7 +997,9 @@ NpyLoadResult ValidateNpyStorage1D(const std::string &path, DType dtype,
   }
 
   const std::size_t element_bytes =
-      dtype == DType::kBF16 || dtype == DType::kF16 ? 2 : 4;
+      IsPackedQuantDType(dtype)
+          ? 1
+          : (dtype == DType::kBF16 || dtype == DType::kF16 ? 2 : 4);
   std::vector<unsigned char> bytes(expected_elements * element_bytes);
   input.read(reinterpret_cast<char *>(bytes.data()),
              static_cast<std::streamsize>(bytes.size()));
@@ -1133,6 +1157,14 @@ std::string ToString(DType dtype) {
     return "f16";
   case DType::kI32:
     return "i32";
+  case DType::kQ4K:
+    return "q4_k";
+  case DType::kQ5K:
+    return "q5_k";
+  case DType::kQ6K:
+    return "q6_k";
+  case DType::kQ8_0:
+    return "q8_0";
   }
   return "unknown";
 }

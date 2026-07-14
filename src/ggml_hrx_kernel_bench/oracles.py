@@ -436,6 +436,12 @@ def _mul_mat_q4_k_f32(np: Any, candidate: Candidate, fixture_dir: Path, seed: in
     np.save(fixture_dir / "dst_init.npy", dst_init.astype(np.float32), allow_pickle=False)
     np.save(fixture_dir / "expected.npy", expected.astype(np.float32), allow_pickle=False)
     meta = _metadata(candidate, seed, "mul_mat_q4_k_f32_normalized_numpy_dequant_matmul", {"atol": 0.08, "rtol": 0.02})
+    meta["arrays"] = {
+        "src0": str(fixture_dir / "src0.npy"),
+        "src1": str(fixture_dir / "src1.npy"),
+        "dst_init": str(fixture_dir / "dst_init.npy"),
+        "expected": str(fixture_dir / "expected.npy"),
+    }
     meta["fixture_policy"] = {
         "src0": "valid_q4_k_balanced_nibbles_centered_groups_block_rms_0.5",
         "src1": "mean_centered_rows_l2_norm_1.0",
@@ -1730,6 +1736,7 @@ def _matmul_f32_arrays(np: Any, candidate: Candidate, seed: int) -> dict[str, An
     expected = np.matmul(lhs.astype(np.float32), rhs.T.astype(np.float32)).T.astype(np.float32)
     return {
         "arrays": {
+            "src0": lhs.reshape(rows * k),
             "src0_logical_f32": lhs.reshape(rows * k),
             "src1": rhs.reshape(cols * k),
             "dst_init": f32_pattern(np, (rows * cols,), seed=seed + 2, scale=0.25),
@@ -1776,7 +1783,7 @@ def _matmul_f16_f32_arrays(np: Any, candidate: Candidate, seed: int) -> dict[str
                     expected[dst_col_base : dst_col_base + rows] = dot[col]
         return {
             "arrays": {
-                "src0": src0,
+                "src0": _f16_bits(np, src0),
                 "src1": src1,
                 "dst_init": dst_init,
                 "expected": expected,
@@ -1789,7 +1796,7 @@ def _matmul_f16_f32_arrays(np: Any, candidate: Candidate, seed: int) -> dict[str
     expected = np.matmul(lhs.astype(np.float32), rhs.T.astype(np.float32)).T.astype(np.float32)
     return {
         "arrays": {
-            "src0": lhs.reshape(rows * k),
+            "src0": _f16_bits(np, lhs),
             "src1": rhs.reshape(cols * k),
             "dst_init": f32_pattern(np, (rows * cols,), seed=seed + 2, scale=0.25),
             "expected": expected.reshape(rows * cols),

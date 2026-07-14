@@ -492,6 +492,40 @@ def _copy_execution_abi(route_id: str, *, src_dtype: str, dst_dtype: str) -> dic
     }
 
 
+def _mul_mat_execution_abi(route_id: str, *, src0_dtype: str) -> dict[str, object]:
+    return {
+        "schema": ROUTE_EXECUTION_ABI_SCHEMA,
+        "route_id": route_id,
+        "entries": [
+            {
+                "position": 0,
+                "role": "src0",
+                "kind": "input",
+                "dtype": src0_dtype,
+                "fixture": "src0",
+            },
+            {
+                "position": 1,
+                "role": "src1",
+                "kind": "input",
+                "dtype": "f32",
+                "fixture": "src1",
+            },
+            {
+                "position": 2,
+                "role": "dst",
+                "kind": "output",
+                "dtype": "f32",
+                "fixture": "dst_init",
+                "expect": {
+                    "fixture": "expected",
+                    "mode": "close",
+                },
+            },
+        ],
+    }
+
+
 def _generated_copy_config(src_dtype: str, dst_dtype: str, *, route_suffix: str = "contiguous_1d") -> dict[str, object]:
     route_id = f"copy_{src_dtype}_{dst_dtype}_{route_suffix}"
     return {
@@ -500,6 +534,23 @@ def _generated_copy_config(src_dtype: str, dst_dtype: str, *, route_suffix: str 
         "cases": [[4, 1, 1, 1]],
         "route_id": route_id,
         "execution_abi": _copy_execution_abi(route_id, src_dtype=src_dtype, dst_dtype=dst_dtype),
+    }
+
+
+def _generated_mul_mat_config(
+    family: str,
+    route_id: str,
+    params: list[str],
+    case_values: list[int],
+    *,
+    src0_dtype: str,
+) -> dict[str, object]:
+    return {
+        "kernel": family,
+        "params": params,
+        "cases": [case_values],
+        "route_id": route_id,
+        "execution_abi": _mul_mat_execution_abi(route_id, src0_dtype=src0_dtype),
     }
 
 
@@ -1136,6 +1187,201 @@ def test_descriptor_from_generated_copy_case_uses_cast_storage_dtypes(
     command = prepared.command
     assert f"0:input:{src_dtype}:4:{tmp_path / descriptor['bindings'][0]['path']}" in command
     assert f"1:output:{dst_dtype}:4:{tmp_path / descriptor['bindings'][1]['path']}" in command
+
+
+@pytest.mark.parametrize(
+    (
+        "family",
+        "route_id",
+        "params",
+        "case_values",
+        "src0_dtype",
+        "src0_storage_dtype",
+        "expected_root",
+    ),
+    [
+        (
+            "mul_mat_f32_f32",
+            "mul_mat_f32_f32_contiguous_4d",
+            ["d0", "d1", "d2", "d3", "src0_d0", "src1_d0", "k", "rows", "cols"],
+            [16, 16, 1, 1, 4, 4, 4, 16, 16],
+            "f32",
+            np.float32,
+            "@hrx2_mul_mat_f32_f32_static",
+        ),
+        (
+            "mul_mat_f16_f32_batched",
+            "mul_mat_f16_f32_batched_contiguous_4d",
+            [
+                "d0",
+                "d1",
+                "d2",
+                "d3",
+                "src0_d0",
+                "src0_d1",
+                "src1_d0",
+                "k",
+                "rows",
+                "cols",
+                "src1_d2_stride",
+                "src1_d3_stride",
+                "dst_d2_stride",
+                "dst_d3_stride",
+            ],
+            [16, 1, 1, 1, 4, 16, 4, 4, 16, 1, 4, 4, 16, 16],
+            "f16",
+            np.int16,
+            "@hrx2_mul_mat_f16_f32_batched",
+        ),
+        (
+            "mul_mat_f16_f32_tiled_batched",
+            "mul_mat_f16_f32_tiled_batched_4d",
+            ["d0", "d1", "d2", "d3", "src0_d0", "src0_d1", "src0_d3", "src1_d0"],
+            [16, 1, 1, 2, 4, 16, 1, 4],
+            "f16",
+            np.int16,
+            "@hrx2_mul_mat_f16_f32_tiled_batched",
+        ),
+    ],
+)
+def test_descriptor_from_generated_mul_mat_float_case_uses_kernel_abi(
+    tmp_path: Path,
+    family: str,
+    route_id: str,
+    params: list[str],
+    case_values: list[int],
+    src0_dtype: str,
+    src0_storage_dtype: object,
+    expected_root: str,
+) -> None:
+    assets = materialize_asset_root(tmp_path / "assets", force=True)
+    result = descriptor_from_generated_case(
+        config_data=_generated_mul_mat_config(family, route_id, params, case_values, src0_dtype=src0_dtype),
+        case_id="mul-mat-small",
+        case_values=case_values,
+        kernel_dir=assets / "kernels" / "v2",
+        routing_dir=assets / "catalog" / "v2",
+        target="gfx1100",
+        max_elements=65536,
+        oracle_fixture_dir=tmp_path / "oracle-fixtures",
+        descriptor_dir=tmp_path,
+    )
+
+    assert result.status == "emitted", result.reason
+    assert result.descriptor is not None
+    descriptor = result.descriptor
+    assert descriptor["root"] == expected_root
+    assert [binding["name"] for binding in descriptor["bindings"]] == ["src0", "src1", "dst"]
+    assert [binding["dtype"] for binding in descriptor["bindings"]] == [src0_dtype, "f32", "f32"]
+    src0 = np.load(tmp_path / descriptor["bindings"][0]["path"])
+    src1 = np.load(tmp_path / descriptor["bindings"][1]["path"])
+    expected = np.load(tmp_path / descriptor["bindings"][2]["expect"]["path"])
+    assert src0.dtype == src0_storage_dtype
+    assert src1.dtype == np.float32
+    assert expected.dtype == np.float32
+
+    descriptor_path = _write_descriptor(tmp_path, descriptor)
+    prepared = prepare_execution(
+        descriptor_path=descriptor_path,
+        fixture_dir=tmp_path / "fixtures",
+        output_path=tmp_path / "result.json",
+        runner="runner",
+        loom_link=None,
+        iree_run_loom=None,
+        repo_root=tmp_path,
+    )
+    command = prepared.command
+    assert f"0:input:{src0_dtype}:{src0.size}:{tmp_path / descriptor['bindings'][0]['path']}" in command
+    assert f"2:output:f32:{expected.size}:{tmp_path / descriptor['bindings'][2]['path']}" in command
+
+
+@pytest.mark.parametrize(
+    ("family", "route_id", "params", "case_values", "src0_dtype", "expected_root"),
+    [
+        (
+            "mul_mat_q4_k_f32",
+            "mul_mat_q4_k_f32_direct_contiguous_4d",
+            ["d0", "d1", "d2", "d3", "src0_d0", "src1_d0", "k", "rows", "cols"],
+            [16, 16, 1, 1, 256, 256, 256, 16, 16],
+            "q4_k",
+            "@hrx2_mul_mat_q4_k_f32_static",
+        ),
+        (
+            "mul_mat_q5_k_f32",
+            "mul_mat_q5_k_f32_dot16_contiguous_cols1_4d",
+            ["d0", "d1", "d2", "d3", "src0_d0", "src0_d1", "src1_d0", "k", "rows", "cols"],
+            [16, 1, 1, 1, 256, 16, 256, 256, 16, 1],
+            "q5_k",
+            "@hrx2_mul_mat_q5_k_f32_dot16_static",
+        ),
+        (
+            "mul_mat_q6_k_f32",
+            "mul_mat_q6_k_f32_direct_contiguous_4d",
+            ["d0", "d1", "d2", "d3", "src0_d0", "src0_d1", "src1_d0", "k", "rows", "cols"],
+            [16, 1, 1, 1, 256, 16, 256, 256, 16, 1],
+            "q6_k",
+            "@hrx2_mul_mat_q6_k_f32_static",
+        ),
+        (
+            "mul_mat_q8_0_f32",
+            "mul_mat_q8_0_f32_contiguous_4d",
+            ["d0", "d1", "d2", "d3", "src0_d0", "src1_d0", "k", "rows", "cols"],
+            [16, 16, 1, 1, 256, 256, 256, 16, 16],
+            "q8_0",
+            "@hrx2_mul_mat_q8_0_f32_static",
+        ),
+    ],
+)
+def test_descriptor_from_generated_mul_mat_quantized_case_uses_int8_storage(
+    tmp_path: Path,
+    family: str,
+    route_id: str,
+    params: list[str],
+    case_values: list[int],
+    src0_dtype: str,
+    expected_root: str,
+) -> None:
+    assets = materialize_asset_root(tmp_path / "assets", force=True)
+    result = descriptor_from_generated_case(
+        config_data=_generated_mul_mat_config(family, route_id, params, case_values, src0_dtype=src0_dtype),
+        case_id="mul-mat-packed-small",
+        case_values=case_values,
+        kernel_dir=assets / "kernels" / "v2",
+        routing_dir=assets / "catalog" / "v2",
+        target="gfx1100",
+        max_elements=65536,
+        oracle_fixture_dir=tmp_path / "oracle-fixtures",
+        descriptor_dir=tmp_path,
+    )
+
+    assert result.status == "emitted", result.reason
+    assert result.descriptor is not None
+    descriptor = result.descriptor
+    assert descriptor["root"] == expected_root
+    assert [binding["name"] for binding in descriptor["bindings"]] == ["src0", "src1", "dst"]
+    assert [binding["dtype"] for binding in descriptor["bindings"]] == [src0_dtype, "f32", "f32"]
+    src0 = np.load(tmp_path / descriptor["bindings"][0]["path"])
+    src1 = np.load(tmp_path / descriptor["bindings"][1]["path"])
+    expected = np.load(tmp_path / descriptor["bindings"][2]["expect"]["path"])
+    assert src0.dtype == np.int8
+    assert src1.dtype == np.float32
+    assert expected.dtype == np.float32
+    assert descriptor["metadata"]["oracle_array_element_counts"]["src0"] == src0.size
+
+    descriptor_path = _write_descriptor(tmp_path, descriptor)
+    prepared = prepare_execution(
+        descriptor_path=descriptor_path,
+        fixture_dir=tmp_path / "fixtures",
+        output_path=tmp_path / "result.json",
+        runner="runner",
+        loom_link=None,
+        iree_run_loom=None,
+        repo_root=tmp_path,
+    )
+    command = prepared.command
+    assert f"0:input:{src0_dtype}:{src0.size}:{tmp_path / descriptor['bindings'][0]['path']}" in command
+    assert f"1:input:f32:{src1.size}:{tmp_path / descriptor['bindings'][1]['path']}" in command
+    assert f"2:output:f32:{expected.size}:{tmp_path / descriptor['bindings'][2]['path']}" in command
 
 
 def test_descriptor_from_generated_swiglu_f32_case_uses_packed_input(tmp_path: Path) -> None:

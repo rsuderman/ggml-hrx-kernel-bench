@@ -101,13 +101,18 @@ The generated runtime CTest suites are named with
     `kernel-run-*` registration after adding scalar `theta_scale`,
     `freq_scale`, and `attn_factor` ABI, mapping `src1` to generated
     `positions` fixtures, and passing targeted descriptor HSA execution.
+  - [x] Migrate the validated matrix multiplication kernel slice `MUL_MAT` off
+    legacy `kernel-run-*` registration after enabling f32/f16 and packed
+    q4_k/q5_k/q6_k/q8_0 buffer descriptor families, correcting descriptor
+    dispatch order for matmul workgroups, and passing targeted descriptor HSA
+    execution.
   - [ ] Continue with the next low-risk pointwise/indexed descriptor-validated
     slice.
   Latest step-4 inventories:
-  `/home/rsuderman/codex/ggml-hrx-kernel-bench-harness-inventory-kernels-step4k-20260713.{json,md}`
+  `/home/rsuderman/codex/ggml-hrx-kernel-bench-harness-inventory-kernels-step4l-20260713.{json,md}`
   and
   `/home/rsuderman/codex/ggml-hrx-kernel-bench-harness-inventory-model-step4-20260713.{json,md}`.
-  The kernel suite now has 95 legacy runtime registrations remaining, and no
+  The kernel suite now has 94 legacy runtime registrations remaining, and no
   op with emitted descriptor cases still has legacy runtime registration.
 - [ ] 5. Simplify or narrow legacy generated-runtime registration once the
   inventory shows descriptor coverage is sufficient for an op. Keep legacy
