@@ -28,6 +28,7 @@ from .selection import RouteSelector, create_route_selector
 class V2RoutingBackend:
     context: RoutingContext
     version: str = "v2"
+    v2_selector_mode: str | None = None
 
     @cached_property
     def catalog(self) -> RouteCatalog:
@@ -35,7 +36,7 @@ class V2RoutingBackend:
 
     @cached_property
     def selector(self) -> RouteSelector:
-        return create_route_selector(self.catalog)
+        return create_route_selector(self.catalog, mode=self.v2_selector_mode)
 
     def manifest(self, *, original_root: Path | None = None) -> dict[str, object]:
         return build_manifest(
@@ -95,7 +96,7 @@ class V2RoutingBackend:
             selector = self.selector
         else:
             catalog = load_route_catalog(routing_dir)
-            selector = create_route_selector(catalog)
+            selector = create_route_selector(catalog, mode=self.v2_selector_mode)
         return runtime_execute_case(
             request,
             catalog=catalog,

@@ -46,6 +46,12 @@ def test_generate_loom_descriptor_tests_cmake_registers_build_prepare_without_pr
             str(tmp_path / "generated-import-dir"),
             "--python-executable",
             sys.executable,
+            "--cmake-command",
+            "/usr/bin/cmake",
+            "--python-module-dir",
+            str(tmp_path / "python"),
+            "--python-module-target",
+            "_ggml_hrx_v2_selector_native",
             "--descriptor-generator-script",
             str(ROOT / "tests" / "infra" / "generate_loom_execution_descriptors.py"),
             "--descriptor-runner-script",
@@ -85,6 +91,35 @@ def test_generate_loom_descriptor_tests_cmake_registers_build_prepare_without_pr
     assert "add_dependencies(kernel-descriptor-prepare-llama-cpp-tests-v2-generated kernel-llama-cpp-tests-v2)" in generated
     assert "add_dependencies(kernel-descriptor-prepare-llama-cpp-tests-v2-generated ggml-hrx-run-loom-simple)" in generated
     assert "--quiet" in generated
+    assert (
+        f'ENVIRONMENT_MODIFICATION "PYTHONPATH=path_list_prepend:{tmp_path / "python"}"'
+        in generated
+    )
+
+    manifest_path = (
+        tmp_path
+        / "generated-import-dir"
+        / "ops"
+        / "ADD"
+        / "generated-kernel-tests.json"
+    ).resolve()
+    import_stamp_path = (tmp_path / "generated-import-dir" / "route-import.stamp").resolve()
+    custom_command = generated.split("add_custom_command(\n", maxsplit=1)[1].split(
+        "\n)\n", maxsplit=1
+    )[0]
+    commands, dependencies = custom_command.split("  DEPENDS\n", maxsplit=1)
+    generate_command = commands.split("  COMMAND\n", maxsplit=1)[1].split(
+        "  COMMAND\n", maxsplit=1
+    )[0]
+    prepare_command = commands.split("  COMMAND\n", maxsplit=2)[2]
+    dependencies = dependencies.split("  VERBATIM", maxsplit=1)[0]
+    environment_prefix = f'"/usr/bin/cmake" -E env "PYTHONPATH={tmp_path / "python"}"'
+    assert environment_prefix in generate_command
+    assert environment_prefix in prepare_command
+    assert f'"{manifest_path}"' in generate_command
+    assert f'"{import_stamp_path}"' in dependencies
+    assert f'"{manifest_path}"' not in dependencies
+    assert '"_ggml_hrx_v2_selector_native"' in dependencies
 
 
 def test_generate_loom_descriptor_tests_cmake_registers_hsa_execution_when_enabled(
@@ -113,6 +148,12 @@ def test_generate_loom_descriptor_tests_cmake_registers_hsa_execution_when_enabl
             str(tmp_path / "generated-import-dir"),
             "--python-executable",
             sys.executable,
+            "--cmake-command",
+            "/usr/bin/cmake",
+            "--python-module-dir",
+            str(tmp_path / "python"),
+            "--python-module-target",
+            "_ggml_hrx_v2_selector_native",
             "--descriptor-generator-script",
             str(ROOT / "tests" / "infra" / "generate_loom_execution_descriptors.py"),
             "--descriptor-runner-script",
@@ -139,3 +180,6 @@ def test_generate_loom_descriptor_tests_cmake_registers_hsa_execution_when_enabl
     assert "--progress" in generated
     assert "--quiet" in generated
     assert 'LABELS "hsa;runtime;loom-descriptor"' in generated
+    assert generated.count(
+        f'ENVIRONMENT_MODIFICATION "PYTHONPATH=path_list_prepend:{tmp_path / "python"}"'
+    ) == 2

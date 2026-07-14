@@ -66,6 +66,9 @@ From this directory:
 python3 -m pip install -e .
 ```
 
+This installs the Python dependencies used by the CMake build, including
+nanobind for the native v2 route selector.
+
 For fixture and golden generation:
 
 ```bash
@@ -87,7 +90,13 @@ cmake --build build
 
 That build produces `loom-link`, `loom-compile`, `iree-test-loom`, and
 `iree-benchmark-loom` under `build/tools`, and the bench
-tests/import validation targets use that in-tree directory automatically.
+tests/import validation targets use that in-tree directory automatically. It
+also always builds `_ggml_hrx_v2_selector_native` under `build/python`. Add that
+directory to `PYTHONPATH` when invoking the routing Python APIs directly:
+
+```bash
+export PYTHONPATH="$PWD/build/python${PYTHONPATH:+:$PYTHONPATH}"
+```
 
 If you only need the Python/materialized-asset targets and do not want the
 nested Loom build, disable it explicitly:
