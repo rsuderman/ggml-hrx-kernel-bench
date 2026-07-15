@@ -1,19 +1,19 @@
-config.decl @hrx2.shape.rms_norm_mul.ncols : %value: index where [range(%value, 1, 65536)]
-config.decl @hrx2.shape.rms_norm_mul.nrows : %value: index where [range(%value, 1, 1048576)]
-config.decl @hrx2.tuning.rms_norm_mul.workgroup_size : %value: index where [range(%value, 32, 1024), mul(%value, 32)]
-config.decl @hrx2.tuning.rms_norm_mul.vector_width : %value: index where [range(%value, 1, 16)]
+config.decl @shape.rms_norm_mul.ncols : %value: index where [range(%value, 1, 65536)]
+config.decl @shape.rms_norm_mul.nrows : %value: index where [range(%value, 1, 1048576)]
+config.decl @tuning.rms_norm_mul.workgroup_size : %value: index where [range(%value, 32, 1024), mul(%value, 32)]
+config.decl @tuning.rms_norm_mul.vector_width : %value: index where [range(%value, 1, 16)]
 
 kernel.def export("rms_norm_mul_f32_static_vector_tail") @rms_norm_mul_f32_static_vector_tail() {
   %unit = index.constant 1 : index
-  %nrows = config.get @hrx2.shape.rms_norm_mul.nrows : index
-  %workgroup_size = config.get @hrx2.tuning.rms_norm_mul.workgroup_size : index
+  %nrows = config.get @shape.rms_norm_mul.nrows : index
+  %workgroup_size = config.get @tuning.rms_norm_mul.workgroup_size : index
   kernel.launch.config workgroups(%nrows, %unit, %unit) workgroup_size(%workgroup_size, %unit, %unit) : index
 } launch(%eps: f32, %src: buffer, %weight: buffer, %dst: buffer) {
   %base = index.constant 0 : offset
-  %ncols = config.get @hrx2.shape.rms_norm_mul.ncols : index
-  %nrows = config.get @hrx2.shape.rms_norm_mul.nrows : index
-  %vector_width = config.get @hrx2.tuning.rms_norm_mul.vector_width : index
-  %workgroup_size = config.get @hrx2.tuning.rms_norm_mul.workgroup_size : index
+  %ncols = config.get @shape.rms_norm_mul.ncols : index
+  %nrows = config.get @shape.rms_norm_mul.nrows : index
+  %vector_width = config.get @tuning.rms_norm_mul.vector_width : index
+  %workgroup_size = config.get @tuning.rms_norm_mul.workgroup_size : index
   %ncols_bounded = index.assume %ncols [range(%ncols, 1, 65536)] : index
   %nrows_bounded = index.assume %nrows [range(%nrows, 1, 1048576)] : index
   %vector_width_bounded = index.assume %vector_width [range(%vector_width, 2, 16)] : index

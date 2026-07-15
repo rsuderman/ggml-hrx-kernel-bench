@@ -105,19 +105,19 @@
   "config": {
     "bindings": [
       {
-        "key": "@hrx2.shape.rms_norm_mul.ncols",
+        "key": "@shape.rms_norm_mul.ncols",
         "source": "tensor.dst.dimensions.d0.size"
       },
       {
-        "key": "@hrx2.shape.rms_norm_mul.nrows",
+        "key": "@shape.rms_norm_mul.nrows",
         "source": "tensor.dst.dimensions.d1.size"
       },
       {
-        "key": "@hrx2.tuning.rms_norm_mul.workgroup_size",
+        "key": "@tuning.rms_norm_mul.workgroup_size",
         "value": "32"
       },
       {
-        "key": "@hrx2.tuning.rms_norm_mul.vector_width",
+        "key": "@tuning.rms_norm_mul.vector_width",
         "value": "16"
       }
     ]

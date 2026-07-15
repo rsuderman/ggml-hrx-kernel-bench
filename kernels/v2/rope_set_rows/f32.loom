@@ -1,29 +1,29 @@
-config.decl @hrx2.shape.rope.ncols : %value: index where [range(%value, 2, 4096), mul(%value, 2)]
-config.decl @hrx2.shape.rope.n_dims : %value: index where [range(%value, 2, 4096), mul(%value, 2)]
-config.decl @hrx2.shape.rope.nheads : %value: index where [range(%value, 1, 256)]
-config.decl @hrx2.shape.rope.ntokens : %value: index where [range(%value, 1, 4096)]
-config.decl @hrx2.shape.rope.src0_head_stride : %value: index where [range(%value, 1, 1048576)]
-config.decl @hrx2.shape.rope.src0_token_stride : %value: index where [range(%value, 1, 1048576)]
-config.decl @hrx2.shape.rope.pos_token_stride : %value: index where [range(%value, 1, 1024)]
-config.decl @hrx2.shape.set_rows.ne1 : %value: index where [range(%value, 1, 1048576)]
-config.decl @hrx2.shape.set_rows.ne11 : %value: index where [range(%value, 1, 1048576)]
-config.decl @hrx2.shape.set_rows.ne12 : %value: index where [range(%value, 1, 1048576)]
-config.decl @hrx2.stride.set_rows.idx_nb0 : %value: index where [range(%value, 1, 64)]
-config.decl @hrx2.stride.set_rows.idx_nb1 : %value: index where [range(%value, 1, 1073741824)]
-config.decl @hrx2.stride.set_rows.idx_nb2 : %value: index where [range(%value, 1, 1073741824)]
-config.decl @hrx2.stride.set_rows.dst_nb1 : %value: index where [range(%value, 1, 1073741824)]
-config.decl @hrx2.stride.set_rows.dst_nb2 : %value: index where [range(%value, 1, 1073741824)]
-config.decl @hrx2.stride.set_rows.dst_nb3 : %value: index where [range(%value, 1, 1073741824)]
-config.decl @hrx2.tuning.rope_set_rows.workgroup_size : %value: index where [range(%value, 32, 1024), mul(%value, 32)]
+config.decl @shape.rope.ncols : %value: index where [range(%value, 2, 4096), mul(%value, 2)]
+config.decl @shape.rope.n_dims : %value: index where [range(%value, 2, 4096), mul(%value, 2)]
+config.decl @shape.rope.nheads : %value: index where [range(%value, 1, 256)]
+config.decl @shape.rope.ntokens : %value: index where [range(%value, 1, 4096)]
+config.decl @shape.rope.src0_head_stride : %value: index where [range(%value, 1, 1048576)]
+config.decl @shape.rope.src0_token_stride : %value: index where [range(%value, 1, 1048576)]
+config.decl @shape.rope.pos_token_stride : %value: index where [range(%value, 1, 1024)]
+config.decl @shape.set_rows.ne1 : %value: index where [range(%value, 1, 1048576)]
+config.decl @shape.set_rows.ne11 : %value: index where [range(%value, 1, 1048576)]
+config.decl @shape.set_rows.ne12 : %value: index where [range(%value, 1, 1048576)]
+config.decl @stride.set_rows.idx_nb0 : %value: index where [range(%value, 1, 64)]
+config.decl @stride.set_rows.idx_nb1 : %value: index where [range(%value, 1, 1073741824)]
+config.decl @stride.set_rows.idx_nb2 : %value: index where [range(%value, 1, 1073741824)]
+config.decl @stride.set_rows.dst_nb1 : %value: index where [range(%value, 1, 1073741824)]
+config.decl @stride.set_rows.dst_nb2 : %value: index where [range(%value, 1, 1073741824)]
+config.decl @stride.set_rows.dst_nb3 : %value: index where [range(%value, 1, 1073741824)]
+config.decl @tuning.rope_set_rows.workgroup_size : %value: index where [range(%value, 32, 1024), mul(%value, 32)]
 
 kernel.def export("hrx2_rope_normal_f32_freq_set_rows_f16") @hrx2_rope_normal_f32_freq_set_rows_f16() {
   %unit = index.constant 1 : index
   %minus_one = index.constant -1 : index
   %two = index.constant 2 : index
-  %ncols = config.get @hrx2.shape.rope.ncols : index
-  %nheads = config.get @hrx2.shape.rope.nheads : index
-  %ntokens = config.get @hrx2.shape.rope.ntokens : index
-  %workgroup_size = config.get @hrx2.tuning.rope_set_rows.workgroup_size : index
+  %ncols = config.get @shape.rope.ncols : index
+  %nheads = config.get @shape.rope.nheads : index
+  %ntokens = config.get @shape.rope.ntokens : index
+  %workgroup_size = config.get @tuning.rope_set_rows.workgroup_size : index
   %half_cols = index.div %ncols, %two : index
   %rows = index.mul %nheads, %ntokens : index
   %total = index.mul %half_cols, %rows : index
@@ -37,23 +37,23 @@ kernel.def export("hrx2_rope_normal_f32_freq_set_rows_f16") @hrx2_rope_normal_f3
   %two = index.constant 2 : index
   %zero = index.constant 0 : index
   %minus_two_f32 = scalar.constant -2.0 : f32
-  %ncols = config.get @hrx2.shape.rope.ncols : index
-  %n_dims = config.get @hrx2.shape.rope.n_dims : index
-  %nheads = config.get @hrx2.shape.rope.nheads : index
-  %ntokens = config.get @hrx2.shape.rope.ntokens : index
-  %src0_head_stride = config.get @hrx2.shape.rope.src0_head_stride : index
-  %src0_token_stride = config.get @hrx2.shape.rope.src0_token_stride : index
-  %pos_token_stride = config.get @hrx2.shape.rope.pos_token_stride : index
-  %set_rows_ne1 = config.get @hrx2.shape.set_rows.ne1 : index
-  %set_rows_ne11 = config.get @hrx2.shape.set_rows.ne11 : index
-  %set_rows_ne12 = config.get @hrx2.shape.set_rows.ne12 : index
-  %idx_nb0 = config.get @hrx2.stride.set_rows.idx_nb0 : index
-  %idx_nb1 = config.get @hrx2.stride.set_rows.idx_nb1 : index
-  %idx_nb2 = config.get @hrx2.stride.set_rows.idx_nb2 : index
-  %dst_nb1 = config.get @hrx2.stride.set_rows.dst_nb1 : index
-  %dst_nb2 = config.get @hrx2.stride.set_rows.dst_nb2 : index
-  %dst_nb3 = config.get @hrx2.stride.set_rows.dst_nb3 : index
-  %workgroup_size = config.get @hrx2.tuning.rope_set_rows.workgroup_size : index
+  %ncols = config.get @shape.rope.ncols : index
+  %n_dims = config.get @shape.rope.n_dims : index
+  %nheads = config.get @shape.rope.nheads : index
+  %ntokens = config.get @shape.rope.ntokens : index
+  %src0_head_stride = config.get @shape.rope.src0_head_stride : index
+  %src0_token_stride = config.get @shape.rope.src0_token_stride : index
+  %pos_token_stride = config.get @shape.rope.pos_token_stride : index
+  %set_rows_ne1 = config.get @shape.set_rows.ne1 : index
+  %set_rows_ne11 = config.get @shape.set_rows.ne11 : index
+  %set_rows_ne12 = config.get @shape.set_rows.ne12 : index
+  %idx_nb0 = config.get @stride.set_rows.idx_nb0 : index
+  %idx_nb1 = config.get @stride.set_rows.idx_nb1 : index
+  %idx_nb2 = config.get @stride.set_rows.idx_nb2 : index
+  %dst_nb1 = config.get @stride.set_rows.dst_nb1 : index
+  %dst_nb2 = config.get @stride.set_rows.dst_nb2 : index
+  %dst_nb3 = config.get @stride.set_rows.dst_nb3 : index
+  %workgroup_size = config.get @tuning.rope_set_rows.workgroup_size : index
   %ncols_bounded = index.assume %ncols [range(%ncols, 2, 4096)] : index
   %n_dims_bounded = index.assume %n_dims [range(%n_dims, 2, 4096)] : index
   %nheads_bounded = index.assume %nheads [range(%nheads, 1, 256)] : index
@@ -191,10 +191,10 @@ kernel.def export("hrx2_rope_neox_f32_freq_set_rows_f16") @hrx2_rope_neox_f32_fr
   %unit = index.constant 1 : index
   %minus_one = index.constant -1 : index
   %two = index.constant 2 : index
-  %ncols = config.get @hrx2.shape.rope.ncols : index
-  %nheads = config.get @hrx2.shape.rope.nheads : index
-  %ntokens = config.get @hrx2.shape.rope.ntokens : index
-  %workgroup_size = config.get @hrx2.tuning.rope_set_rows.workgroup_size : index
+  %ncols = config.get @shape.rope.ncols : index
+  %nheads = config.get @shape.rope.nheads : index
+  %ntokens = config.get @shape.rope.ntokens : index
+  %workgroup_size = config.get @tuning.rope_set_rows.workgroup_size : index
   %half_cols = index.div %ncols, %two : index
   %rows = index.mul %nheads, %ntokens : index
   %total = index.mul %half_cols, %rows : index
@@ -208,19 +208,19 @@ kernel.def export("hrx2_rope_neox_f32_freq_set_rows_f16") @hrx2_rope_neox_f32_fr
   %two = index.constant 2 : index
   %zero = index.constant 0 : index
   %minus_one_f32 = scalar.constant -1.0 : f32
-  %ncols = config.get @hrx2.shape.rope.ncols : index
-  %n_dims = config.get @hrx2.shape.rope.n_dims : index
-  %nheads = config.get @hrx2.shape.rope.nheads : index
-  %ntokens = config.get @hrx2.shape.rope.ntokens : index
-  %src0_head_stride = config.get @hrx2.shape.rope.src0_head_stride : index
-  %src0_token_stride = config.get @hrx2.shape.rope.src0_token_stride : index
-  %pos_token_stride = config.get @hrx2.shape.rope.pos_token_stride : index
-  %set_rows_ne1 = config.get @hrx2.shape.set_rows.ne1 : index
-  %idx_nb0 = config.get @hrx2.stride.set_rows.idx_nb0 : index
-  %idx_nb1 = config.get @hrx2.stride.set_rows.idx_nb1 : index
-  %idx_nb2 = config.get @hrx2.stride.set_rows.idx_nb2 : index
-  %dst_nb1 = config.get @hrx2.stride.set_rows.dst_nb1 : index
-  %workgroup_size = config.get @hrx2.tuning.rope_set_rows.workgroup_size : index
+  %ncols = config.get @shape.rope.ncols : index
+  %n_dims = config.get @shape.rope.n_dims : index
+  %nheads = config.get @shape.rope.nheads : index
+  %ntokens = config.get @shape.rope.ntokens : index
+  %src0_head_stride = config.get @shape.rope.src0_head_stride : index
+  %src0_token_stride = config.get @shape.rope.src0_token_stride : index
+  %pos_token_stride = config.get @shape.rope.pos_token_stride : index
+  %set_rows_ne1 = config.get @shape.set_rows.ne1 : index
+  %idx_nb0 = config.get @stride.set_rows.idx_nb0 : index
+  %idx_nb1 = config.get @stride.set_rows.idx_nb1 : index
+  %idx_nb2 = config.get @stride.set_rows.idx_nb2 : index
+  %dst_nb1 = config.get @stride.set_rows.dst_nb1 : index
+  %workgroup_size = config.get @tuning.rope_set_rows.workgroup_size : index
   %ncols_bounded = index.assume %ncols [range(%ncols, 2, 4096)] : index
   %n_dims_bounded = index.assume %n_dims [range(%n_dims, 2, 4096)] : index
   %nheads_bounded = index.assume %nheads [range(%nheads, 1, 256)] : index

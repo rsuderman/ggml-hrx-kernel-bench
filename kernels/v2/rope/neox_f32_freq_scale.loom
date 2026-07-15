@@ -1,20 +1,20 @@
-config.decl @hrx2.shape.rope.ncols : %value: index where [range(%value, 2, 4096), mul(%value, 2)]
-config.decl @hrx2.shape.rope.n_dims : %value: index where [range(%value, 2, 4096), mul(%value, 2)]
-config.decl @hrx2.shape.rope.nheads : %value: index where [range(%value, 1, 256)]
-config.decl @hrx2.shape.rope.ntokens : %value: index where [range(%value, 1, 4096)]
-config.decl @hrx2.shape.rope.src0_head_stride : %value: index where [range(%value, 1, 1048576)]
-config.decl @hrx2.shape.rope.src0_token_stride : %value: index where [range(%value, 1, 1048576)]
-config.decl @hrx2.shape.rope.dst_head_stride : %value: index where [range(%value, 1, 1048576)]
-config.decl @hrx2.shape.rope.dst_token_stride : %value: index where [range(%value, 1, 1048576)]
-config.decl @hrx2.shape.rope.pos_token_stride : %value: index where [range(%value, 1, 1024)]
-config.decl @hrx2.tuning.rope.workgroup_size : %value: index where [range(%value, 32, 1024), mul(%value, 32)]
+config.decl @shape.rope.ncols : %value: index where [range(%value, 2, 4096), mul(%value, 2)]
+config.decl @shape.rope.n_dims : %value: index where [range(%value, 2, 4096), mul(%value, 2)]
+config.decl @shape.rope.nheads : %value: index where [range(%value, 1, 256)]
+config.decl @shape.rope.ntokens : %value: index where [range(%value, 1, 4096)]
+config.decl @shape.rope.src0_head_stride : %value: index where [range(%value, 1, 1048576)]
+config.decl @shape.rope.src0_token_stride : %value: index where [range(%value, 1, 1048576)]
+config.decl @shape.rope.dst_head_stride : %value: index where [range(%value, 1, 1048576)]
+config.decl @shape.rope.dst_token_stride : %value: index where [range(%value, 1, 1048576)]
+config.decl @shape.rope.pos_token_stride : %value: index where [range(%value, 1, 1024)]
+config.decl @tuning.rope.workgroup_size : %value: index where [range(%value, 32, 1024), mul(%value, 32)]
 
 kernel.def export("rope_neox_f32_freq_scale") @rope_neox_f32_freq_scale() {
   %unit = index.constant 1 : index
-  %ncols = config.get @hrx2.shape.rope.ncols : index
-  %nheads = config.get @hrx2.shape.rope.nheads : index
-  %ntokens = config.get @hrx2.shape.rope.ntokens : index
-  %workgroup_size = config.get @hrx2.tuning.rope.workgroup_size : index
+  %ncols = config.get @shape.rope.ncols : index
+  %nheads = config.get @shape.rope.nheads : index
+  %ntokens = config.get @shape.rope.ntokens : index
+  %workgroup_size = config.get @tuning.rope.workgroup_size : index
   %rows = index.mul %nheads, %ntokens : index
   kernel.launch.config workgroups(%rows, %unit, %unit) workgroup_size(%workgroup_size, %unit, %unit) : index
 } launch(%theta_scale: f32, %freq_scale: f32, %attn_factor: f32, %output_scale: f32, %src0: buffer, %pos: buffer, %freq: buffer, %dst: buffer) {
@@ -22,15 +22,15 @@ kernel.def export("rope_neox_f32_freq_scale") @rope_neox_f32_freq_scale() {
   %zero = index.constant 0 : index
   %one = index.constant 1 : index
   %two = index.constant 2 : index
-  %ncols = config.get @hrx2.shape.rope.ncols : index
-  %n_dims = config.get @hrx2.shape.rope.n_dims : index
-  %nheads = config.get @hrx2.shape.rope.nheads : index
-  %ntokens = config.get @hrx2.shape.rope.ntokens : index
-  %src0_head_stride = config.get @hrx2.shape.rope.src0_head_stride : index
-  %src0_token_stride = config.get @hrx2.shape.rope.src0_token_stride : index
-  %dst_head_stride = config.get @hrx2.shape.rope.dst_head_stride : index
-  %dst_token_stride = config.get @hrx2.shape.rope.dst_token_stride : index
-  %pos_token_stride = config.get @hrx2.shape.rope.pos_token_stride : index
+  %ncols = config.get @shape.rope.ncols : index
+  %n_dims = config.get @shape.rope.n_dims : index
+  %nheads = config.get @shape.rope.nheads : index
+  %ntokens = config.get @shape.rope.ntokens : index
+  %src0_head_stride = config.get @shape.rope.src0_head_stride : index
+  %src0_token_stride = config.get @shape.rope.src0_token_stride : index
+  %dst_head_stride = config.get @shape.rope.dst_head_stride : index
+  %dst_token_stride = config.get @shape.rope.dst_token_stride : index
+  %pos_token_stride = config.get @shape.rope.pos_token_stride : index
   %ncols_bounded = index.assume %ncols [range(%ncols, 2, 4096)] : index
   %n_dims_bounded = index.assume %n_dims [range(%n_dims, 2, 4096)] : index
   %nheads_bounded = index.assume %nheads [range(%nheads, 1, 256)] : index

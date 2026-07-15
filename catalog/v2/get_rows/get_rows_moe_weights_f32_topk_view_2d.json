@@ -127,31 +127,31 @@
   "config": {
     "bindings": [
       {
-        "key": "@hrx2.shape.get_rows_moe.nexperts",
+        "key": "@shape.get_rows_moe.nexperts",
         "source": "tensor.src0.dimensions.d0.size"
       },
       {
-        "key": "@hrx2.shape.get_rows_moe.nselected",
+        "key": "@shape.get_rows_moe.nselected",
         "source": "tensor.dst.dimensions.d0.size"
       },
       {
-        "key": "@hrx2.shape.get_rows_moe.ntokens",
+        "key": "@shape.get_rows_moe.ntokens",
         "source": "tensor.dst.dimensions.d1.size"
       },
       {
-        "key": "@hrx2.shape.get_rows_moe.src0_token_stride",
+        "key": "@shape.get_rows_moe.src0_token_stride",
         "source": "tensor.src0.dimensions.d1.stride"
       },
       {
-        "key": "@hrx2.shape.get_rows_moe.idx_token_stride",
+        "key": "@shape.get_rows_moe.idx_token_stride",
         "source": "tensor.src1.dimensions.d1.stride"
       },
       {
-        "key": "@hrx2.shape.get_rows_moe.dst_token_stride",
+        "key": "@shape.get_rows_moe.dst_token_stride",
         "source": "tensor.dst.dimensions.d1.stride"
       },
       {
-        "key": "@hrx2.tuning.get_rows_moe.workgroup_size",
+        "key": "@tuning.get_rows_moe.workgroup_size",
         "value": "256"
       }
     ]

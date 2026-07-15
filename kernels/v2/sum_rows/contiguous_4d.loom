@@ -1,20 +1,20 @@
-config.decl @hrx2.shape.sum_rows.ncols : %value: index where [range(%value, 1, 65536)]
-config.decl @hrx2.shape.sum_rows.nrows : %value: index where [range(%value, 1, 1048576)]
-config.decl @hrx2.shape.sum_rows.src0_row_stride : %value: index where [range(%value, 1, 65536)]
-config.decl @hrx2.tuning.sum_rows.workgroup_size : %value: index where [range(%value, 32, 1024), mul(%value, 32)]
+config.decl @shape.sum_rows.ncols : %value: index where [range(%value, 1, 65536)]
+config.decl @shape.sum_rows.nrows : %value: index where [range(%value, 1, 1048576)]
+config.decl @shape.sum_rows.src0_row_stride : %value: index where [range(%value, 1, 65536)]
+config.decl @tuning.sum_rows.workgroup_size : %value: index where [range(%value, 32, 1024), mul(%value, 32)]
 
 kernel.def export("hrx2_sum_rows_f32") @hrx2_sum_rows_f32() {
   %unit = index.constant 1 : index
-  %nrows = config.get @hrx2.shape.sum_rows.nrows : index
-  %workgroup_size = config.get @hrx2.tuning.sum_rows.workgroup_size : index
+  %nrows = config.get @shape.sum_rows.nrows : index
+  %workgroup_size = config.get @tuning.sum_rows.workgroup_size : index
   kernel.launch.config workgroups(%nrows, %unit, %unit) workgroup_size(%workgroup_size, %unit, %unit) : index
 } launch(%src0: buffer, %dst: buffer) {
   %base = index.constant 0 : offset
   %zero_index = index.constant 0 : index
-  %ncols = config.get @hrx2.shape.sum_rows.ncols : index
-  %nrows = config.get @hrx2.shape.sum_rows.nrows : index
-  %src0_row_stride = config.get @hrx2.shape.sum_rows.src0_row_stride : index
-  %workgroup_size = config.get @hrx2.tuning.sum_rows.workgroup_size : index
+  %ncols = config.get @shape.sum_rows.ncols : index
+  %nrows = config.get @shape.sum_rows.nrows : index
+  %src0_row_stride = config.get @shape.sum_rows.src0_row_stride : index
+  %workgroup_size = config.get @tuning.sum_rows.workgroup_size : index
   %ncols_bounded = index.assume %ncols [range(%ncols, 1, 65536)] : index
   %nrows_bounded = index.assume %nrows [range(%nrows, 1, 1048576)] : index
   %row0 = kernel.workgroup.id<x> : index

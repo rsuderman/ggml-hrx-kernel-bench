@@ -11,10 +11,10 @@
     "dst": "F32"
   },
   "parameters": {
-    "k": {"config_key": "@hrx2.shape.k"},
-    "rows": {"config_key": "@hrx2.shape.rows"},
-    "cols": {"config_key": "@hrx2.shape.cols"},
-    "workgroup_size": {"config_key": "@hrx2.tuning.workgroup_size"}
+    "k": {"config_key": "@shape.k"},
+    "rows": {"config_key": "@shape.rows"},
+    "cols": {"config_key": "@shape.cols"},
+    "workgroup_size": {"config_key": "@tuning.workgroup_size"}
   },
   "shape_domain": {
     "k": {"min": 256, "max": 32768, "multiple_of": 256},

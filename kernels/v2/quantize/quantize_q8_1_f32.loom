@@ -1,11 +1,11 @@
-config.decl @hrx2.quantize_q8_1.blocks : %value: index where [range(%value, 1, 1024)]
-config.decl @hrx2.quantize_q8_1.ne1 : %value: index where [range(%value, 1, 512)]
-config.decl @hrx2.quantize_q8_1.z_count : %value: index where [range(%value, 1, 16)]
+config.decl @quantize_q8_1.blocks : %value: index where [range(%value, 1, 1024)]
+config.decl @quantize_q8_1.ne1 : %value: index where [range(%value, 1, 512)]
+config.decl @quantize_q8_1.z_count : %value: index where [range(%value, 1, 16)]
 
 kernel.def export("quantize_q8_1_f32") @quantize_q8_1_f32() {
-  %blocks = config.get @hrx2.quantize_q8_1.blocks : index
-  %ne1 = config.get @hrx2.quantize_q8_1.ne1 : index
-  %z_count = config.get @hrx2.quantize_q8_1.z_count : index
+  %blocks = config.get @quantize_q8_1.blocks : index
+  %ne1 = config.get @quantize_q8_1.ne1 : index
+  %z_count = config.get @quantize_q8_1.z_count : index
   %blocks_bounded = index.assume %blocks [range(%blocks, 1, 1024)] : index
   %ne1_bounded = index.assume %ne1 [range(%ne1, 1, 512)] : index
   %z_count_bounded = index.assume %z_count [range(%z_count, 1, 16)] : index
@@ -34,7 +34,7 @@ kernel.def export("quantize_q8_1_f32") @quantize_q8_1_f32() {
   %negative_half_f32 = scalar.constant -0.5 : f32
   %one_two_seven = scalar.constant 127.0 : f32
   %zero_i32 = scalar.constant 0 : i32
-  %blocks = config.get @hrx2.quantize_q8_1.blocks : index
+  %blocks = config.get @quantize_q8_1.blocks : index
   %blocks_bounded = index.assume %blocks [range(%blocks, 1, 1024)] : index
   %ne00_bounded = index.assume %ne00 [range(%ne00, 32, 32768)] : index
   %s01_bounded = index.assume %s01 [range(%s01, 32, 32768)] : index

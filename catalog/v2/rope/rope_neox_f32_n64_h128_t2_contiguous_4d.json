@@ -216,39 +216,39 @@
   "config": {
     "bindings": [
       {
-        "key": "@hrx2.shape.rope.ncols",
+        "key": "@shape.rope.ncols",
         "source": "shape.rope.ncols"
       },
       {
-        "key": "@hrx2.shape.rope.nheads",
+        "key": "@shape.rope.nheads",
         "source": "shape.rope.nheads"
       },
       {
-        "key": "@hrx2.shape.rope.ntokens",
+        "key": "@shape.rope.ntokens",
         "source": "shape.rope.ntokens"
       },
       {
-        "key": "@hrx2.shape.rope.src0_head_stride",
+        "key": "@shape.rope.src0_head_stride",
         "source": "shape.rope.src0_head_stride"
       },
       {
-        "key": "@hrx2.shape.rope.src0_token_stride",
+        "key": "@shape.rope.src0_token_stride",
         "source": "shape.rope.src0_token_stride"
       },
       {
-        "key": "@hrx2.shape.rope.dst_head_stride",
+        "key": "@shape.rope.dst_head_stride",
         "source": "shape.rope.dst_head_stride"
       },
       {
-        "key": "@hrx2.shape.rope.dst_token_stride",
+        "key": "@shape.rope.dst_token_stride",
         "source": "shape.rope.dst_token_stride"
       },
       {
-        "key": "@hrx2.shape.rope.pos_token_stride",
+        "key": "@shape.rope.pos_token_stride",
         "source": "shape.rope.pos_token_stride"
       },
       {
-        "key": "@hrx2.tuning.rope.workgroup_size",
+        "key": "@tuning.rope.workgroup_size",
         "value": "256"
       }
     ]

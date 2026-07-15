@@ -82,35 +82,35 @@
   "config": {
     "bindings": [
       {
-        "key": "@hrx2.shape.cont.d0",
+        "key": "@shape.cont.d0",
         "source": "value.leading_dimensions.0"
       },
       {
-        "key": "@hrx2.shape.cont.d1",
+        "key": "@shape.cont.d1",
         "source": "value.flattened_trailing_dimensions"
       },
       {
-        "key": "@hrx2.shape.cont.ne1",
+        "key": "@shape.cont.ne1",
         "source": "shape.cont.ne1"
       },
       {
-        "key": "@hrx2.shape.cont.ne2",
+        "key": "@shape.cont.ne2",
         "source": "shape.cont.ne2"
       },
       {
-        "key": "@hrx2.stride.cont.src_nb1",
+        "key": "@stride.cont.src_nb1",
         "source": "shape.cont.src_nb1"
       },
       {
-        "key": "@hrx2.stride.cont.src_nb2",
+        "key": "@stride.cont.src_nb2",
         "source": "shape.cont.src_nb2"
       },
       {
-        "key": "@hrx2.stride.cont.src_nb3",
+        "key": "@stride.cont.src_nb3",
         "source": "shape.cont.src_nb3"
       },
       {
-        "key": "@hrx2.tuning.cont.workgroup_size",
+        "key": "@tuning.cont.workgroup_size",
         "value": "256"
       }
     ]

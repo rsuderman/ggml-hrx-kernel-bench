@@ -35,8 +35,8 @@ def _descriptor() -> dict[str, object]:
         "root": "@add_f32_contiguous_1d",
         "target": "gfx1100",
         "configs": {
-            "hrx2.shape.pointwise.total_size": 4,
-            "hrx2.tuning.pointwise.workgroup_size": 32,
+            "shape.pointwise.total_size": 4,
+            "tuning.pointwise.workgroup_size": 32,
         },
         "bindings": [
             {
@@ -1009,7 +1009,7 @@ def test_descriptor_from_generated_add_case_emits_compact_payload(tmp_path: Path
     assert descriptor["kernel"] == "kernels/v2/add/generic_4d.loom"
     assert descriptor["root"] == "@add_f32_generic_4d"
     assert descriptor["workgroup_count"] == [1, 1, 1]
-    assert descriptor["configs"]["@hrx2.shape.add4d.ne0"] == "4"
+    assert descriptor["configs"]["@shape.add4d.ne0"] == "4"
     assert descriptor["metadata"]["element_counts"] == {"src0": 4, "src1": 4, "dst": 4}
     assert descriptor["metadata"]["execution_abi"]["schema"] == ROUTE_EXECUTION_ABI_SCHEMA
     assert descriptor["metadata"]["oracle"]["status"] == "fixtures_ready"

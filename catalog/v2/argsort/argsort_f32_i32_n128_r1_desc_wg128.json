@@ -87,15 +87,15 @@
   "config": {
     "bindings": [
       {
-        "key": "@hrx2.shape.argsort.ncols",
+        "key": "@shape.argsort.ncols",
         "source": "tensor.dst.dimensions.d0.size"
       },
       {
-        "key": "@hrx2.shape.argsort.nrows",
+        "key": "@shape.argsort.nrows",
         "source": "tensor.dst.dimensions.d1.size"
       },
       {
-        "key": "@hrx2.tuning.argsort.workgroup_size",
+        "key": "@tuning.argsort.workgroup_size",
         "value": "128"
       }
     ]

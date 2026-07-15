@@ -1,20 +1,20 @@
-config.decl @hrx2.shape.mul_mat_id.k : %value: index where [range(%value, 256, 32768), mul(%value, 256)]
-config.decl @hrx2.shape.mul_mat_id.rows : %value: index where [range(%value, 1, 32768)]
-config.decl @hrx2.shape.mul_mat_id.nexperts : %value: index where [range(%value, 1, 1024)]
-config.decl @hrx2.shape.mul_mat_id.nselected : %value: index where [range(%value, 1, 128)]
-config.decl @hrx2.shape.mul_mat_id.ntokens : %value: index where [range(%value, 1, 1048576)]
-config.decl @hrx2.shape.mul_mat_id.src1_selected_stride : %value: index where [range(%value, 0, 1048576)]
-config.decl @hrx2.shape.mul_mat_id.src1_token_stride : %value: index where [range(%value, 1, 1048576)]
-config.decl @hrx2.shape.mul_mat_id.idx_token_stride : %value: index where [range(%value, 1, 1048576)]
-config.decl @hrx2.shape.mul_mat_id.dst_token_stride : %value: index where [range(%value, 1, 1048576)]
-config.decl @hrx2.tuning.mul_mat_id.workgroup_size : %value: index where [range(%value, 64, 256), mul(%value, 64)]
+config.decl @shape.mul_mat_id.k : %value: index where [range(%value, 256, 32768), mul(%value, 256)]
+config.decl @shape.mul_mat_id.rows : %value: index where [range(%value, 1, 32768)]
+config.decl @shape.mul_mat_id.nexperts : %value: index where [range(%value, 1, 1024)]
+config.decl @shape.mul_mat_id.nselected : %value: index where [range(%value, 1, 128)]
+config.decl @shape.mul_mat_id.ntokens : %value: index where [range(%value, 1, 1048576)]
+config.decl @shape.mul_mat_id.src1_selected_stride : %value: index where [range(%value, 0, 1048576)]
+config.decl @shape.mul_mat_id.src1_token_stride : %value: index where [range(%value, 1, 1048576)]
+config.decl @shape.mul_mat_id.idx_token_stride : %value: index where [range(%value, 1, 1048576)]
+config.decl @shape.mul_mat_id.dst_token_stride : %value: index where [range(%value, 1, 1048576)]
+config.decl @tuning.mul_mat_id.workgroup_size : %value: index where [range(%value, 64, 256), mul(%value, 64)]
 
 kernel.def export("mul_mat_id_q4_k_f32_static") @mul_mat_id_q4_k_f32_static() {
   %unit = index.constant 1 : index
-  %rows = config.get @hrx2.shape.mul_mat_id.rows : index
-  %nselected = config.get @hrx2.shape.mul_mat_id.nselected : index
-  %ntokens = config.get @hrx2.shape.mul_mat_id.ntokens : index
-  %workgroup_size = config.get @hrx2.tuning.mul_mat_id.workgroup_size : index
+  %rows = config.get @shape.mul_mat_id.rows : index
+  %nselected = config.get @shape.mul_mat_id.nselected : index
+  %ntokens = config.get @shape.mul_mat_id.ntokens : index
+  %workgroup_size = config.get @tuning.mul_mat_id.workgroup_size : index
   kernel.launch.config workgroups(%rows, %nselected, %ntokens) workgroup_size(%workgroup_size, %unit, %unit) : index
 } launch(%src0: buffer, %src1: buffer, %idx: buffer, %dst: buffer) {
   %base = index.constant 0 : offset
@@ -36,16 +36,16 @@ kernel.def export("mul_mat_id_q4_k_f32_static") @mul_mat_id_q4_k_f32_static() {
   %block_f16s = index.constant 72 : index
   %scale_offset = index.constant 4 : index
   %qs_offset = index.constant 16 : index
-  %k = config.get @hrx2.shape.mul_mat_id.k : index
-  %rows = config.get @hrx2.shape.mul_mat_id.rows : index
-  %nexperts = config.get @hrx2.shape.mul_mat_id.nexperts : index
-  %nselected = config.get @hrx2.shape.mul_mat_id.nselected : index
-  %ntokens = config.get @hrx2.shape.mul_mat_id.ntokens : index
-  %src1_selected_stride = config.get @hrx2.shape.mul_mat_id.src1_selected_stride : index
-  %src1_token_stride = config.get @hrx2.shape.mul_mat_id.src1_token_stride : index
-  %idx_token_stride = config.get @hrx2.shape.mul_mat_id.idx_token_stride : index
-  %dst_token_stride = config.get @hrx2.shape.mul_mat_id.dst_token_stride : index
-  %workgroup_size = config.get @hrx2.tuning.mul_mat_id.workgroup_size : index
+  %k = config.get @shape.mul_mat_id.k : index
+  %rows = config.get @shape.mul_mat_id.rows : index
+  %nexperts = config.get @shape.mul_mat_id.nexperts : index
+  %nselected = config.get @shape.mul_mat_id.nselected : index
+  %ntokens = config.get @shape.mul_mat_id.ntokens : index
+  %src1_selected_stride = config.get @shape.mul_mat_id.src1_selected_stride : index
+  %src1_token_stride = config.get @shape.mul_mat_id.src1_token_stride : index
+  %idx_token_stride = config.get @shape.mul_mat_id.idx_token_stride : index
+  %dst_token_stride = config.get @shape.mul_mat_id.dst_token_stride : index
+  %workgroup_size = config.get @tuning.mul_mat_id.workgroup_size : index
   %k_bounded = index.assume %k [range(%k, 256, 32768)] : index
   %rows_bounded = index.assume %rows [range(%rows, 1, 32768)] : index
   %nexperts_bounded = index.assume %nexperts [range(%nexperts, 1, 1024)] : index

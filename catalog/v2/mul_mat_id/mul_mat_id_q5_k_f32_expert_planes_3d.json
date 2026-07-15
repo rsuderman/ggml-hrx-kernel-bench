@@ -195,43 +195,43 @@
   "config": {
     "bindings": [
       {
-        "key": "@hrx2.shape.mul_mat_id.k",
+        "key": "@shape.mul_mat_id.k",
         "source": "tensor.src0.dimensions.d0.size"
       },
       {
-        "key": "@hrx2.shape.mul_mat_id.rows",
+        "key": "@shape.mul_mat_id.rows",
         "source": "tensor.dst.dimensions.d0.size"
       },
       {
-        "key": "@hrx2.shape.mul_mat_id.nexperts",
+        "key": "@shape.mul_mat_id.nexperts",
         "source": "tensor.src0.dimensions.d2.size"
       },
       {
-        "key": "@hrx2.shape.mul_mat_id.nselected",
+        "key": "@shape.mul_mat_id.nselected",
         "source": "tensor.dst.dimensions.d1.size"
       },
       {
-        "key": "@hrx2.shape.mul_mat_id.ntokens",
+        "key": "@shape.mul_mat_id.ntokens",
         "source": "tensor.dst.dimensions.d2.size"
       },
       {
-        "key": "@hrx2.shape.mul_mat_id.src1_selected_stride",
+        "key": "@shape.mul_mat_id.src1_selected_stride",
         "source": "tensor.src1.dimensions.d1.stride"
       },
       {
-        "key": "@hrx2.shape.mul_mat_id.src1_token_stride",
+        "key": "@shape.mul_mat_id.src1_token_stride",
         "source": "tensor.src1.dimensions.d2.stride"
       },
       {
-        "key": "@hrx2.shape.mul_mat_id.idx_token_stride",
+        "key": "@shape.mul_mat_id.idx_token_stride",
         "source": "tensor.src2.dimensions.d1.stride"
       },
       {
-        "key": "@hrx2.shape.mul_mat_id.dst_token_stride",
+        "key": "@shape.mul_mat_id.dst_token_stride",
         "source": "tensor.dst.dimensions.d2.stride"
       },
       {
-        "key": "@hrx2.tuning.mul_mat_id.workgroup_size",
+        "key": "@tuning.mul_mat_id.workgroup_size",
         "value": "256"
       }
     ]

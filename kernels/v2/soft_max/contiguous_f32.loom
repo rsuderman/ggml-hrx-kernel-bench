@@ -1,17 +1,17 @@
-config.decl @hrx2.shape.soft_max.ncols : %value: index where [range(%value, 1, 4096)]
-config.decl @hrx2.shape.soft_max.nrows : %value: index where [range(%value, 1, 1048576)]
-config.decl @hrx2.tuning.soft_max.workgroup_size : %value: index where [range(%value, 32, 1024), mul(%value, 32)]
+config.decl @shape.soft_max.ncols : %value: index where [range(%value, 1, 4096)]
+config.decl @shape.soft_max.nrows : %value: index where [range(%value, 1, 1048576)]
+config.decl @tuning.soft_max.workgroup_size : %value: index where [range(%value, 32, 1024), mul(%value, 32)]
 
 kernel.def export("hrx2_soft_max_f32") @hrx2_soft_max_f32() {
   %unit = index.constant 1 : index
-  %nrows = config.get @hrx2.shape.soft_max.nrows : index
-  %workgroup_size = config.get @hrx2.tuning.soft_max.workgroup_size : index
+  %nrows = config.get @shape.soft_max.nrows : index
+  %workgroup_size = config.get @tuning.soft_max.workgroup_size : index
   kernel.launch.config workgroups(%nrows, %unit, %unit) workgroup_size(%workgroup_size, %unit, %unit) : index
 } launch(%scale: f32, %src0: buffer, %dst: buffer) {
   %base = index.constant 0 : offset
-  %ncols = config.get @hrx2.shape.soft_max.ncols : index
-  %nrows = config.get @hrx2.shape.soft_max.nrows : index
-  %workgroup_size = config.get @hrx2.tuning.soft_max.workgroup_size : index
+  %ncols = config.get @shape.soft_max.ncols : index
+  %nrows = config.get @shape.soft_max.nrows : index
+  %workgroup_size = config.get @tuning.soft_max.workgroup_size : index
   %ncols_bounded = index.assume %ncols [range(%ncols, 1, 4096)] : index
   %nrows_bounded = index.assume %nrows [range(%nrows, 1, 1048576)] : index
   %row0 = kernel.workgroup.id<x> : index

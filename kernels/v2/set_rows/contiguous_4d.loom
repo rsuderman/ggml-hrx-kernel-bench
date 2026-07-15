@@ -1,29 +1,29 @@
-config.decl @hrx2.shape.set_rows.nc : %value: index where [range(%value, 1, 65536)]
-config.decl @hrx2.shape.set_rows.nr : %value: index where [range(%value, 1, 1048576)]
-config.decl @hrx2.shape.set_rows.ne02 : %value: index where [range(%value, 1, 1048576)]
-config.decl @hrx2.shape.set_rows.ne03 : %value: index where [range(%value, 1, 1048576)]
-config.decl @hrx2.shape.set_rows.ne1 : %value: index where [range(%value, 1, 1048576)]
-config.decl @hrx2.shape.set_rows.ne11 : %value: index where [range(%value, 1, 1048576)]
-config.decl @hrx2.shape.set_rows.ne12 : %value: index where [range(%value, 1, 1048576)]
-config.decl @hrx2.stride.set_rows.src0_nb1 : %value: index where [range(%value, 1, 1073741824)]
-config.decl @hrx2.stride.set_rows.src0_nb2 : %value: index where [range(%value, 1, 1073741824)]
-config.decl @hrx2.stride.set_rows.src0_nb3 : %value: index where [range(%value, 1, 1073741824)]
-config.decl @hrx2.stride.set_rows.idx_nb0 : %value: index where [range(%value, 1, 64)]
-config.decl @hrx2.stride.set_rows.idx_nb1 : %value: index where [range(%value, 1, 1073741824)]
-config.decl @hrx2.stride.set_rows.idx_nb2 : %value: index where [range(%value, 1, 1073741824)]
-config.decl @hrx2.stride.set_rows.dst_nb1 : %value: index where [range(%value, 1, 1073741824)]
-config.decl @hrx2.stride.set_rows.dst_nb2 : %value: index where [range(%value, 1, 1073741824)]
-config.decl @hrx2.stride.set_rows.dst_nb3 : %value: index where [range(%value, 1, 1073741824)]
-config.decl @hrx2.tuning.set_rows.workgroup_size : %value: index where [range(%value, 32, 1024), mul(%value, 32)]
+config.decl @shape.set_rows.nc : %value: index where [range(%value, 1, 65536)]
+config.decl @shape.set_rows.nr : %value: index where [range(%value, 1, 1048576)]
+config.decl @shape.set_rows.ne02 : %value: index where [range(%value, 1, 1048576)]
+config.decl @shape.set_rows.ne03 : %value: index where [range(%value, 1, 1048576)]
+config.decl @shape.set_rows.ne1 : %value: index where [range(%value, 1, 1048576)]
+config.decl @shape.set_rows.ne11 : %value: index where [range(%value, 1, 1048576)]
+config.decl @shape.set_rows.ne12 : %value: index where [range(%value, 1, 1048576)]
+config.decl @stride.set_rows.src0_nb1 : %value: index where [range(%value, 1, 1073741824)]
+config.decl @stride.set_rows.src0_nb2 : %value: index where [range(%value, 1, 1073741824)]
+config.decl @stride.set_rows.src0_nb3 : %value: index where [range(%value, 1, 1073741824)]
+config.decl @stride.set_rows.idx_nb0 : %value: index where [range(%value, 1, 64)]
+config.decl @stride.set_rows.idx_nb1 : %value: index where [range(%value, 1, 1073741824)]
+config.decl @stride.set_rows.idx_nb2 : %value: index where [range(%value, 1, 1073741824)]
+config.decl @stride.set_rows.dst_nb1 : %value: index where [range(%value, 1, 1073741824)]
+config.decl @stride.set_rows.dst_nb2 : %value: index where [range(%value, 1, 1073741824)]
+config.decl @stride.set_rows.dst_nb3 : %value: index where [range(%value, 1, 1073741824)]
+config.decl @tuning.set_rows.workgroup_size : %value: index where [range(%value, 32, 1024), mul(%value, 32)]
 
 kernel.def export("set_rows_f32_f32") @set_rows_f32_f32() {
   %unit = index.constant 1 : index
   %minus_one = index.constant -1 : index
-  %nc = config.get @hrx2.shape.set_rows.nc : index
-  %nr = config.get @hrx2.shape.set_rows.nr : index
-  %ne02 = config.get @hrx2.shape.set_rows.ne02 : index
-  %ne03 = config.get @hrx2.shape.set_rows.ne03 : index
-  %workgroup_size = config.get @hrx2.tuning.set_rows.workgroup_size : index
+  %nc = config.get @shape.set_rows.nc : index
+  %nr = config.get @shape.set_rows.nr : index
+  %ne02 = config.get @shape.set_rows.ne02 : index
+  %ne03 = config.get @shape.set_rows.ne03 : index
+  %workgroup_size = config.get @tuning.set_rows.workgroup_size : index
   %total0 = index.mul %nc, %nr : index
   %total1 = index.mul %total0, %ne02 : index
   %total = index.mul %total1, %ne03 : index
@@ -34,23 +34,23 @@ kernel.def export("set_rows_f32_f32") @set_rows_f32_f32() {
 } launch(%src0: buffer, %idx: buffer, %dst: buffer) {
   %base = index.constant 0 : offset
   %two = index.constant 2 : index
-  %nc = config.get @hrx2.shape.set_rows.nc : index
-  %nr = config.get @hrx2.shape.set_rows.nr : index
-  %ne02 = config.get @hrx2.shape.set_rows.ne02 : index
-  %ne03 = config.get @hrx2.shape.set_rows.ne03 : index
-  %ne1 = config.get @hrx2.shape.set_rows.ne1 : index
-  %ne11 = config.get @hrx2.shape.set_rows.ne11 : index
-  %ne12 = config.get @hrx2.shape.set_rows.ne12 : index
-  %src0_nb1 = config.get @hrx2.stride.set_rows.src0_nb1 : index
-  %src0_nb2 = config.get @hrx2.stride.set_rows.src0_nb2 : index
-  %src0_nb3 = config.get @hrx2.stride.set_rows.src0_nb3 : index
-  %idx_nb0 = config.get @hrx2.stride.set_rows.idx_nb0 : index
-  %idx_nb1 = config.get @hrx2.stride.set_rows.idx_nb1 : index
-  %idx_nb2 = config.get @hrx2.stride.set_rows.idx_nb2 : index
-  %dst_nb1 = config.get @hrx2.stride.set_rows.dst_nb1 : index
-  %dst_nb2 = config.get @hrx2.stride.set_rows.dst_nb2 : index
-  %dst_nb3 = config.get @hrx2.stride.set_rows.dst_nb3 : index
-  %workgroup_size = config.get @hrx2.tuning.set_rows.workgroup_size : index
+  %nc = config.get @shape.set_rows.nc : index
+  %nr = config.get @shape.set_rows.nr : index
+  %ne02 = config.get @shape.set_rows.ne02 : index
+  %ne03 = config.get @shape.set_rows.ne03 : index
+  %ne1 = config.get @shape.set_rows.ne1 : index
+  %ne11 = config.get @shape.set_rows.ne11 : index
+  %ne12 = config.get @shape.set_rows.ne12 : index
+  %src0_nb1 = config.get @stride.set_rows.src0_nb1 : index
+  %src0_nb2 = config.get @stride.set_rows.src0_nb2 : index
+  %src0_nb3 = config.get @stride.set_rows.src0_nb3 : index
+  %idx_nb0 = config.get @stride.set_rows.idx_nb0 : index
+  %idx_nb1 = config.get @stride.set_rows.idx_nb1 : index
+  %idx_nb2 = config.get @stride.set_rows.idx_nb2 : index
+  %dst_nb1 = config.get @stride.set_rows.dst_nb1 : index
+  %dst_nb2 = config.get @stride.set_rows.dst_nb2 : index
+  %dst_nb3 = config.get @stride.set_rows.dst_nb3 : index
+  %workgroup_size = config.get @tuning.set_rows.workgroup_size : index
   %workgroup0 = kernel.workgroup.id<x> : index
   %lane0 = kernel.workitem.id<x> : index
   %workgroup = index.assume %workgroup0 [range(%workgroup0, 0, 4194303)] : index

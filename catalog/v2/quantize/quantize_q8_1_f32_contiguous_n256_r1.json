@@ -72,15 +72,15 @@
   "config": {
     "bindings": [
       {
-        "key": "@hrx2.quantize_q8_1.blocks",
+        "key": "@quantize_q8_1.blocks",
         "source": "shape.q8_1.blocks"
       },
       {
-        "key": "@hrx2.quantize_q8_1.ne1",
+        "key": "@quantize_q8_1.ne1",
         "source": "shape.q8_1.ne1"
       },
       {
-        "key": "@hrx2.quantize_q8_1.z_count",
+        "key": "@quantize_q8_1.z_count",
         "source": "shape.q8_1.z_count"
       }
     ]

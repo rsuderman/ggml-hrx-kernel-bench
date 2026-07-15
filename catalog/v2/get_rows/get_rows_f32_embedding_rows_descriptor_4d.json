@@ -171,23 +171,23 @@
   "config": {
     "bindings": [
       {
-        "key": "@hrx2.shape.get_rows.ncols",
+        "key": "@shape.get_rows.ncols",
         "source": "tensor.dst.dimensions.d0.size"
       },
       {
-        "key": "@hrx2.shape.get_rows.nrows",
+        "key": "@shape.get_rows.nrows",
         "source": "tensor.dst.dimensions.d1.size"
       },
       {
-        "key": "@hrx2.shape.get_rows.src0_nrows",
+        "key": "@shape.get_rows.src0_nrows",
         "source": "tensor.src0.dimensions.d1.size"
       },
       {
-        "key": "@hrx2.shape.get_rows.idx_row_stride",
+        "key": "@shape.get_rows.idx_row_stride",
         "source": "tensor.src1.dimensions.d0.stride"
       },
       {
-        "key": "@hrx2.tuning.get_rows.workgroup_size",
+        "key": "@tuning.get_rows.workgroup_size",
         "value": "256"
       }
     ]

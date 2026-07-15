@@ -79,15 +79,15 @@
   "config": {
     "bindings": [
       {
-        "key": "@hrx2.shape.soft_max.ncols",
+        "key": "@shape.soft_max.ncols",
         "source": "tensor.dst.dimensions.d0.size"
       },
       {
-        "key": "@hrx2.shape.soft_max.nrows",
+        "key": "@shape.soft_max.nrows",
         "source": "tensor.dst.dimensions.d1.size"
       },
       {
-        "key": "@hrx2.tuning.soft_max.workgroup_size",
+        "key": "@tuning.soft_max.workgroup_size",
         "value": "1024"
       }
     ]

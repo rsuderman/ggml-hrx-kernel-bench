@@ -218,19 +218,19 @@
   "config": {
     "bindings": [
       {
-        "key": "@hrx2.shape.k",
+        "key": "@shape.k",
         "source": "shape.k"
       },
       {
-        "key": "@hrx2.shape.rows",
+        "key": "@shape.rows",
         "source": "shape.rows"
       },
       {
-        "key": "@hrx2.shape.cols",
+        "key": "@shape.cols",
         "source": "shape.cols"
       },
       {
-        "key": "@hrx2.tuning.q5_dot16.workgroup_size",
+        "key": "@tuning.q5_dot16.workgroup_size",
         "value": "32"
       }
     ]

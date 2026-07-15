@@ -75,15 +75,15 @@
   "config": {
     "bindings": [
       {
-        "key": "@hrx2.shape.rms_norm.ncols",
+        "key": "@shape.rms_norm.ncols",
         "source": "tensor.dst.dimensions.d0.size"
       },
       {
-        "key": "@hrx2.shape.rms_norm.nrows",
+        "key": "@shape.rms_norm.nrows",
         "source": "value.flattened_trailing_dimensions"
       },
       {
-        "key": "@hrx2.tuning.rms_norm.workgroup_size",
+        "key": "@tuning.rms_norm.workgroup_size",
         "value": "32"
       }
     ]

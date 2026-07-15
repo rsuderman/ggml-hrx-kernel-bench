@@ -152,7 +152,7 @@
   "config": {
     "bindings": [
       {
-        "key": "@hrx2.shape.k",
+        "key": "@shape.k",
         "source": "shape.k"
       }
     ]

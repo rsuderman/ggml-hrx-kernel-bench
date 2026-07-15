@@ -82,15 +82,15 @@
   "config": {
     "bindings": [
       {
-        "key": "@hrx2.shape.pointwise.d0",
+        "key": "@shape.pointwise.d0",
         "source": "value.leading_dimensions.0"
       },
       {
-        "key": "@hrx2.shape.pointwise.d1",
+        "key": "@shape.pointwise.d1",
         "source": "value.flattened_trailing_dimensions"
       },
       {
-        "key": "@hrx2.tuning.pointwise.workgroup_size",
+        "key": "@tuning.pointwise.workgroup_size",
         "value": "256"
       }
     ]

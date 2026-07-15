@@ -1,4 +1,4 @@
-config.decl @hrx2.shape.k : %value: index where [range(%value, 512, 4096), mul(%value, 512)]
+config.decl @shape.k : %value: index where [range(%value, 512, 4096), mul(%value, 512)]
 
 amdgpu.target<gfx1100> @hrx2_gfx1100_wave64 {subgroup_size = 64}
 
@@ -19,7 +19,7 @@ kernel.def target(@hrx2_gfx1100_wave64) export("hrx2_softmax_kqv_f32_f16_masked_
   %zero_f32 = scalar.constant 0.0 : f32
   %minus_inf = scalar.constant -3.4028234663852886e+38 : f32
 
-  %k0 = config.get @hrx2.shape.k : index
+  %k0 = config.get @shape.k : index
   %k = index.assume %k0 [range(%k0, 512, 4096), mul(%k0, 512)] : index
 
   %row0 = kernel.workgroup.id<x> : index

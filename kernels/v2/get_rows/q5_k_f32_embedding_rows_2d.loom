@@ -1,15 +1,15 @@
-config.decl @hrx2.shape.get_rows.ncols : %value: index where [range(%value, 256, 65536), mul(%value, 256)]
-config.decl @hrx2.shape.get_rows.nrows : %value: index where [range(%value, 1, 1048576)]
-config.decl @hrx2.shape.get_rows.src0_nrows : %value: index where [range(%value, 1, 1048576)]
-config.decl @hrx2.shape.get_rows.idx_row_stride : %value: index where [range(%value, 1, 1024)]
-config.decl @hrx2.tuning.get_rows.workgroup_size : %value: index where [range(%value, 32, 1024), mul(%value, 32)]
+config.decl @shape.get_rows.ncols : %value: index where [range(%value, 256, 65536), mul(%value, 256)]
+config.decl @shape.get_rows.nrows : %value: index where [range(%value, 1, 1048576)]
+config.decl @shape.get_rows.src0_nrows : %value: index where [range(%value, 1, 1048576)]
+config.decl @shape.get_rows.idx_row_stride : %value: index where [range(%value, 1, 1024)]
+config.decl @tuning.get_rows.workgroup_size : %value: index where [range(%value, 32, 1024), mul(%value, 32)]
 
 kernel.def export("get_rows_q5_k_f32") @get_rows_q5_k_f32() {
   %unit = index.constant 1 : index
   %minus_one = index.constant -1 : index
-  %ncols = config.get @hrx2.shape.get_rows.ncols : index
-  %nrows = config.get @hrx2.shape.get_rows.nrows : index
-  %workgroup_size = config.get @hrx2.tuning.get_rows.workgroup_size : index
+  %ncols = config.get @shape.get_rows.ncols : index
+  %nrows = config.get @shape.get_rows.nrows : index
+  %workgroup_size = config.get @tuning.get_rows.workgroup_size : index
   %total = index.mul %ncols, %nrows : index
   %rounding = index.add %workgroup_size, %minus_one : index
   %rounded = index.add %total, %rounding : index
@@ -34,11 +34,11 @@ kernel.def export("get_rows_q5_k_f32") @get_rows_q5_k_f32() {
   %one_i32 = scalar.constant 1 : i32
   %mask_0f = scalar.constant 15 : i32
   %mask_3f = scalar.constant 63 : i32
-  %ncols = config.get @hrx2.shape.get_rows.ncols : index
-  %nrows = config.get @hrx2.shape.get_rows.nrows : index
-  %src0_nrows = config.get @hrx2.shape.get_rows.src0_nrows : index
-  %idx_row_stride = config.get @hrx2.shape.get_rows.idx_row_stride : index
-  %workgroup_size = config.get @hrx2.tuning.get_rows.workgroup_size : index
+  %ncols = config.get @shape.get_rows.ncols : index
+  %nrows = config.get @shape.get_rows.nrows : index
+  %src0_nrows = config.get @shape.get_rows.src0_nrows : index
+  %idx_row_stride = config.get @shape.get_rows.idx_row_stride : index
+  %workgroup_size = config.get @tuning.get_rows.workgroup_size : index
   %ncols_bounded = index.assume %ncols [range(%ncols, 256, 65536)] : index
   %nrows_bounded = index.assume %nrows [range(%nrows, 1, 1048576)] : index
   %src0_nrows_bounded = index.assume %src0_nrows [range(%src0_nrows, 1, 1048576)] : index

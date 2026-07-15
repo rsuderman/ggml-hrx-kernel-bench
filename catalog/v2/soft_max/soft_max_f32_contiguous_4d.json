@@ -109,15 +109,15 @@
   "config": {
     "bindings": [
       {
-        "key": "@hrx2.shape.soft_max.ncols",
+        "key": "@shape.soft_max.ncols",
         "source": "value.ncols"
       },
       {
-        "key": "@hrx2.shape.soft_max.nrows",
+        "key": "@shape.soft_max.nrows",
         "source": "value.nrows"
       },
       {
-        "key": "@hrx2.tuning.soft_max.workgroup_size",
+        "key": "@tuning.soft_max.workgroup_size",
         "value": "1024"
       }
     ]

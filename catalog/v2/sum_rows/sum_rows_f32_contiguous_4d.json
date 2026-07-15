@@ -62,19 +62,19 @@
   "config": {
     "bindings": [
       {
-        "key": "@hrx2.shape.sum_rows.ncols",
+        "key": "@shape.sum_rows.ncols",
         "source": "tensor.src0.dimensions.d0.size"
       },
       {
-        "key": "@hrx2.shape.sum_rows.nrows",
+        "key": "@shape.sum_rows.nrows",
         "source": "value.flattened_trailing_dimensions"
       },
       {
-        "key": "@hrx2.shape.sum_rows.src0_row_stride",
+        "key": "@shape.sum_rows.src0_row_stride",
         "source": "tensor.src0.dimensions.d1.stride"
       },
       {
-        "key": "@hrx2.tuning.sum_rows.workgroup_size",
+        "key": "@tuning.sum_rows.workgroup_size",
         "value": "32"
       }
     ]

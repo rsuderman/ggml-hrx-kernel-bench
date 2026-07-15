@@ -1,33 +1,33 @@
-config.decl @hrx2.shape.soft_max.ncols : %value: index where [range(%value, 1, 4096)]
-config.decl @hrx2.shape.soft_max.nrows : %value: index where [range(%value, 1, 1048576)]
-config.decl @hrx2.shape.soft_max.ne01 : %value: index where [range(%value, 1, 4096)]
-config.decl @hrx2.shape.soft_max.ne02 : %value: index where [range(%value, 1, 4096)]
-config.decl @hrx2.shape.soft_max.mask_nb1 : %value: index where [range(%value, 1, 1048576)]
-config.decl @hrx2.shape.soft_max.mask_nb2 : %value: index where [range(%value, 1, 1048576)]
-config.decl @hrx2.shape.soft_max.mask_nb3 : %value: index where [range(%value, 1, 1048576)]
-config.decl @hrx2.shape.soft_max.mask_ne1 : %value: index where [range(%value, 1, 4096)]
-config.decl @hrx2.shape.soft_max.mask_ne2 : %value: index where [range(%value, 1, 4096)]
-config.decl @hrx2.shape.soft_max.mask_ne3 : %value: index where [range(%value, 1, 4096)]
-config.decl @hrx2.tuning.soft_max.workgroup_size : %value: index where [range(%value, 32, 1024), mul(%value, 32)]
+config.decl @shape.soft_max.ncols : %value: index where [range(%value, 1, 4096)]
+config.decl @shape.soft_max.nrows : %value: index where [range(%value, 1, 1048576)]
+config.decl @shape.soft_max.ne01 : %value: index where [range(%value, 1, 4096)]
+config.decl @shape.soft_max.ne02 : %value: index where [range(%value, 1, 4096)]
+config.decl @shape.soft_max.mask_nb1 : %value: index where [range(%value, 1, 1048576)]
+config.decl @shape.soft_max.mask_nb2 : %value: index where [range(%value, 1, 1048576)]
+config.decl @shape.soft_max.mask_nb3 : %value: index where [range(%value, 1, 1048576)]
+config.decl @shape.soft_max.mask_ne1 : %value: index where [range(%value, 1, 4096)]
+config.decl @shape.soft_max.mask_ne2 : %value: index where [range(%value, 1, 4096)]
+config.decl @shape.soft_max.mask_ne3 : %value: index where [range(%value, 1, 4096)]
+config.decl @tuning.soft_max.workgroup_size : %value: index where [range(%value, 32, 1024), mul(%value, 32)]
 
 kernel.def export("hrx2_soft_max_f32_mask") @hrx2_soft_max_f32_mask() {
   %unit = index.constant 1 : index
-  %nrows = config.get @hrx2.shape.soft_max.nrows : index
-  %workgroup_size = config.get @hrx2.tuning.soft_max.workgroup_size : index
+  %nrows = config.get @shape.soft_max.nrows : index
+  %workgroup_size = config.get @tuning.soft_max.workgroup_size : index
   kernel.launch.config workgroups(%nrows, %unit, %unit) workgroup_size(%workgroup_size, %unit, %unit) : index
 } launch(%scale: f32, %src0: buffer, %mask: buffer, %dst: buffer) {
   %base = index.constant 0 : offset
-  %ncols = config.get @hrx2.shape.soft_max.ncols : index
-  %nrows = config.get @hrx2.shape.soft_max.nrows : index
-  %ne01 = config.get @hrx2.shape.soft_max.ne01 : index
-  %ne02 = config.get @hrx2.shape.soft_max.ne02 : index
-  %mask_nb1 = config.get @hrx2.shape.soft_max.mask_nb1 : index
-  %mask_nb2 = config.get @hrx2.shape.soft_max.mask_nb2 : index
-  %mask_nb3 = config.get @hrx2.shape.soft_max.mask_nb3 : index
-  %mask_ne1 = config.get @hrx2.shape.soft_max.mask_ne1 : index
-  %mask_ne2 = config.get @hrx2.shape.soft_max.mask_ne2 : index
-  %mask_ne3 = config.get @hrx2.shape.soft_max.mask_ne3 : index
-  %workgroup_size = config.get @hrx2.tuning.soft_max.workgroup_size : index
+  %ncols = config.get @shape.soft_max.ncols : index
+  %nrows = config.get @shape.soft_max.nrows : index
+  %ne01 = config.get @shape.soft_max.ne01 : index
+  %ne02 = config.get @shape.soft_max.ne02 : index
+  %mask_nb1 = config.get @shape.soft_max.mask_nb1 : index
+  %mask_nb2 = config.get @shape.soft_max.mask_nb2 : index
+  %mask_nb3 = config.get @shape.soft_max.mask_nb3 : index
+  %mask_ne1 = config.get @shape.soft_max.mask_ne1 : index
+  %mask_ne2 = config.get @shape.soft_max.mask_ne2 : index
+  %mask_ne3 = config.get @shape.soft_max.mask_ne3 : index
+  %workgroup_size = config.get @tuning.soft_max.workgroup_size : index
   %ncols_bounded = index.assume %ncols [range(%ncols, 1, 4096)] : index
   %nrows_bounded = index.assume %nrows [range(%nrows, 1, 1048576)] : index
   %ne01_bounded = index.assume %ne01 [range(%ne01, 1, 4096)] : index

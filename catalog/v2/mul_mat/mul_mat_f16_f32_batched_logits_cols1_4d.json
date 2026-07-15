@@ -202,71 +202,71 @@
   "config": {
     "bindings": [
       {
-        "key": "@hrx2.shape.mul_mat_f16.k",
+        "key": "@shape.mul_mat_f16.k",
         "source": "shape.k"
       },
       {
-        "key": "@hrx2.shape.mul_mat_f16.rows",
+        "key": "@shape.mul_mat_f16.rows",
         "source": "shape.rows"
       },
       {
-        "key": "@hrx2.shape.mul_mat_f16.cols",
+        "key": "@shape.mul_mat_f16.cols",
         "source": "shape.cols"
       },
       {
-        "key": "@hrx2.shape.mul_mat_f16.dst_ne2",
+        "key": "@shape.mul_mat_f16.dst_ne2",
         "source": "shape.d2"
       },
       {
-        "key": "@hrx2.shape.mul_mat_f16.dst_ne3",
+        "key": "@shape.mul_mat_f16.dst_ne3",
         "source": "shape.d3"
       },
       {
-        "key": "@hrx2.shape.mul_mat_f16.src0_ne2",
+        "key": "@shape.mul_mat_f16.src0_ne2",
         "value": "1"
       },
       {
-        "key": "@hrx2.shape.mul_mat_f16.src0_ne3",
+        "key": "@shape.mul_mat_f16.src0_ne3",
         "value": "1"
       },
       {
-        "key": "@hrx2.shape.mul_mat_f16.src0_stride_row",
+        "key": "@shape.mul_mat_f16.src0_stride_row",
         "source": "tensor.src0.dimensions.d1.stride"
       },
       {
-        "key": "@hrx2.shape.mul_mat_f16.src0_stride_ne2",
+        "key": "@shape.mul_mat_f16.src0_stride_ne2",
         "value": "1"
       },
       {
-        "key": "@hrx2.shape.mul_mat_f16.src0_stride_ne3",
+        "key": "@shape.mul_mat_f16.src0_stride_ne3",
         "value": "1"
       },
       {
-        "key": "@hrx2.shape.mul_mat_f16.src1_stride_col",
+        "key": "@shape.mul_mat_f16.src1_stride_col",
         "source": "tensor.src1.dimensions.d1.stride"
       },
       {
-        "key": "@hrx2.shape.mul_mat_f16.src1_stride_ne2",
+        "key": "@shape.mul_mat_f16.src1_stride_ne2",
         "source": "shape.src1_d2_stride"
       },
       {
-        "key": "@hrx2.shape.mul_mat_f16.src1_stride_ne3",
+        "key": "@shape.mul_mat_f16.src1_stride_ne3",
         "source": "shape.src1_d3_stride"
       },
       {
-        "key": "@hrx2.shape.mul_mat_f16.dst_stride_col",
+        "key": "@shape.mul_mat_f16.dst_stride_col",
         "source": "tensor.dst.dimensions.d1.stride"
       },
       {
-        "key": "@hrx2.shape.mul_mat_f16.dst_stride_ne2",
+        "key": "@shape.mul_mat_f16.dst_stride_ne2",
         "source": "shape.dst_d2_stride"
       },
       {
-        "key": "@hrx2.shape.mul_mat_f16.dst_stride_ne3",
+        "key": "@shape.mul_mat_f16.dst_stride_ne3",
         "source": "shape.dst_d3_stride"
       },
       {
-        "key": "@hrx2.tuning.mul_mat_f16.workgroup_size",
+        "key": "@tuning.mul_mat_f16.workgroup_size",
         "value": "256"
       }
     ]

@@ -1,13 +1,13 @@
-config.decl @hrx2.shape.k : %value: index where [range(%value, 256, 32768), mul(%value, 256)]
-config.decl @hrx2.shape.rows : %value: index where [range(%value, 1, 262144)]
-config.decl @hrx2.shape.cols : %value: index where [range(%value, 1, 1)]
-config.decl @hrx2.tuning.q5_dot16.workgroup_size : %value: index where [range(%value, 32, 256), mul(%value, 32)]
+config.decl @shape.k : %value: index where [range(%value, 256, 32768), mul(%value, 256)]
+config.decl @shape.rows : %value: index where [range(%value, 1, 262144)]
+config.decl @shape.cols : %value: index where [range(%value, 1, 1)]
+config.decl @tuning.q5_dot16.workgroup_size : %value: index where [range(%value, 32, 256), mul(%value, 32)]
 
 kernel.def export("hrx2_mul_mat_q5_k_f32_dot16_static") @hrx2_mul_mat_q5_k_f32_dot16_static() {
   %unit = index.constant 1 : index
-  %rows = config.get @hrx2.shape.rows : index
-  %cols = config.get @hrx2.shape.cols : index
-  %workgroup_size = config.get @hrx2.tuning.q5_dot16.workgroup_size : index
+  %rows = config.get @shape.rows : index
+  %cols = config.get @shape.cols : index
+  %workgroup_size = config.get @tuning.q5_dot16.workgroup_size : index
   kernel.launch.config workgroups(%rows, %cols, %unit) workgroup_size(%workgroup_size, %unit, %unit) : index
 } launch(%src0: buffer, %src1: buffer, %dst: buffer) {
   %base = index.constant 0 : offset
@@ -48,10 +48,10 @@ kernel.def export("hrx2_mul_mat_q5_k_f32_dot16_static") @hrx2_mul_mat_q5_k_f32_d
   %mask_20202020 = scalar.constant 538976288 : i32
   %zero_f32 = scalar.constant 0.0 : f32
 
-  %k = config.get @hrx2.shape.k : index
-  %rows = config.get @hrx2.shape.rows : index
-  %cols = config.get @hrx2.shape.cols : index
-  %workgroup_size = config.get @hrx2.tuning.q5_dot16.workgroup_size : index
+  %k = config.get @shape.k : index
+  %rows = config.get @shape.rows : index
+  %cols = config.get @shape.cols : index
+  %workgroup_size = config.get @tuning.q5_dot16.workgroup_size : index
   %k_bounded = index.assume %k [range(%k, 256, 32768)] : index
   %rows_bounded = index.assume %rows [range(%rows, 1, 262144)] : index
   %cols_bounded = index.assume %cols [range(%cols, 1, 1)] : index

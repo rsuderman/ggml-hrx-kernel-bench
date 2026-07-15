@@ -94,15 +94,15 @@
   "config": {
     "bindings": [
       {
-        "key": "@hrx2.shape.swiglu.ncols",
+        "key": "@shape.swiglu.ncols",
         "source": "tensor.dst.dimensions.d0.size"
       },
       {
-        "key": "@hrx2.shape.swiglu.nrows",
+        "key": "@shape.swiglu.nrows",
         "source": "value.flattened_trailing_dimensions"
       },
       {
-        "key": "@hrx2.tuning.swiglu.workgroup_size",
+        "key": "@tuning.swiglu.workgroup_size",
         "value": "256"
       }
     ]

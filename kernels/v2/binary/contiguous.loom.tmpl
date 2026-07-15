@@ -1,12 +1,12 @@
-config.decl @hrx2.shape.pointwise.total_size : %value: index where [range(%value, 1, 1073741824)]
-config.decl @hrx2.tuning.pointwise.workgroup_size : %value: index where [range(%value, 32, 1024), mul(%value, 32)]
+config.decl @shape.pointwise.total_size : %value: index where [range(%value, 1, 1073741824)]
+config.decl @tuning.pointwise.workgroup_size : %value: index where [range(%value, 32, 1024), mul(%value, 32)]
 
 kernel.def export("${op}_f32_contiguous") @${op}_f32_contiguous() {
   %unit = index.constant 1 : index
   %minus_one = index.constant -1 : index
   %max_workgroups_x = index.constant 65535 : index
-  %total = config.get @hrx2.shape.pointwise.total_size : index
-  %workgroup_size = config.get @hrx2.tuning.pointwise.workgroup_size : index
+  %total = config.get @shape.pointwise.total_size : index
+  %workgroup_size = config.get @tuning.pointwise.workgroup_size : index
   %rounding = index.add %workgroup_size, %minus_one : index
   %rounded = index.add %total, %rounding : index
   %flat_workgroups = index.div %rounded, %workgroup_size : index
@@ -20,8 +20,8 @@ kernel.def export("${op}_f32_contiguous") @${op}_f32_contiguous() {
 } launch(%src0: buffer, %src1: buffer, %dst: buffer) {
   %base = index.constant 0 : offset
   %minus_one = index.constant -1 : index
-  %total = config.get @hrx2.shape.pointwise.total_size : index
-  %workgroup_size = config.get @hrx2.tuning.pointwise.workgroup_size : index
+  %total = config.get @shape.pointwise.total_size : index
+  %workgroup_size = config.get @tuning.pointwise.workgroup_size : index
   %max_workgroups_x = index.constant 65535 : index
   %total_bounded = index.assume %total [range(%total, 1, 1073741824)] : index
   %rounding = index.add %workgroup_size, %minus_one : index
@@ -69,8 +69,8 @@ kernel.def export("${op}_f16_contiguous") @${op}_f16_contiguous() {
   %unit = index.constant 1 : index
   %minus_one = index.constant -1 : index
   %max_workgroups_x = index.constant 65535 : index
-  %total = config.get @hrx2.shape.pointwise.total_size : index
-  %workgroup_size = config.get @hrx2.tuning.pointwise.workgroup_size : index
+  %total = config.get @shape.pointwise.total_size : index
+  %workgroup_size = config.get @tuning.pointwise.workgroup_size : index
   %rounding = index.add %workgroup_size, %minus_one : index
   %rounded = index.add %total, %rounding : index
   %flat_workgroups = index.div %rounded, %workgroup_size : index
@@ -84,8 +84,8 @@ kernel.def export("${op}_f16_contiguous") @${op}_f16_contiguous() {
 } launch(%src0: buffer, %src1: buffer, %dst: buffer) {
   %base = index.constant 0 : offset
   %minus_one = index.constant -1 : index
-  %total = config.get @hrx2.shape.pointwise.total_size : index
-  %workgroup_size = config.get @hrx2.tuning.pointwise.workgroup_size : index
+  %total = config.get @shape.pointwise.total_size : index
+  %workgroup_size = config.get @tuning.pointwise.workgroup_size : index
   %max_workgroups_x = index.constant 65535 : index
   %total_bounded = index.assume %total [range(%total, 1, 1073741824)] : index
   %rounding = index.add %workgroup_size, %minus_one : index

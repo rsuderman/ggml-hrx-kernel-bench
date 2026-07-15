@@ -126,47 +126,47 @@
   "config": {
     "bindings": [
       {
-        "key": "@hrx2.shape.soft_max.ncols",
+        "key": "@shape.soft_max.ncols",
         "source": "value.ncols"
       },
       {
-        "key": "@hrx2.shape.soft_max.nrows",
+        "key": "@shape.soft_max.nrows",
         "source": "value.nrows"
       },
       {
-        "key": "@hrx2.shape.soft_max.ne01",
+        "key": "@shape.soft_max.ne01",
         "source": "tensor.dst.dimensions.d1.size"
       },
       {
-        "key": "@hrx2.shape.soft_max.ne02",
+        "key": "@shape.soft_max.ne02",
         "source": "tensor.dst.dimensions.d2.size"
       },
       {
-        "key": "@hrx2.shape.soft_max.mask_nb1",
+        "key": "@shape.soft_max.mask_nb1",
         "source": "tensor.mask.dimensions.d1.stride"
       },
       {
-        "key": "@hrx2.shape.soft_max.mask_nb2",
+        "key": "@shape.soft_max.mask_nb2",
         "source": "tensor.mask.dimensions.d2.stride"
       },
       {
-        "key": "@hrx2.shape.soft_max.mask_nb3",
+        "key": "@shape.soft_max.mask_nb3",
         "source": "tensor.mask.dimensions.d3.stride"
       },
       {
-        "key": "@hrx2.shape.soft_max.mask_ne1",
+        "key": "@shape.soft_max.mask_ne1",
         "source": "tensor.mask.dimensions.d1.size"
       },
       {
-        "key": "@hrx2.shape.soft_max.mask_ne2",
+        "key": "@shape.soft_max.mask_ne2",
         "source": "tensor.mask.dimensions.d2.size"
       },
       {
-        "key": "@hrx2.shape.soft_max.mask_ne3",
+        "key": "@shape.soft_max.mask_ne3",
         "source": "tensor.mask.dimensions.d3.size"
       },
       {
-        "key": "@hrx2.tuning.soft_max.workgroup_size",
+        "key": "@tuning.soft_max.workgroup_size",
         "value": "1024"
       }
     ]

@@ -85,71 +85,71 @@
   "config": {
     "bindings": [
       {
-        "key": "@hrx2.shape.set_rows.nc",
+        "key": "@shape.set_rows.nc",
         "source": "tensor.dst.dimensions.d0.size"
       },
       {
-        "key": "@hrx2.shape.set_rows.nr",
+        "key": "@shape.set_rows.nr",
         "source": "tensor.src0.dimensions.d1.size"
       },
       {
-        "key": "@hrx2.shape.set_rows.ne02",
+        "key": "@shape.set_rows.ne02",
         "source": "tensor.dst.dimensions.d2.size"
       },
       {
-        "key": "@hrx2.shape.set_rows.ne03",
+        "key": "@shape.set_rows.ne03",
         "source": "tensor.dst.dimensions.d3.size"
       },
       {
-        "key": "@hrx2.shape.set_rows.ne1",
+        "key": "@shape.set_rows.ne1",
         "source": "tensor.dst.dimensions.d1.size"
       },
       {
-        "key": "@hrx2.shape.set_rows.ne11",
+        "key": "@shape.set_rows.ne11",
         "source": "tensor.src1.dimensions.d1.size"
       },
       {
-        "key": "@hrx2.shape.set_rows.ne12",
+        "key": "@shape.set_rows.ne12",
         "source": "tensor.src1.dimensions.d2.size"
       },
       {
-        "key": "@hrx2.stride.set_rows.src0_nb1",
+        "key": "@stride.set_rows.src0_nb1",
         "source": "tensor.src0.dimensions.d1.stride"
       },
       {
-        "key": "@hrx2.stride.set_rows.src0_nb2",
+        "key": "@stride.set_rows.src0_nb2",
         "source": "tensor.src0.dimensions.d2.stride"
       },
       {
-        "key": "@hrx2.stride.set_rows.src0_nb3",
+        "key": "@stride.set_rows.src0_nb3",
         "source": "tensor.src0.dimensions.d3.stride"
       },
       {
-        "key": "@hrx2.stride.set_rows.idx_nb0",
+        "key": "@stride.set_rows.idx_nb0",
         "source": "tensor.src1.dimensions.d0.stride"
       },
       {
-        "key": "@hrx2.stride.set_rows.idx_nb1",
+        "key": "@stride.set_rows.idx_nb1",
         "source": "tensor.src1.dimensions.d1.stride"
       },
       {
-        "key": "@hrx2.stride.set_rows.idx_nb2",
+        "key": "@stride.set_rows.idx_nb2",
         "source": "tensor.src1.dimensions.d2.stride"
       },
       {
-        "key": "@hrx2.stride.set_rows.dst_nb1",
+        "key": "@stride.set_rows.dst_nb1",
         "source": "tensor.dst.dimensions.d1.stride"
       },
       {
-        "key": "@hrx2.stride.set_rows.dst_nb2",
+        "key": "@stride.set_rows.dst_nb2",
         "source": "tensor.dst.dimensions.d2.stride"
       },
       {
-        "key": "@hrx2.stride.set_rows.dst_nb3",
+        "key": "@stride.set_rows.dst_nb3",
         "source": "tensor.dst.dimensions.d3.stride"
       },
       {
-        "key": "@hrx2.tuning.set_rows.workgroup_size",
+        "key": "@tuning.set_rows.workgroup_size",
         "value": "256"
       }
     ]

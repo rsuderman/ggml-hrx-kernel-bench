@@ -1,21 +1,21 @@
-config.decl @hrx2.shape.pointwise.ne0 : %value: index where [range(%value, 1, 1073741824)]
-config.decl @hrx2.shape.pointwise.ne1 : %value: index where [range(%value, 1, 1073741824)]
-config.decl @hrx2.shape.pointwise.ne2 : %value: index where [range(%value, 1, 1073741824)]
-config.decl @hrx2.shape.pointwise.ne3 : %value: index where [range(%value, 1, 1073741824)]
-config.decl @hrx2.stride.pointwise.src0_nb0 : %value: index where [range(%value, 0, 1073741824)]
-config.decl @hrx2.stride.pointwise.src0_nb1 : %value: index where [range(%value, 0, 1073741824)]
-config.decl @hrx2.stride.pointwise.src0_nb2 : %value: index where [range(%value, 0, 1073741824)]
-config.decl @hrx2.stride.pointwise.src0_nb3 : %value: index where [range(%value, 0, 1073741824)]
-config.decl @hrx2.tuning.pointwise.workgroup_size : %value: index where [range(%value, 32, 1024), mul(%value, 32)]
+config.decl @shape.pointwise.ne0 : %value: index where [range(%value, 1, 1073741824)]
+config.decl @shape.pointwise.ne1 : %value: index where [range(%value, 1, 1073741824)]
+config.decl @shape.pointwise.ne2 : %value: index where [range(%value, 1, 1073741824)]
+config.decl @shape.pointwise.ne3 : %value: index where [range(%value, 1, 1073741824)]
+config.decl @stride.pointwise.src0_nb0 : %value: index where [range(%value, 0, 1073741824)]
+config.decl @stride.pointwise.src0_nb1 : %value: index where [range(%value, 0, 1073741824)]
+config.decl @stride.pointwise.src0_nb2 : %value: index where [range(%value, 0, 1073741824)]
+config.decl @stride.pointwise.src0_nb3 : %value: index where [range(%value, 0, 1073741824)]
+config.decl @tuning.pointwise.workgroup_size : %value: index where [range(%value, 32, 1024), mul(%value, 32)]
 
 kernel.def export("${op}_f32_non_contiguous_4d") @${op}_f32_non_contiguous_4d() {
   %unit = index.constant 1 : index
   %minus_one = index.constant -1 : index
-  %ne0 = config.get @hrx2.shape.pointwise.ne0 : index
-  %ne1 = config.get @hrx2.shape.pointwise.ne1 : index
-  %ne2 = config.get @hrx2.shape.pointwise.ne2 : index
-  %ne3 = config.get @hrx2.shape.pointwise.ne3 : index
-  %workgroup_size = config.get @hrx2.tuning.pointwise.workgroup_size : index
+  %ne0 = config.get @shape.pointwise.ne0 : index
+  %ne1 = config.get @shape.pointwise.ne1 : index
+  %ne2 = config.get @shape.pointwise.ne2 : index
+  %ne3 = config.get @shape.pointwise.ne3 : index
+  %workgroup_size = config.get @tuning.pointwise.workgroup_size : index
   %ne01 = index.mul %ne0, %ne1 : index
   %ne012 = index.mul %ne01, %ne2 : index
   %total = index.mul %ne012, %ne3 : index
@@ -25,15 +25,15 @@ kernel.def export("${op}_f32_non_contiguous_4d") @${op}_f32_non_contiguous_4d() 
   kernel.launch.config workgroups(%workgroups, %unit, %unit) workgroup_size(%workgroup_size, %unit, %unit) : index
 } launch(%src0: buffer, %dst: buffer) {
   %base = index.constant 0 : offset
-$preamble  %ne0 = config.get @hrx2.shape.pointwise.ne0 : index
-  %ne1 = config.get @hrx2.shape.pointwise.ne1 : index
-  %ne2 = config.get @hrx2.shape.pointwise.ne2 : index
-  %ne3 = config.get @hrx2.shape.pointwise.ne3 : index
-  %src0_nb0 = config.get @hrx2.stride.pointwise.src0_nb0 : index
-  %src0_nb1 = config.get @hrx2.stride.pointwise.src0_nb1 : index
-  %src0_nb2 = config.get @hrx2.stride.pointwise.src0_nb2 : index
-  %src0_nb3 = config.get @hrx2.stride.pointwise.src0_nb3 : index
-  %workgroup_size = config.get @hrx2.tuning.pointwise.workgroup_size : index
+$preamble  %ne0 = config.get @shape.pointwise.ne0 : index
+  %ne1 = config.get @shape.pointwise.ne1 : index
+  %ne2 = config.get @shape.pointwise.ne2 : index
+  %ne3 = config.get @shape.pointwise.ne3 : index
+  %src0_nb0 = config.get @stride.pointwise.src0_nb0 : index
+  %src0_nb1 = config.get @stride.pointwise.src0_nb1 : index
+  %src0_nb2 = config.get @stride.pointwise.src0_nb2 : index
+  %src0_nb3 = config.get @stride.pointwise.src0_nb3 : index
+  %workgroup_size = config.get @tuning.pointwise.workgroup_size : index
   %ne0_bounded = index.assume %ne0 [range(%ne0, 1, 1073741824)] : index
   %ne1_bounded = index.assume %ne1 [range(%ne1, 1, 1073741824)] : index
   %ne2_bounded = index.assume %ne2 [range(%ne2, 1, 1073741824)] : index
@@ -85,11 +85,11 @@ $compute_block
 kernel.def export("${op}_f16_non_contiguous_4d") @${op}_f16_non_contiguous_4d() {
   %unit = index.constant 1 : index
   %minus_one = index.constant -1 : index
-  %ne0 = config.get @hrx2.shape.pointwise.ne0 : index
-  %ne1 = config.get @hrx2.shape.pointwise.ne1 : index
-  %ne2 = config.get @hrx2.shape.pointwise.ne2 : index
-  %ne3 = config.get @hrx2.shape.pointwise.ne3 : index
-  %workgroup_size = config.get @hrx2.tuning.pointwise.workgroup_size : index
+  %ne0 = config.get @shape.pointwise.ne0 : index
+  %ne1 = config.get @shape.pointwise.ne1 : index
+  %ne2 = config.get @shape.pointwise.ne2 : index
+  %ne3 = config.get @shape.pointwise.ne3 : index
+  %workgroup_size = config.get @tuning.pointwise.workgroup_size : index
   %ne01 = index.mul %ne0, %ne1 : index
   %ne012 = index.mul %ne01, %ne2 : index
   %total = index.mul %ne012, %ne3 : index
@@ -99,15 +99,15 @@ kernel.def export("${op}_f16_non_contiguous_4d") @${op}_f16_non_contiguous_4d() 
   kernel.launch.config workgroups(%workgroups, %unit, %unit) workgroup_size(%workgroup_size, %unit, %unit) : index
 } launch(%src0: buffer, %dst: buffer) {
   %base = index.constant 0 : offset
-$preamble  %ne0 = config.get @hrx2.shape.pointwise.ne0 : index
-  %ne1 = config.get @hrx2.shape.pointwise.ne1 : index
-  %ne2 = config.get @hrx2.shape.pointwise.ne2 : index
-  %ne3 = config.get @hrx2.shape.pointwise.ne3 : index
-  %src0_nb0 = config.get @hrx2.stride.pointwise.src0_nb0 : index
-  %src0_nb1 = config.get @hrx2.stride.pointwise.src0_nb1 : index
-  %src0_nb2 = config.get @hrx2.stride.pointwise.src0_nb2 : index
-  %src0_nb3 = config.get @hrx2.stride.pointwise.src0_nb3 : index
-  %workgroup_size = config.get @hrx2.tuning.pointwise.workgroup_size : index
+$preamble  %ne0 = config.get @shape.pointwise.ne0 : index
+  %ne1 = config.get @shape.pointwise.ne1 : index
+  %ne2 = config.get @shape.pointwise.ne2 : index
+  %ne3 = config.get @shape.pointwise.ne3 : index
+  %src0_nb0 = config.get @stride.pointwise.src0_nb0 : index
+  %src0_nb1 = config.get @stride.pointwise.src0_nb1 : index
+  %src0_nb2 = config.get @stride.pointwise.src0_nb2 : index
+  %src0_nb3 = config.get @stride.pointwise.src0_nb3 : index
+  %workgroup_size = config.get @tuning.pointwise.workgroup_size : index
   %ne0_bounded = index.assume %ne0 [range(%ne0, 1, 1073741824)] : index
   %ne1_bounded = index.assume %ne1 [range(%ne1, 1, 1073741824)] : index
   %ne2_bounded = index.assume %ne2 [range(%ne2, 1, 1073741824)] : index

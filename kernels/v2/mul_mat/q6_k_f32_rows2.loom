@@ -1,14 +1,14 @@
-config.decl @hrx2.shape.k : %value: index where [range(%value, 256, 32768), mul(%value, 256)]
-config.decl @hrx2.shape.rows : %value: index where [range(%value, 1, 262144)]
-config.decl @hrx2.shape.cols : %value: index where [range(%value, 1, 1024)]
-config.decl @hrx2.tuning.workgroup_size : %value: index where [range(%value, 32, 256), mul(%value, 32)]
+config.decl @shape.k : %value: index where [range(%value, 256, 32768), mul(%value, 256)]
+config.decl @shape.rows : %value: index where [range(%value, 1, 262144)]
+config.decl @shape.cols : %value: index where [range(%value, 1, 1024)]
+config.decl @tuning.workgroup_size : %value: index where [range(%value, 32, 256), mul(%value, 32)]
 
 kernel.def export("hrx2_mul_mat_q6_k_f32_rows2_wg32_static") @hrx2_mul_mat_q6_k_f32_rows2_wg32_static() {
   %unit = index.constant 1 : index
   %one = index.constant 1 : index
   %two = index.constant 2 : index
-  %rows = config.get @hrx2.shape.rows : index
-  %cols = config.get @hrx2.shape.cols : index
+  %rows = config.get @shape.rows : index
+  %cols = config.get @shape.cols : index
   %rows_plus1 = index.add %rows, %one : index
   %row_groups = index.div %rows_plus1, %two : index
   %wg = index.constant 32 : index
@@ -48,9 +48,9 @@ kernel.def export("hrx2_mul_mat_q6_k_f32_rows2_wg32_static") @hrx2_mul_mat_q6_k_
   %mask_c0c0c0c0 = scalar.constant -1061109568 : i32
   %mask_0f0f0f0f = scalar.constant 252645135 : i32
   %zero_f32 = scalar.constant 0.0 : f32
-  %k = config.get @hrx2.shape.k : index
-  %rows = config.get @hrx2.shape.rows : index
-  %cols = config.get @hrx2.shape.cols : index
+  %k = config.get @shape.k : index
+  %rows = config.get @shape.rows : index
+  %cols = config.get @shape.cols : index
   %k_bounded = index.assume %k [range(%k, 256, 32768)] : index
   %rows_bounded = index.assume %rows [range(%rows, 1, 262144)] : index
   %cols_bounded = index.assume %cols [range(%cols, 1, 1)] : index

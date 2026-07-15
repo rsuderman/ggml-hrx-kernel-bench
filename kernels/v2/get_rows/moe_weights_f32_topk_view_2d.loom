@@ -1,17 +1,17 @@
-config.decl @hrx2.shape.get_rows_moe.nexperts : %value: index where [range(%value, 1, 1024)]
-config.decl @hrx2.shape.get_rows_moe.nselected : %value: index where [range(%value, 1, 128)]
-config.decl @hrx2.shape.get_rows_moe.ntokens : %value: index where [range(%value, 1, 1048576)]
-config.decl @hrx2.shape.get_rows_moe.src0_token_stride : %value: index where [range(%value, 1, 1048576)]
-config.decl @hrx2.shape.get_rows_moe.idx_token_stride : %value: index where [range(%value, 1, 1048576)]
-config.decl @hrx2.shape.get_rows_moe.dst_token_stride : %value: index where [range(%value, 1, 1048576)]
-config.decl @hrx2.tuning.get_rows_moe.workgroup_size : %value: index where [range(%value, 32, 1024), mul(%value, 32)]
+config.decl @shape.get_rows_moe.nexperts : %value: index where [range(%value, 1, 1024)]
+config.decl @shape.get_rows_moe.nselected : %value: index where [range(%value, 1, 128)]
+config.decl @shape.get_rows_moe.ntokens : %value: index where [range(%value, 1, 1048576)]
+config.decl @shape.get_rows_moe.src0_token_stride : %value: index where [range(%value, 1, 1048576)]
+config.decl @shape.get_rows_moe.idx_token_stride : %value: index where [range(%value, 1, 1048576)]
+config.decl @shape.get_rows_moe.dst_token_stride : %value: index where [range(%value, 1, 1048576)]
+config.decl @tuning.get_rows_moe.workgroup_size : %value: index where [range(%value, 32, 1024), mul(%value, 32)]
 
 kernel.def export("get_rows_moe_weights_f32") @get_rows_moe_weights_f32() {
   %unit = index.constant 1 : index
   %minus_one = index.constant -1 : index
-  %nselected = config.get @hrx2.shape.get_rows_moe.nselected : index
-  %ntokens = config.get @hrx2.shape.get_rows_moe.ntokens : index
-  %workgroup_size = config.get @hrx2.tuning.get_rows_moe.workgroup_size : index
+  %nselected = config.get @shape.get_rows_moe.nselected : index
+  %ntokens = config.get @shape.get_rows_moe.ntokens : index
+  %workgroup_size = config.get @tuning.get_rows_moe.workgroup_size : index
   %total = index.mul %nselected, %ntokens : index
   %rounding = index.add %workgroup_size, %minus_one : index
   %rounded = index.add %total, %rounding : index
@@ -20,13 +20,13 @@ kernel.def export("get_rows_moe_weights_f32") @get_rows_moe_weights_f32() {
 } launch(%src0: buffer, %idx: buffer, %dst: buffer) {
   %base = index.constant 0 : offset
   %zero_i32 = scalar.constant 0 : i32
-  %nexperts = config.get @hrx2.shape.get_rows_moe.nexperts : index
-  %nselected = config.get @hrx2.shape.get_rows_moe.nselected : index
-  %ntokens = config.get @hrx2.shape.get_rows_moe.ntokens : index
-  %src0_token_stride = config.get @hrx2.shape.get_rows_moe.src0_token_stride : index
-  %idx_token_stride = config.get @hrx2.shape.get_rows_moe.idx_token_stride : index
-  %dst_token_stride = config.get @hrx2.shape.get_rows_moe.dst_token_stride : index
-  %workgroup_size = config.get @hrx2.tuning.get_rows_moe.workgroup_size : index
+  %nexperts = config.get @shape.get_rows_moe.nexperts : index
+  %nselected = config.get @shape.get_rows_moe.nselected : index
+  %ntokens = config.get @shape.get_rows_moe.ntokens : index
+  %src0_token_stride = config.get @shape.get_rows_moe.src0_token_stride : index
+  %idx_token_stride = config.get @shape.get_rows_moe.idx_token_stride : index
+  %dst_token_stride = config.get @shape.get_rows_moe.dst_token_stride : index
+  %workgroup_size = config.get @tuning.get_rows_moe.workgroup_size : index
   %nexperts_bounded = index.assume %nexperts [range(%nexperts, 1, 1024)] : index
   %nselected_bounded = index.assume %nselected [range(%nselected, 1, 128)] : index
   %ntokens_bounded = index.assume %ntokens [range(%ntokens, 1, 1048576)] : index

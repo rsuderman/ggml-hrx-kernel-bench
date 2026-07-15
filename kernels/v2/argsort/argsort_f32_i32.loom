@@ -1,11 +1,11 @@
-config.decl @hrx2.shape.argsort.ncols : %value: index where [range(%value, 1, 256)]
-config.decl @hrx2.shape.argsort.nrows : %value: index where [range(%value, 1, 1048576)]
-config.decl @hrx2.tuning.argsort.workgroup_size : %value: index where [range(%value, 32, 256), mul(%value, 32)]
+config.decl @shape.argsort.ncols : %value: index where [range(%value, 1, 256)]
+config.decl @shape.argsort.nrows : %value: index where [range(%value, 1, 1048576)]
+config.decl @tuning.argsort.workgroup_size : %value: index where [range(%value, 32, 256), mul(%value, 32)]
 
 kernel.def export("hrx2_argsort_f32_i32_desc") @hrx2_argsort_f32_i32_desc() {
   %unit = index.constant 1 : index
-  %nrows = config.get @hrx2.shape.argsort.nrows : index
-  %workgroup_size = config.get @hrx2.tuning.argsort.workgroup_size : index
+  %nrows = config.get @shape.argsort.nrows : index
+  %workgroup_size = config.get @tuning.argsort.workgroup_size : index
   kernel.launch.config workgroups(%nrows, %unit, %unit) workgroup_size(%workgroup_size, %unit, %unit) : index
 } launch(%src0: buffer, %dst: buffer) {
   %base = index.constant 0 : offset
@@ -13,8 +13,8 @@ kernel.def export("hrx2_argsort_f32_i32_desc") @hrx2_argsort_f32_i32_desc() {
   %one = index.constant 1 : index
   %zero_i32 = scalar.constant 0 : i32
   %one_i32 = scalar.constant 1 : i32
-  %ncols = config.get @hrx2.shape.argsort.ncols : index
-  %nrows = config.get @hrx2.shape.argsort.nrows : index
+  %ncols = config.get @shape.argsort.ncols : index
+  %nrows = config.get @shape.argsort.nrows : index
   %ncols_bounded = index.assume %ncols [range(%ncols, 1, 256)] : index
   %nrows_bounded = index.assume %nrows [range(%nrows, 1, 1048576)] : index
   %row0 = kernel.workgroup.id<x> : index

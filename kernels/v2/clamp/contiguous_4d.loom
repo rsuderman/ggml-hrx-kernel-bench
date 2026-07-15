@@ -1,13 +1,13 @@
-config.decl @hrx2.shape.pointwise.d0 : %value: index where [range(%value, 1, 65536)]
-config.decl @hrx2.shape.pointwise.d1 : %value: index where [range(%value, 1, 1048576)]
-config.decl @hrx2.tuning.pointwise.workgroup_size : %value: index where [range(%value, 32, 1024), mul(%value, 32)]
+config.decl @shape.pointwise.d0 : %value: index where [range(%value, 1, 65536)]
+config.decl @shape.pointwise.d1 : %value: index where [range(%value, 1, 1048576)]
+config.decl @tuning.pointwise.workgroup_size : %value: index where [range(%value, 32, 1024), mul(%value, 32)]
 
 kernel.def export("clamp_f32") @clamp_f32() {
   %unit = index.constant 1 : index
   %minus_one = index.constant -1 : index
-  %d0 = config.get @hrx2.shape.pointwise.d0 : index
-  %d1 = config.get @hrx2.shape.pointwise.d1 : index
-  %workgroup_size = config.get @hrx2.tuning.pointwise.workgroup_size : index
+  %d0 = config.get @shape.pointwise.d0 : index
+  %d1 = config.get @shape.pointwise.d1 : index
+  %workgroup_size = config.get @tuning.pointwise.workgroup_size : index
   %total = index.mul %d0, %d1 : index
   %rounding = index.add %workgroup_size, %minus_one : index
   %rounded = index.add %total, %rounding : index
@@ -15,9 +15,9 @@ kernel.def export("clamp_f32") @clamp_f32() {
   kernel.launch.config workgroups(%workgroups, %unit, %unit) workgroup_size(%workgroup_size, %unit, %unit) : index
 } launch(%min: f32, %max: f32, %src0: buffer, %dst: buffer) {
   %base = index.constant 0 : offset
-  %d0 = config.get @hrx2.shape.pointwise.d0 : index
-  %d1 = config.get @hrx2.shape.pointwise.d1 : index
-  %workgroup_size = config.get @hrx2.tuning.pointwise.workgroup_size : index
+  %d0 = config.get @shape.pointwise.d0 : index
+  %d1 = config.get @shape.pointwise.d1 : index
+  %workgroup_size = config.get @tuning.pointwise.workgroup_size : index
   %d0_bounded = index.assume %d0 [range(%d0, 1, 65536)] : index
   %d1_bounded = index.assume %d1 [range(%d1, 1, 1048576)] : index
   %workgroup0 = kernel.workgroup.id<x> : index

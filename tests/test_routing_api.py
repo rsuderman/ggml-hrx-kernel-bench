@@ -115,11 +115,11 @@ def _write_v2_descriptor(routing_dir: Path) -> None:
                 "config": {
                     "bindings": [
                         {
-                            "key": "@hrx2.shape.pointwise.total_size",
+                            "key": "@shape.pointwise.total_size",
                             "source": "value.total_size",
                         },
                         {
-                            "key": "@hrx2.tuning.pointwise.workgroup_size",
+                            "key": "@tuning.pointwise.workgroup_size",
                             "value": "256",
                         },
                     ]
@@ -175,31 +175,31 @@ def _write_v2_descriptor(routing_dir: Path) -> None:
                 },
                 "config": {
                     "bindings": [
-                        {"key": "@hrx2.shape.add4d.ne0", "source": "tensor.dst.dimensions.d0.size"},
-                        {"key": "@hrx2.shape.add4d.ne1", "source": "tensor.dst.dimensions.d1.size"},
-                        {"key": "@hrx2.shape.add4d.ne2", "source": "tensor.dst.dimensions.d2.size"},
-                        {"key": "@hrx2.shape.add4d.ne3", "source": "tensor.dst.dimensions.d3.size"},
-                        {"key": "@hrx2.shape.add4d.src0_ne0", "source": "tensor.src0.dimensions.d0.size"},
-                        {"key": "@hrx2.shape.add4d.src0_ne1", "source": "tensor.src0.dimensions.d1.size"},
-                        {"key": "@hrx2.shape.add4d.src0_ne2", "source": "tensor.src0.dimensions.d2.size"},
-                        {"key": "@hrx2.shape.add4d.src0_ne3", "source": "tensor.src0.dimensions.d3.size"},
-                        {"key": "@hrx2.shape.add4d.src1_ne0", "source": "tensor.src1.dimensions.d0.size"},
-                        {"key": "@hrx2.shape.add4d.src1_ne1", "source": "tensor.src1.dimensions.d1.size"},
-                        {"key": "@hrx2.shape.add4d.src1_ne2", "source": "tensor.src1.dimensions.d2.size"},
-                        {"key": "@hrx2.shape.add4d.src1_ne3", "source": "tensor.src1.dimensions.d3.size"},
-                        {"key": "@hrx2.stride.add4d.src0_nb0", "source": "tensor.src0.dimensions.d0.stride"},
-                        {"key": "@hrx2.stride.add4d.src0_nb1", "source": "tensor.src0.dimensions.d1.stride"},
-                        {"key": "@hrx2.stride.add4d.src0_nb2", "source": "tensor.src0.dimensions.d2.stride"},
-                        {"key": "@hrx2.stride.add4d.src0_nb3", "source": "tensor.src0.dimensions.d3.stride"},
-                        {"key": "@hrx2.stride.add4d.src1_nb0", "source": "tensor.src1.dimensions.d0.stride"},
-                        {"key": "@hrx2.stride.add4d.src1_nb1", "source": "tensor.src1.dimensions.d1.stride"},
-                        {"key": "@hrx2.stride.add4d.src1_nb2", "source": "tensor.src1.dimensions.d2.stride"},
-                        {"key": "@hrx2.stride.add4d.src1_nb3", "source": "tensor.src1.dimensions.d3.stride"},
-                        {"key": "@hrx2.stride.add4d.dst_nb0", "source": "tensor.dst.dimensions.d0.stride"},
-                        {"key": "@hrx2.stride.add4d.dst_nb1", "source": "tensor.dst.dimensions.d1.stride"},
-                        {"key": "@hrx2.stride.add4d.dst_nb2", "source": "tensor.dst.dimensions.d2.stride"},
-                        {"key": "@hrx2.stride.add4d.dst_nb3", "source": "tensor.dst.dimensions.d3.stride"},
-                        {"key": "@hrx2.tuning.add4d.workgroup_size", "value": "256"},
+                        {"key": "@shape.add4d.ne0", "source": "tensor.dst.dimensions.d0.size"},
+                        {"key": "@shape.add4d.ne1", "source": "tensor.dst.dimensions.d1.size"},
+                        {"key": "@shape.add4d.ne2", "source": "tensor.dst.dimensions.d2.size"},
+                        {"key": "@shape.add4d.ne3", "source": "tensor.dst.dimensions.d3.size"},
+                        {"key": "@shape.add4d.src0_ne0", "source": "tensor.src0.dimensions.d0.size"},
+                        {"key": "@shape.add4d.src0_ne1", "source": "tensor.src0.dimensions.d1.size"},
+                        {"key": "@shape.add4d.src0_ne2", "source": "tensor.src0.dimensions.d2.size"},
+                        {"key": "@shape.add4d.src0_ne3", "source": "tensor.src0.dimensions.d3.size"},
+                        {"key": "@shape.add4d.src1_ne0", "source": "tensor.src1.dimensions.d0.size"},
+                        {"key": "@shape.add4d.src1_ne1", "source": "tensor.src1.dimensions.d1.size"},
+                        {"key": "@shape.add4d.src1_ne2", "source": "tensor.src1.dimensions.d2.size"},
+                        {"key": "@shape.add4d.src1_ne3", "source": "tensor.src1.dimensions.d3.size"},
+                        {"key": "@stride.add4d.src0_nb0", "source": "tensor.src0.dimensions.d0.stride"},
+                        {"key": "@stride.add4d.src0_nb1", "source": "tensor.src0.dimensions.d1.stride"},
+                        {"key": "@stride.add4d.src0_nb2", "source": "tensor.src0.dimensions.d2.stride"},
+                        {"key": "@stride.add4d.src0_nb3", "source": "tensor.src0.dimensions.d3.stride"},
+                        {"key": "@stride.add4d.src1_nb0", "source": "tensor.src1.dimensions.d0.stride"},
+                        {"key": "@stride.add4d.src1_nb1", "source": "tensor.src1.dimensions.d1.stride"},
+                        {"key": "@stride.add4d.src1_nb2", "source": "tensor.src1.dimensions.d2.stride"},
+                        {"key": "@stride.add4d.src1_nb3", "source": "tensor.src1.dimensions.d3.stride"},
+                        {"key": "@stride.add4d.dst_nb0", "source": "tensor.dst.dimensions.d0.stride"},
+                        {"key": "@stride.add4d.dst_nb1", "source": "tensor.dst.dimensions.d1.stride"},
+                        {"key": "@stride.add4d.dst_nb2", "source": "tensor.dst.dimensions.d2.stride"},
+                        {"key": "@stride.add4d.dst_nb3", "source": "tensor.dst.dimensions.d3.stride"},
+                        {"key": "@tuning.add4d.workgroup_size", "value": "256"},
                     ]
                 },
             },
@@ -614,7 +614,7 @@ def test_v2_rms_norm_dispatch_uses_flattened_trailing_rows() -> None:
         shape={"d0": 1025, "d1": 5, "d2": 4, "d3": 3},
     )
 
-    assert candidate.config["@hrx2.shape.rms_norm.nrows"] == "60"
+    assert candidate.config["@shape.rms_norm.nrows"] == "60"
     assert candidate.dispatch["workgroup_count"] == [60, 1, 1]
 
 
@@ -629,7 +629,7 @@ def test_v2_soft_max_dispatch_uses_flattened_trailing_rows(route_id: str) -> Non
         shape={"d0": 16, "d1": 2, "d2": 32, "d3": 1},
     )
 
-    assert candidate.config["@hrx2.shape.soft_max.nrows"] == "64"
+    assert candidate.config["@shape.soft_max.nrows"] == "64"
     assert candidate.dispatch["workgroup_count"] == [64, 1, 1]
 
 
@@ -679,14 +679,14 @@ def test_v2_default_cont_candidate_derives_rank_polymorphic_shape_bindings() -> 
 
     assert candidate.shape == {"d0": 1, "d1": 1}
     assert candidate.config == {
-        "@hrx2.shape.cont.d0": "1",
-        "@hrx2.shape.cont.d1": "1",
-        "@hrx2.shape.cont.ne1": "1",
-        "@hrx2.shape.cont.ne2": "1",
-        "@hrx2.stride.cont.src_nb1": "1",
-        "@hrx2.stride.cont.src_nb2": "1",
-        "@hrx2.stride.cont.src_nb3": "1",
-        "@hrx2.tuning.cont.workgroup_size": "256",
+        "@shape.cont.d0": "1",
+        "@shape.cont.d1": "1",
+        "@shape.cont.ne1": "1",
+        "@shape.cont.ne2": "1",
+        "@stride.cont.src_nb1": "1",
+        "@stride.cont.src_nb2": "1",
+        "@stride.cont.src_nb3": "1",
+        "@tuning.cont.workgroup_size": "256",
     }
 
 
@@ -1021,7 +1021,7 @@ def test_v2_catalog_rejects_binding_with_source_and_value(tmp_path: Path) -> Non
                 "config": {
                     "bindings": [
                         {
-                            "key": "@hrx2.shape.copy.n",
+                            "key": "@shape.copy.n",
                             "source": "value.total_size",
                             "value": "256",
                         }
@@ -1051,7 +1051,7 @@ def test_v2_binary_contiguous_large_dispatch_uses_2d_tiles() -> None:
 
     assert candidate.status == "planned"
     assert candidate.dispatch["workgroup_count"] == [32768, 2, 1]
-    assert candidate.config["@hrx2.shape.pointwise.total_size"] == "16777216"
+    assert candidate.config["@shape.pointwise.total_size"] == "16777216"
 
 
 def test_v2_binary_non_contiguous_large_dispatch_uses_2d_tiles() -> None:
@@ -1079,8 +1079,8 @@ def test_v2_binary_non_contiguous_large_dispatch_uses_2d_tiles() -> None:
 
     assert candidate.status == "planned"
     assert candidate.dispatch["workgroup_count"] == [32768, 2, 1]
-    assert candidate.config["@hrx2.shape.add4d.ne0"] == "256"
-    assert candidate.config["@hrx2.shape.add4d.src1_ne0"] == "1"
+    assert candidate.config["@shape.add4d.ne0"] == "256"
+    assert candidate.config["@shape.add4d.src1_ne0"] == "1"
 
 
 def test_v2_catalog_objects_are_immutable(tmp_path: Path) -> None:
@@ -1133,31 +1133,31 @@ def test_v2_generic_4d_candidate_binds_dimension_sizes_and_strides(tmp_path: Pat
     )
 
     assert generic.config == {
-        "@hrx2.shape.add4d.ne0": "1",
-        "@hrx2.shape.add4d.ne1": "1",
-        "@hrx2.shape.add4d.ne2": "1",
-        "@hrx2.shape.add4d.ne3": "1",
-        "@hrx2.shape.add4d.src0_ne0": "1",
-        "@hrx2.shape.add4d.src0_ne1": "1",
-        "@hrx2.shape.add4d.src0_ne2": "1",
-        "@hrx2.shape.add4d.src0_ne3": "1",
-        "@hrx2.shape.add4d.src1_ne0": "1",
-        "@hrx2.shape.add4d.src1_ne1": "1",
-        "@hrx2.shape.add4d.src1_ne2": "1",
-        "@hrx2.shape.add4d.src1_ne3": "1",
-        "@hrx2.stride.add4d.src0_nb0": "1",
-        "@hrx2.stride.add4d.src0_nb1": "1",
-        "@hrx2.stride.add4d.src0_nb2": "1",
-        "@hrx2.stride.add4d.src0_nb3": "1",
-        "@hrx2.stride.add4d.src1_nb0": "1",
-        "@hrx2.stride.add4d.src1_nb1": "1",
-        "@hrx2.stride.add4d.src1_nb2": "1",
-        "@hrx2.stride.add4d.src1_nb3": "1",
-        "@hrx2.stride.add4d.dst_nb0": "1",
-        "@hrx2.stride.add4d.dst_nb1": "1",
-        "@hrx2.stride.add4d.dst_nb2": "1",
-        "@hrx2.stride.add4d.dst_nb3": "1",
-        "@hrx2.tuning.add4d.workgroup_size": "256",
+        "@shape.add4d.ne0": "1",
+        "@shape.add4d.ne1": "1",
+        "@shape.add4d.ne2": "1",
+        "@shape.add4d.ne3": "1",
+        "@shape.add4d.src0_ne0": "1",
+        "@shape.add4d.src0_ne1": "1",
+        "@shape.add4d.src0_ne2": "1",
+        "@shape.add4d.src0_ne3": "1",
+        "@shape.add4d.src1_ne0": "1",
+        "@shape.add4d.src1_ne1": "1",
+        "@shape.add4d.src1_ne2": "1",
+        "@shape.add4d.src1_ne3": "1",
+        "@stride.add4d.src0_nb0": "1",
+        "@stride.add4d.src0_nb1": "1",
+        "@stride.add4d.src0_nb2": "1",
+        "@stride.add4d.src0_nb3": "1",
+        "@stride.add4d.src1_nb0": "1",
+        "@stride.add4d.src1_nb1": "1",
+        "@stride.add4d.src1_nb2": "1",
+        "@stride.add4d.src1_nb3": "1",
+        "@stride.add4d.dst_nb0": "1",
+        "@stride.add4d.dst_nb1": "1",
+        "@stride.add4d.dst_nb2": "1",
+        "@stride.add4d.dst_nb3": "1",
+        "@tuning.add4d.workgroup_size": "256",
     }
 
 def test_v2_router_executes_matching_case(tmp_path: Path, monkeypatch) -> None:
@@ -1179,8 +1179,8 @@ def test_v2_router_executes_matching_case(tmp_path: Path, monkeypatch) -> None:
         assert candidate.source_path == kernel_dir / "add" / "contiguous_1d.loom"
         assert candidate.root_symbol == "@hrx2_add_f32_contiguous_1d"
         assert candidate.config == {
-            "@hrx2.shape.pointwise.total_size": "1024",
-            "@hrx2.tuning.pointwise.workgroup_size": "256",
+            "@shape.pointwise.total_size": "1024",
+            "@tuning.pointwise.workgroup_size": "256",
         }
         return {
             "status": "ran",
