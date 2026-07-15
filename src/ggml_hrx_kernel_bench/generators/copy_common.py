@@ -61,6 +61,7 @@ SCALAR_DTYPES: tuple[ScalarDType, ...] = (
     ScalarDType(name="bf16", route_dtype="BF16", loom_type="bf16", domain="float", precision_rank=16),
     ScalarDType(name="f16", route_dtype="F16", loom_type="f16", domain="float", precision_rank=16),
     ScalarDType(name="f32", route_dtype="F32", loom_type="f32", domain="float", precision_rank=32),
+    ScalarDType(name="i32", route_dtype="I32", loom_type="i32", domain="int", precision_rank=32),
 )
 
 

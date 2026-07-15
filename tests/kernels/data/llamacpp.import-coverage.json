@@ -1,8 +1,8 @@
 {
   "schema": "ggml_hrx_kernel_bench.import_test_coverage.v1",
   "operation_count": 115,
-  "total_pass_case_count": 991,
-  "total_fail_case_count": 10206,
+  "total_pass_case_count": 1024,
+  "total_fail_case_count": 10173,
   "operations": [
     {
       "op": "ABS",
@@ -56,8 +56,8 @@
     },
     {
       "op": "CLAMP",
-      "pass_case_count": 3,
-      "fail_case_count": 3
+      "pass_case_count": 6,
+      "fail_case_count": 0
     },
     {
       "op": "CONCAT",
@@ -66,8 +66,8 @@
     },
     {
       "op": "CONT",
-      "pass_case_count": 8,
-      "fail_case_count": 28
+      "pass_case_count": 36,
+      "fail_case_count": 0
     },
     {
       "op": "CONV_2D",
@@ -106,8 +106,8 @@
     },
     {
       "op": "CPY",
-      "pass_case_count": 48,
-      "fail_case_count": 372
+      "pass_case_count": 50,
+      "fail_case_count": 370
     },
     {
       "op": "CROSS_ENTROPY_LOSS",

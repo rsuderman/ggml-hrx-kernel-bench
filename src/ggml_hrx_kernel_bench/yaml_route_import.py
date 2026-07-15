@@ -35,6 +35,10 @@ STATIC_SCALAR_ABI_BY_FAMILY: dict[str, tuple[dict[str, Any], ...]] = {
         {"role": "min", "dtype": "f32", "value": -0.45},
         {"role": "max", "dtype": "f32", "value": 0.55},
     ),
+    "clamp_f16": (
+        {"role": "min", "dtype": "f32", "value": -0.45},
+        {"role": "max", "dtype": "f32", "value": 0.55},
+    ),
     "soft_max_f32": (
         {"role": "scale", "dtype": "f32", "value": 0.75},
     ),

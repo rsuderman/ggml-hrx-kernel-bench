@@ -2,6 +2,7 @@
   "schema": "ggml_hrx_kernel_bench.routing_descriptors.v2",
   "routes": {
     "CLAMP": [
+      "clamp/clamp_f16.json",
       "clamp/clamp_f32.json"
     ],
     "CONT": [

@@ -758,11 +758,15 @@ def _copy_f32_f16(np: Any, candidate: Candidate, fixture_dir: Path, seed: int) -
         dst_dims = _copy_tensor_dims(candidate, "dst", common_dims)
         src0_strides = _copy_tensor_strides(candidate, "src0", src0_dims)
         dst_strides = _copy_tensor_strides(candidate, "dst", dst_dims)
-        src0_buffer_len = _buffer_length(src0_dims, src0_strides)
+        src0_buffer_len = max(
+            _buffer_length(src0_dims, src0_strides),
+            _buffer_length(common_dims, src0_strides),
+        )
         dst_buffer_len = _buffer_length(dst_dims, dst_strides)
         src = _copy_pattern(np, src_dtype, (src0_buffer_len,), seed=seed)
         dst_init = _copy_zeros(np, dst_dtype, (dst_buffer_len,))
-        src_indices = _pointwise_logical_indices(np, common_dims, src0_dims, src0_strides)
+        src_index_dims = common_dims if str(candidate.route_id).endswith("_storage_4d") else src0_dims
+        src_indices = _pointwise_logical_indices(np, common_dims, src_index_dims, src0_strides)
         dst_indices = _pointwise_logical_indices(np, common_dims, dst_dims, dst_strides)
         expected = dst_init.copy()
         expected[dst_indices] = _copy_cast(np, src[src_indices], dst_dtype)
@@ -1124,7 +1128,7 @@ def _copy_family_dtypes(family: str) -> tuple[str, str]:
     if len(parts) != 2:
         raise ValueError(f"unsupported COPY family {family}")
     src_dtype, dst_dtype = parts
-    supported = {"bf16", "f16", "f32"}
+    supported = {"bf16", "f16", "f32", "i32"}
     if src_dtype not in supported or dst_dtype not in supported:
         raise ValueError(f"unsupported COPY family {family}")
     return src_dtype, dst_dtype
@@ -1175,6 +1179,9 @@ def _copy_pattern(np: Any, dtype: str, shape: tuple[int, ...], *, seed: int) -> 
         return f16_pattern(np, shape, seed=seed)
     if dtype == "f32":
         return f32_pattern(np, shape, seed=seed)
+    if dtype == "i32":
+        seed_offset = np.int32(seed % 65521)
+        return ((np.arange(_product(shape), dtype=np.int32).reshape(shape) * np.int32(17) + seed_offset) % np.int32(65521)).astype(np.int32)
     raise ValueError(f"unsupported COPY dtype {dtype}")
 
 
@@ -1185,10 +1192,14 @@ def _copy_cast(np: Any, values: Any, dtype: str) -> Any:
         return values.astype(np.float16)
     if dtype == "f32":
         return values.astype(np.float32)
+    if dtype == "i32":
+        return values.astype(np.int32)
     raise ValueError(f"unsupported COPY dtype {dtype}")
 
 
 def _copy_zeros(np: Any, dtype: str, shape: tuple[int, ...]) -> Any:
+    if dtype == "i32":
+        return np.zeros(shape, dtype=np.int32)
     if dtype == "f16":
         return np.zeros(shape, dtype=np.float16)
     return np.zeros(shape, dtype=np.float32)
@@ -1201,11 +1212,17 @@ def _copy_storage(np: Any, values: Any, dtype: str) -> Any:
         return _f16_bits(np, values)
     if dtype == "f32":
         return values.astype(np.float32)
+    if dtype == "i32":
+        return values.astype(np.int32)
     raise ValueError(f"unsupported COPY dtype {dtype}")
 
 
 def _copy_tensor_type(dtype: str, elems: int) -> str:
-    return f"tensor<{elems}xi16>" if dtype in {"bf16", "f16"} else f"tensor<{elems}xf32>"
+    if dtype in {"bf16", "f16"}:
+        return f"tensor<{elems}xi16>"
+    if dtype == "i32":
+        return f"tensor<{elems}xi32>"
+    return f"tensor<{elems}xf32>"
 
 
 def _read_copy_tensor(
@@ -1215,6 +1232,8 @@ def _read_copy_tensor(
     dtype: str,
     elems: int,
 ) -> str:
+    if dtype == "i32":
+        return _read_i32(workbench_path, fixture_dir, name, elems)
     return _read_i16(workbench_path, fixture_dir, name, elems) if dtype in {"bf16", "f16"} else _read_f32(workbench_path, fixture_dir, name, elems)
 
 
@@ -1337,6 +1356,22 @@ def _clamp_arrays(np: Any, candidate: Candidate, seed: int) -> dict[str, Any]:
             "src0": src0.reshape(elems),
             "dst_init": f32_pattern(np, (elems,), seed=seed + 2, scale=0.25),
             "expected": np.clip(src0, lo, hi).astype(np.float32).reshape(elems),
+        },
+        "metadata": {"min": float(lo), "max": float(hi)},
+    }
+
+
+def _clamp_f16_arrays(np: Any, candidate: Candidate, seed: int) -> dict[str, Any]:
+    ncols, nrows, elems = _dims(candidate)
+    src0 = f16_pattern(np, (nrows, ncols), seed=seed)
+    lo = np.float32(-0.45)
+    hi = np.float32(0.55)
+    expected = np.clip(src0.astype(np.float32), lo, hi).astype(np.float16)
+    return {
+        "arrays": {
+            "src0": _f16_bits(np, src0.reshape(elems)),
+            "dst_init": _f16_bits(np, f16_pattern(np, (elems,), seed=seed + 2)),
+            "expected": _f16_bits(np, expected.reshape(elems)),
         },
         "metadata": {"min": float(lo), "max": float(hi)},
     }
@@ -2650,7 +2685,7 @@ def _write_copy_workbench(candidate: Candidate, linked_source: Path, workbench_p
     read_dst = _read_copy_tensor(workbench_path, fixture_dir, "dst_init", dst_dtype, dst_elems)
     read_expected = _read_copy_tensor(workbench_path, fixture_dir, "expected", dst_dtype, dst_elems)
     read_dst = read_dst.replace("%dst_init", "%dst")
-    if dst_dtype in {"bf16", "f16"}:
+    if dst_dtype in {"bf16", "f16", "i32"}:
         check = f"  check.expect.equal actual(%dst) expected(%expected) : {dst_tensor_type}"
     else:
         check = f"  check.expect.close actual(%dst) expected(%expected) atol(0.0) rtol(0.0) nan(same) : {dst_tensor_type}"
@@ -2734,6 +2769,17 @@ def _write_unary_workbench(candidate: Candidate, linked_source: Path, workbench_
 def _write_pointwise_workbench(candidate: Candidate, linked_source: Path, workbench_path: Path, fixture_dir: Path) -> tuple[str, dict[str, Any]]:
     src0_elems, src1_elems, dst_elems = _pointwise_buffer_lengths(candidate)
     case_name, bench_name = _case_names(candidate)
+    if candidate.family == "clamp_f16":
+        lines = [
+            "  %min = check.literal value(-0.45) : f32",
+            "  %max = check.literal value(0.55) : f32",
+            _read_i16(workbench_path, fixture_dir, "src0", src0_elems),
+            _read_i16(workbench_path, fixture_dir, "dst_init", dst_elems).replace("%dst_init", "%dst"),
+            _read_i16(workbench_path, fixture_dir, "expected", dst_elems),
+            f"  func.call {candidate.root_symbol}(%min, %max, %src0, %dst) : (f32, f32, tensor<{src0_elems}xi16>, tensor<{dst_elems}xi16>)",
+            f"  check.expect.equal actual(%dst) expected(%expected) : tensor<{dst_elems}xi16>",
+        ]
+        return _emit_case(linked_source, workbench_path, case_name, bench_name, "\n".join(lines))
     if candidate.family in {"add_f16", "mul_f16", "div_f16", "sub_f16"}:
         lines = [
             _read_i16(workbench_path, fixture_dir, "src0", src0_elems),
@@ -3266,6 +3312,7 @@ ORACLE_SPECS: tuple[OracleSpec, ...] = (
             "copy_f32_bf16",
             "copy_f32_f16",
             "copy_f32_f32",
+            "copy_i32_i32",
         ),
         generate=_copy_f32_f16,
         write_workbench=_write_copy_workbench,
@@ -3313,6 +3360,11 @@ ORACLE_SPECS: tuple[OracleSpec, ...] = (
     OracleSpec(
         family_ids=("clamp_f32",),
         generate=_logical_generate(LogicalOracleSpec(("clamp_f32",), "clamp_f32_numpy", {"atol": 1e-6, "rtol": 1e-6}, _clamp_arrays, exact_kernel_abi=True)),
+        write_workbench=_write_pointwise_workbench,
+    ),
+    OracleSpec(
+        family_ids=("clamp_f16",),
+        generate=_logical_generate(LogicalOracleSpec(("clamp_f16",), "clamp_f16_numpy", {"atol": 0.0, "rtol": 0.0}, _clamp_f16_arrays, exact_kernel_abi=True)),
         write_workbench=_write_pointwise_workbench,
     ),
     OracleSpec(
