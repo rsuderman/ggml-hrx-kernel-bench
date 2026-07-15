@@ -14,24 +14,14 @@ OPS_BY_KEY = (
     ("MUL", "mul"),
     ("SUB", "sub"),
 )
-PLAIN_VARIANTS = (
-    "generic_2d",
-    "contiguous_2d",
-    "rhs_row_broadcast_2d",
-    "contiguous_1d",
-    "generic_4d",
+KERNEL_VARIANTS = (
+    "contiguous",
+    "non_contiguous",
 )
-ROUTER_VARIANTS_BY_DTYPE = (
-    ("generic_2d", "f16"),
-    ("generic_2d", "f32"),
-    ("contiguous_2d", "f16"),
-    ("rhs_row_broadcast_2d", "f16"),
-    ("contiguous_1d", "f16"),
-    ("generic_4d", "f16"),
-    ("contiguous_2d", "f32"),
-    ("rhs_row_broadcast_2d", "f32"),
-    ("contiguous_1d", "f32"),
-    ("generic_4d", "f32"),
+ROUTE_VARIANTS = (
+    "contiguous",
+    "non_contiguous_2d",
+    "non_contiguous_4d",
 )
 
 SPECIAL_STATIC_ROUTES_BY_KEY = {
@@ -69,20 +59,25 @@ def _kernel_path(op: str, variant: str) -> str:
 
 
 def _symbol(op: str, dt: str, variant: str) -> str:
-    return f"{op}_{dt}" if variant == "generic_2d" else _route_id(op, dt, variant)
+    kernel_variant = _kernel_variant_for_route(variant)
+    return f"{op}_{dt}_{kernel_variant}"
 
 
 def _source_id(op: str, dt: str, variant: str) -> str:
-    if variant in {"generic_2d", "contiguous_2d", "rhs_row_broadcast_2d"}:
-        return f"{op}_pointwise_{dt}"
     return f"{op}_{dt}"
+
+
+def _kernel_variant_for_route(variant: str) -> str:
+    if variant.startswith("non_contiguous"):
+        return "non_contiguous"
+    return variant
 
 
 def render_kernel_artifacts() -> dict[Path, str]:
     out: dict[Path, str] = {}
     for op in BINARY_OPS:
         spec = BINARY_OPS[op]
-        for variant in PLAIN_VARIANTS:
+        for variant in KERNEL_VARIANTS:
             rendered = load_template(
                 "kernels", "v2", "binary", f"{variant}.loom.tmpl"
             ).substitute(
@@ -97,16 +92,17 @@ def render_kernel_artifacts() -> dict[Path, str]:
 def render_catalog_artifacts() -> dict[Path, str]:
     out: dict[Path, str] = {}
     for op in BINARY_OPS:
-        for variant in PLAIN_VARIANTS:
+        for variant in ROUTE_VARIANTS:
             template = load_template("catalog", "v2", "binary", f"{variant}.json.tmpl")
             for dt, DT in DTYPES:
                 symbol = _symbol(op, dt, variant)
+                kernel_variant = _kernel_variant_for_route(variant)
                 rendered = template.substitute(
                     op=op,
                     route_id=_route_id(op, dt, variant),
                     family=f"{op}_{dt}",
                     source_id=_source_id(op, dt, variant),
-                    kernel_path=_kernel_path(op, variant),
+                    kernel_path=_kernel_path(op, kernel_variant),
                     root_symbol=f"@{symbol}",
                     export_name=symbol,
                     dtype=DT,
@@ -120,7 +116,8 @@ def router_route_lists() -> dict[str, list[str]]:
     for op_key, op in OPS_BY_KEY:
         paths = [
             _route_relpath(op, dt, variant)
-            for variant, dt in ROUTER_VARIANTS_BY_DTYPE
+            for dt, _DT in DTYPES
+            for variant in ROUTE_VARIANTS
         ]
         paths.extend(SPECIAL_STATIC_ROUTES_BY_KEY.get(op_key, ()))
         lists[op_key] = paths

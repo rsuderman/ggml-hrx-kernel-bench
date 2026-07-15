@@ -38,7 +38,8 @@
     },
     {
       "name": "dst_dimensions",
-      "length": 4
+      "rank_min": 2,
+      "rank_max": 2
     },
     {
       "divides": [
@@ -72,11 +73,11 @@
       },
       {
         "key": "@hrx2.shape.${op}4d.ne2",
-        "source": "tensor.dst.dimensions.d2.size"
+        "value": "1"
       },
       {
         "key": "@hrx2.shape.${op}4d.ne3",
-        "source": "tensor.dst.dimensions.d3.size"
+        "value": "1"
       },
       {
         "key": "@hrx2.shape.${op}4d.src0_ne0",
@@ -88,11 +89,11 @@
       },
       {
         "key": "@hrx2.shape.${op}4d.src0_ne2",
-        "source": "tensor.src0.dimensions.d2.size"
+        "value": "1"
       },
       {
         "key": "@hrx2.shape.${op}4d.src0_ne3",
-        "source": "tensor.src0.dimensions.d3.size"
+        "value": "1"
       },
       {
         "key": "@hrx2.shape.${op}4d.src1_ne0",
@@ -104,11 +105,11 @@
       },
       {
         "key": "@hrx2.shape.${op}4d.src1_ne2",
-        "source": "tensor.src1.dimensions.d2.size"
+        "value": "1"
       },
       {
         "key": "@hrx2.shape.${op}4d.src1_ne3",
-        "source": "tensor.src1.dimensions.d3.size"
+        "value": "1"
       },
       {
         "key": "@hrx2.stride.${op}4d.src0_nb0",
@@ -120,11 +121,11 @@
       },
       {
         "key": "@hrx2.stride.${op}4d.src0_nb2",
-        "source": "tensor.src0.dimensions.d2.stride"
+        "value": "0"
       },
       {
         "key": "@hrx2.stride.${op}4d.src0_nb3",
-        "source": "tensor.src0.dimensions.d3.stride"
+        "value": "0"
       },
       {
         "key": "@hrx2.stride.${op}4d.src1_nb0",
@@ -136,11 +137,11 @@
       },
       {
         "key": "@hrx2.stride.${op}4d.src1_nb2",
-        "source": "tensor.src1.dimensions.d2.stride"
+        "value": "0"
       },
       {
         "key": "@hrx2.stride.${op}4d.src1_nb3",
-        "source": "tensor.src1.dimensions.d3.stride"
+        "value": "0"
       },
       {
         "key": "@hrx2.stride.${op}4d.dst_nb0",
@@ -152,11 +153,11 @@
       },
       {
         "key": "@hrx2.stride.${op}4d.dst_nb2",
-        "source": "tensor.dst.dimensions.d2.stride"
+        "value": "0"
       },
       {
         "key": "@hrx2.stride.${op}4d.dst_nb3",
-        "source": "tensor.dst.dimensions.d3.stride"
+        "value": "0"
       },
       {
         "key": "@hrx2.tuning.${op}4d.workgroup_size",

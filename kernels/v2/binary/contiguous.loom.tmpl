@@ -1,7 +1,7 @@
 config.decl @hrx2.shape.pointwise.total_size : %value: index where [range(%value, 1, 1073741824)]
 config.decl @hrx2.tuning.pointwise.workgroup_size : %value: index where [range(%value, 32, 1024), mul(%value, 32)]
 
-kernel.def export("${op}_f32_contiguous_1d") @${op}_f32_contiguous_1d() {
+kernel.def export("${op}_f32_contiguous") @${op}_f32_contiguous() {
   %unit = index.constant 1 : index
   %minus_one = index.constant -1 : index
   %total = config.get @hrx2.shape.pointwise.total_size : index
@@ -17,7 +17,7 @@ kernel.def export("${op}_f32_contiguous_1d") @${op}_f32_contiguous_1d() {
   %total_bounded = index.assume %total [range(%total, 1, 1073741824)] : index
   %workgroup0 = kernel.workgroup.id<x> : index
   %lane0 = kernel.workitem.id<x> : index
-  %workgroup = index.assume %workgroup0 [range(%workgroup0, 0, 4095)] : index
+  %workgroup = index.assume %workgroup0 [range(%workgroup0, 0, 4194303)] : index
   %lane = index.assume %lane0 [range(%lane0, 0, 1023)] : index
   %linear_base0 = index.mul %workgroup, %workgroup_size : index
   %linear_base = index.assume %linear_base0 [range(%linear_base0, 0, 1073741823)] : index
@@ -41,7 +41,7 @@ kernel.def export("${op}_f32_contiguous_1d") @${op}_f32_contiguous_1d() {
   kernel.return
 }
 
-kernel.def export("${op}_f16_contiguous_1d") @${op}_f16_contiguous_1d() {
+kernel.def export("${op}_f16_contiguous") @${op}_f16_contiguous() {
   %unit = index.constant 1 : index
   %minus_one = index.constant -1 : index
   %total = config.get @hrx2.shape.pointwise.total_size : index
@@ -57,7 +57,7 @@ kernel.def export("${op}_f16_contiguous_1d") @${op}_f16_contiguous_1d() {
   %total_bounded = index.assume %total [range(%total, 1, 1073741824)] : index
   %workgroup0 = kernel.workgroup.id<x> : index
   %lane0 = kernel.workitem.id<x> : index
-  %workgroup = index.assume %workgroup0 [range(%workgroup0, 0, 4095)] : index
+  %workgroup = index.assume %workgroup0 [range(%workgroup0, 0, 4194303)] : index
   %lane = index.assume %lane0 [range(%lane0, 0, 1023)] : index
   %linear_base0 = index.mul %workgroup, %workgroup_size : index
   %linear_base = index.assume %linear_base0 [range(%linear_base0, 0, 1073741823)] : index

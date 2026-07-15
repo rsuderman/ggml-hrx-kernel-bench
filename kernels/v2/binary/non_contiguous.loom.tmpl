@@ -24,7 +24,7 @@ config.decl @hrx2.stride.${op}4d.dst_nb2 : %value: index where [range(%value, 0,
 config.decl @hrx2.stride.${op}4d.dst_nb3 : %value: index where [range(%value, 0, 1073741824)]
 config.decl @hrx2.tuning.${op}4d.workgroup_size : %value: index where [range(%value, 32, 1024), mul(%value, 32)]
 
-kernel.def export("${op}_f32_generic_4d") @${op}_f32_generic_4d() {
+kernel.def export("${op}_f32_non_contiguous") @${op}_f32_non_contiguous() {
   %unit = index.constant 1 : index
   %minus_one = index.constant -1 : index
   %ne0 = config.get @hrx2.shape.${op}4d.ne0 : index
@@ -150,7 +150,7 @@ kernel.def export("${op}_f32_generic_4d") @${op}_f32_generic_4d() {
   kernel.return
 }
 
-kernel.def export("${op}_f16_generic_4d") @${op}_f16_generic_4d() {
+kernel.def export("${op}_f16_non_contiguous") @${op}_f16_non_contiguous() {
   %unit = index.constant 1 : index
   %minus_one = index.constant -1 : index
   %ne0 = config.get @hrx2.shape.${op}4d.ne0 : index

@@ -28,24 +28,22 @@
     {
       "name": "contiguous_strides",
       "contiguous_strides": "dst_dimensions"
+    },
+    {
+      "name": "total_size",
+      "product": "dst_dimensions"
     }
   ],
   "constraints": [
     {
-      "name": "dst_dimensions",
-      "length": 2
-    },
-    {
-      "name": "dst_dimensions",
-      "index": 0,
+      "name": "total_size",
       "min": 1,
-      "max": 65536
+      "max": 16776960
     },
     {
       "name": "dst_dimensions",
-      "index": 1,
-      "min": 64,
-      "max": 1048576
+      "rank_min": 1,
+      "rank_max": 4
     },
     {
       "equals": [
@@ -68,19 +66,13 @@
       256,
       1,
       1
-    ],
-    "rows_per_workgroup": 1,
-    "cols_per_workgroup": 256
+    ]
   },
   "config": {
     "bindings": [
       {
-        "key": "@hrx2.shape.pointwise.d0",
-        "source": "shape.d0"
-      },
-      {
-        "key": "@hrx2.shape.pointwise.d1",
-        "source": "shape.d1"
+        "key": "@hrx2.shape.pointwise.total_size",
+        "source": "value.total_size"
       },
       {
         "key": "@hrx2.tuning.pointwise.workgroup_size",
