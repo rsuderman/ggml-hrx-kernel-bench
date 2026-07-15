@@ -65,7 +65,7 @@ def test_generate_loom_descriptor_tests_cmake_registers_build_prepare_without_pr
             "--repo-root",
             str(ROOT),
             "--build-prepare-target",
-            "kernel-descriptor-prepare-llama-cpp-tests-v2-generated",
+            "kernel-prepare-llama-cpp-tests-v2-generated",
             "--import-target",
             "kernel-llama-cpp-tests-v2",
             "--all-ops",
@@ -74,16 +74,16 @@ def test_generate_loom_descriptor_tests_cmake_registers_build_prepare_without_pr
 
     assert module.main() == 0
     generated = output_path.read_text(encoding="utf-8")
-    assert "kernel-descriptor-generate-llama-cpp-tests-v2-ADD-generated" in generated
-    assert "kernel-descriptor-execute-llama-cpp-tests-v2-ADD-generated" not in generated
+    assert "kernel-generate-llama-cpp-tests-v2-ADD" in generated
+    assert "kernel-execute-llama-cpp-tests-v2-ADD" not in generated
     assert "--execute" not in generated
-    assert "FIXTURES_SETUP descriptor-llama-cpp-tests-v2-ADD" in generated
-    assert "  NAME kernel-descriptor-prepare-llama-cpp-tests-v2-ADD-generated" not in generated
-    assert "FIXTURES_REQUIRED descriptor-llama-cpp-tests-v2-ADD" not in generated
+    assert "FIXTURES_SETUP kernel-llama-cpp-tests-v2-ADD" in generated
+    assert "  NAME kernel-prepare-llama-cpp-tests-v2-ADD-generated" not in generated
+    assert "FIXTURES_REQUIRED kernel-llama-cpp-tests-v2-ADD" not in generated
     assert "$<TARGET_FILE:ggml-hrx-run-loom-simple>" in generated
-    assert "add_custom_target(kernel-descriptor-prepare-llama-cpp-tests-v2-generated ALL" in generated
-    assert "add_dependencies(kernel-descriptor-prepare-llama-cpp-tests-v2-generated kernel-llama-cpp-tests-v2)" in generated
-    assert "add_dependencies(kernel-descriptor-prepare-llama-cpp-tests-v2-generated ggml-hrx-run-loom-simple)" in generated
+    assert "add_custom_target(kernel-prepare-llama-cpp-tests-v2-generated ALL" in generated
+    assert "add_dependencies(kernel-prepare-llama-cpp-tests-v2-generated kernel-llama-cpp-tests-v2)" in generated
+    assert "add_dependencies(kernel-prepare-llama-cpp-tests-v2-generated ggml-hrx-run-loom-simple)" in generated
     assert "--quiet" in generated
     assert "ENVIRONMENT_MODIFICATION" not in generated
 
@@ -166,7 +166,7 @@ def test_generate_loom_descriptor_tests_cmake_registers_hsa_execution_when_enabl
 
     assert module.main() == 0
     generated = output_path.read_text(encoding="utf-8")
-    assert "kernel-descriptor-execute-llama-cpp-tests-v2-ADD-generated" in generated
+    assert "kernel-execute-llama-cpp-tests-v2-ADD" in generated
     assert "--execute" in generated
     assert "--progress" in generated
     assert "--quiet" in generated

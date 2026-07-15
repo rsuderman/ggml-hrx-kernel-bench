@@ -151,14 +151,14 @@ def main() -> int:
         if op_name.upper() in excluded_ops:
             continue
         op_safe_name = _safe_name(op_name)
-        fixture_name = f'descriptor-{args.name}-{op_safe_name}'
+        fixture_name = f'kernel-{args.name}-{op_safe_name}'
         manifest_path = generated_import_dir / 'ops' / op_safe_name / 'generated-kernel-tests.json'
         op_descriptor_output_dir = descriptor_output_dir / op_safe_name
         descriptor_manifest_path = op_descriptor_output_dir / 'loom-execution-descriptors.json'
         op_prepare_output_dir = prepare_output_dir / op_safe_name
         prepare_run_manifest_path = op_prepare_output_dir / 'loom-execution-runs.json'
 
-        generate_name = f'kernel-descriptor-generate-{args.name}-{op_safe_name}-generated'
+        generate_name = f'kernel-generate-{args.name}-{op_safe_name}'
         generate_command = [
             _cmake_quote(args.python_executable),
             _cmake_quote(str(Path(args.descriptor_generator_script).resolve())),
@@ -216,7 +216,7 @@ def main() -> int:
             build_prepare_outputs.append(prepare_run_manifest_path)
 
         if args.execute_hsa:
-            execute_name = f'kernel-descriptor-execute-{args.name}-{op_safe_name}-generated'
+            execute_name = f'kernel-execute-{args.name}-{op_safe_name}'
             op_execute_output_dir = (execute_output_dir or prepare_output_dir / 'execute') / op_safe_name
             execute_command = [
                 _cmake_quote(args.python_executable),

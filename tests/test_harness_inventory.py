@@ -52,9 +52,9 @@ def test_build_harness_inventory_reports_descriptor_and_legacy_state(tmp_path: P
     descriptor_cmake.write_text(
         "\n".join(
             [
-                "add_test(NAME kernel-descriptor-generate-demo-EXP-generated)",
-                "add_test(NAME kernel-descriptor-execute-demo-EXP-generated)",
-                "add_test(NAME kernel-descriptor-generate-demo-ADD-generated)",
+                "add_test(NAME kernel-generate-demo-EXP)",
+                "add_test(NAME kernel-execute-demo-EXP)",
+                "add_test(NAME kernel-generate-demo-ADD)",
             ]
         ),
         encoding="utf-8",

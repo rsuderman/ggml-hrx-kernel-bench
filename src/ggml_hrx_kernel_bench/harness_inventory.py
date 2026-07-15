@@ -100,11 +100,11 @@ def build_harness_inventory(
         counts = _descriptor_counts(descriptor_manifest_path)
         generate_registered = _contains_test(
             descriptor_cmake,
-            f"kernel-descriptor-generate-{name}-{op_safe_name}-generated",
+            f"kernel-generate-{name}-{op_safe_name}",
         )
         execute_registered = _contains_test(
             descriptor_cmake,
-            f"kernel-descriptor-execute-{name}-{op_safe_name}-generated",
+            f"kernel-execute-{name}-{op_safe_name}",
         )
         legacy_registered = _contains_test(
             legacy_cmake,

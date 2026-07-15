@@ -23,7 +23,7 @@ else()
 endif()
 
 add_yaml_route_import_descriptor_tests(
-  NAME llama-cpp-yaml-route-import-v2
+  NAME llama-cpp-v2
   GENERATED_IMPORT_DIR ${GGML_HRX_LLAMA_CPP_YAML_ROUTE_IMPORT_DIR_V2}
   GROUPED_YAML ${GGML_HRX_GROUPED_YAML}
   ROUTING_DIR ${GGML_HRX_ROUTING_DIR_V2}
