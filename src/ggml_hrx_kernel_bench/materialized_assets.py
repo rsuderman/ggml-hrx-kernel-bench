@@ -16,6 +16,12 @@ from .generators.cont_copy import (
     render_catalog_artifacts as cont_copy_render_catalog_artifacts,
     router_route_list as cont_copy_router_route_list,
 )
+from .generators.binary import (
+    generator_input_paths as binary_generator_input_paths,
+    render_catalog_artifacts as binary_render_catalog_artifacts,
+    render_kernel_artifacts as binary_render_kernel_artifacts,
+    router_route_lists as binary_router_route_lists,
+)
 from .generators.unary import (
     generator_input_paths as unary_generator_input_paths,
     render_catalog_artifacts as unary_render_catalog_artifacts,
@@ -119,14 +125,23 @@ def _copied_catalog_paths() -> tuple[Path, ...]:
 def _generated_kernel_paths() -> tuple[Path, ...]:
     return tuple(
         Path("kernels") / "v2" / relative_path
-        for relative_path in (*render_kernel_artifacts(), *unary_render_kernel_artifacts())
+        for relative_path in (
+            *render_kernel_artifacts(),
+            *binary_render_kernel_artifacts(),
+            *unary_render_kernel_artifacts(),
+        )
     )
 
 
 def _generated_catalog_paths() -> tuple[Path, ...]:
     return tuple(
         Path("catalog") / "v2" / relative_path
-        for relative_path in (*render_catalog_artifacts(), *cont_copy_render_catalog_artifacts(), *unary_render_catalog_artifacts())
+        for relative_path in (
+            *render_catalog_artifacts(),
+            *cont_copy_render_catalog_artifacts(),
+            *binary_render_catalog_artifacts(),
+            *unary_render_catalog_artifacts(),
+        )
     )
 
 
@@ -148,6 +163,11 @@ def _validate_materialized_v2_router(output_root: Path) -> None:
         raise FileNotFoundError(
             f"materialized v2 router is missing generated CONT copy routes at {router_path}"
         )
+    for op_key, route_paths in binary_router_route_lists().items():
+        if routes.get(op_key) != route_paths:
+            raise FileNotFoundError(
+                f"materialized v2 router is missing generated {op_key} routes at {router_path}"
+            )
     for op_key, route_paths in unary_router_route_lists().items():
         if routes.get(op_key) != route_paths:
             raise FileNotFoundError(
@@ -182,6 +202,7 @@ def _materialization_inputs() -> list[Path]:
     inputs.append(Path(__file__))
     inputs.extend(generator_input_paths())
     inputs.extend(cont_copy_generator_input_paths())
+    inputs.extend(binary_generator_input_paths())
     inputs.extend(unary_generator_input_paths())
     return inputs
 
@@ -264,6 +285,16 @@ def materialize_asset_root(output_root: Path, *, force: bool = False) -> Path:
         destination_path.parent.mkdir(parents=True, exist_ok=True)
         destination_path.write_text(contents, encoding="utf-8")
 
+    for relative_path, contents in binary_render_kernel_artifacts().items():
+        destination_path = destination_root / "kernels" / "v2" / relative_path
+        destination_path.parent.mkdir(parents=True, exist_ok=True)
+        destination_path.write_text(contents, encoding="utf-8")
+
+    for relative_path, contents in binary_render_catalog_artifacts().items():
+        destination_path = destination_root / "catalog" / "v2" / relative_path
+        destination_path.parent.mkdir(parents=True, exist_ok=True)
+        destination_path.write_text(contents, encoding="utf-8")
+
     for relative_path, contents in unary_render_kernel_artifacts().items():
         destination_path = destination_root / "kernels" / "v2" / relative_path
         destination_path.parent.mkdir(parents=True, exist_ok=True)
@@ -287,6 +318,8 @@ def _write_materialized_v2_router(destination_root: Path) -> None:
         raise RuntimeError(f"invalid v2 router payload at {router_path}")
     routes["CPY"] = list(generated_catalog_route_paths())
     routes["CONT"] = cont_copy_router_route_list()
+    for op_key, route_paths in binary_router_route_lists().items():
+        routes[op_key] = route_paths
     for op_key, route_paths in unary_router_route_lists().items():
         routes[op_key] = route_paths
     router_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")

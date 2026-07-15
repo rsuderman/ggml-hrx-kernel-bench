@@ -1,35 +1,30 @@
 {
-  "id": "mul_f16_rhs_row_broadcast_2d",
-  "family": "mul_f16",
+  "id": "${route_id}",
+  "family": "${family}",
   "kernel": {
-    "source_id": "mul_pointwise_f16",
-    "path": "mul/rhs_row_broadcast_2d.loom",
-    "root_symbol": "@mul_f16_rhs_row_broadcast_2d",
-    "export_name": "mul_f16_rhs_row_broadcast_2d"
+    "source_id": "${source_id}",
+    "path": "${kernel_path}",
+    "root_symbol": "${root_symbol}",
+    "export_name": "${export_name}"
   },
   "tensors": {
     "src0": {
-      "dtype": "F16",
+      "dtype": "${dtype}",
       "dimensions": "src0_dimensions",
       "strides": "src0_strides"
     },
     "src1": {
-      "dtype": "F16",
+      "dtype": "${dtype}",
       "dimensions": "src1_dimensions",
       "strides": "src1_strides"
     },
     "dst": {
-      "dtype": "F16",
+      "dtype": "${dtype}",
       "dimensions": "dst_dimensions",
       "strides": "dst_strides"
     }
   },
-  "values": [
-    {
-      "name": "contiguous_strides",
-      "contiguous_strides": "dst_dimensions"
-    }
-  ],
+  "values": [],
   "constraints": [
     {
       "name": "dst_dimensions",
@@ -44,7 +39,7 @@
     {
       "name": "dst_dimensions",
       "index": 1,
-      "min": 64,
+      "min": 1,
       "max": 1048576
     },
     {
@@ -54,29 +49,20 @@
       ]
     },
     {
-      "equals": [
-        "contiguous_strides",
-        "src0_strides",
-        "dst_strides"
-      ]
+      "name": "src1_dimensions",
+      "length": 2
     },
     {
-      "name": "src1_dimensions",
-      "index": 1,
-      "min": 1,
-      "max": 1
+      "divides": [
+        "src1_dimensions",
+        "dst_dimensions"
+      ]
     },
     {
       "name": "src1_strides",
       "index": 0,
       "min": 1,
       "max": 1
-    },
-    {
-      "name": "src1_strides",
-      "index": 1,
-      "min": 0,
-      "max": 0
     }
   ],
   "launch": {
@@ -86,7 +72,7 @@
       1
     ],
     "rows_per_workgroup": 1,
-    "cols_per_workgroup": 256
+    "cols_per_workgroup": 1
   },
   "config": {
     "bindings": [
@@ -97,6 +83,18 @@
       {
         "key": "@hrx2.shape.pointwise.d1",
         "source": "shape.d1"
+      },
+      {
+        "key": "@hrx2.shape.pointwise.src0_d1_stride",
+        "source": "shape.src0_d1_stride"
+      },
+      {
+        "key": "@hrx2.shape.pointwise.src1_d1_stride",
+        "source": "shape.src1_d1_stride"
+      },
+      {
+        "key": "@hrx2.shape.pointwise.src1_d0",
+        "source": "shape.src1_d0"
       },
       {
         "key": "@hrx2.tuning.pointwise.workgroup_size",

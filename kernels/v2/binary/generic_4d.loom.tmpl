@@ -1,37 +1,37 @@
-config.decl @hrx2.shape.add4d.ne0 : %value: index where [range(%value, 1, 1073741824)]
-config.decl @hrx2.shape.add4d.ne1 : %value: index where [range(%value, 1, 1073741824)]
-config.decl @hrx2.shape.add4d.ne2 : %value: index where [range(%value, 1, 1073741824)]
-config.decl @hrx2.shape.add4d.ne3 : %value: index where [range(%value, 1, 1073741824)]
-config.decl @hrx2.shape.add4d.src0_ne0 : %value: index where [range(%value, 1, 1073741824)]
-config.decl @hrx2.shape.add4d.src0_ne1 : %value: index where [range(%value, 1, 1073741824)]
-config.decl @hrx2.shape.add4d.src0_ne2 : %value: index where [range(%value, 1, 1073741824)]
-config.decl @hrx2.shape.add4d.src0_ne3 : %value: index where [range(%value, 1, 1073741824)]
-config.decl @hrx2.shape.add4d.src1_ne0 : %value: index where [range(%value, 1, 1073741824)]
-config.decl @hrx2.shape.add4d.src1_ne1 : %value: index where [range(%value, 1, 1073741824)]
-config.decl @hrx2.shape.add4d.src1_ne2 : %value: index where [range(%value, 1, 1073741824)]
-config.decl @hrx2.shape.add4d.src1_ne3 : %value: index where [range(%value, 1, 1073741824)]
-config.decl @hrx2.stride.add4d.src0_nb0 : %value: index where [range(%value, 0, 1073741824)]
-config.decl @hrx2.stride.add4d.src0_nb1 : %value: index where [range(%value, 0, 1073741824)]
-config.decl @hrx2.stride.add4d.src0_nb2 : %value: index where [range(%value, 0, 1073741824)]
-config.decl @hrx2.stride.add4d.src0_nb3 : %value: index where [range(%value, 0, 1073741824)]
-config.decl @hrx2.stride.add4d.src1_nb0 : %value: index where [range(%value, 0, 1073741824)]
-config.decl @hrx2.stride.add4d.src1_nb1 : %value: index where [range(%value, 0, 1073741824)]
-config.decl @hrx2.stride.add4d.src1_nb2 : %value: index where [range(%value, 0, 1073741824)]
-config.decl @hrx2.stride.add4d.src1_nb3 : %value: index where [range(%value, 0, 1073741824)]
-config.decl @hrx2.stride.add4d.dst_nb0 : %value: index where [range(%value, 0, 1073741824)]
-config.decl @hrx2.stride.add4d.dst_nb1 : %value: index where [range(%value, 0, 1073741824)]
-config.decl @hrx2.stride.add4d.dst_nb2 : %value: index where [range(%value, 0, 1073741824)]
-config.decl @hrx2.stride.add4d.dst_nb3 : %value: index where [range(%value, 0, 1073741824)]
-config.decl @hrx2.tuning.add4d.workgroup_size : %value: index where [range(%value, 32, 1024), mul(%value, 32)]
+config.decl @hrx2.shape.${op}4d.ne0 : %value: index where [range(%value, 1, 1073741824)]
+config.decl @hrx2.shape.${op}4d.ne1 : %value: index where [range(%value, 1, 1073741824)]
+config.decl @hrx2.shape.${op}4d.ne2 : %value: index where [range(%value, 1, 1073741824)]
+config.decl @hrx2.shape.${op}4d.ne3 : %value: index where [range(%value, 1, 1073741824)]
+config.decl @hrx2.shape.${op}4d.src0_ne0 : %value: index where [range(%value, 1, 1073741824)]
+config.decl @hrx2.shape.${op}4d.src0_ne1 : %value: index where [range(%value, 1, 1073741824)]
+config.decl @hrx2.shape.${op}4d.src0_ne2 : %value: index where [range(%value, 1, 1073741824)]
+config.decl @hrx2.shape.${op}4d.src0_ne3 : %value: index where [range(%value, 1, 1073741824)]
+config.decl @hrx2.shape.${op}4d.src1_ne0 : %value: index where [range(%value, 1, 1073741824)]
+config.decl @hrx2.shape.${op}4d.src1_ne1 : %value: index where [range(%value, 1, 1073741824)]
+config.decl @hrx2.shape.${op}4d.src1_ne2 : %value: index where [range(%value, 1, 1073741824)]
+config.decl @hrx2.shape.${op}4d.src1_ne3 : %value: index where [range(%value, 1, 1073741824)]
+config.decl @hrx2.stride.${op}4d.src0_nb0 : %value: index where [range(%value, 0, 1073741824)]
+config.decl @hrx2.stride.${op}4d.src0_nb1 : %value: index where [range(%value, 0, 1073741824)]
+config.decl @hrx2.stride.${op}4d.src0_nb2 : %value: index where [range(%value, 0, 1073741824)]
+config.decl @hrx2.stride.${op}4d.src0_nb3 : %value: index where [range(%value, 0, 1073741824)]
+config.decl @hrx2.stride.${op}4d.src1_nb0 : %value: index where [range(%value, 0, 1073741824)]
+config.decl @hrx2.stride.${op}4d.src1_nb1 : %value: index where [range(%value, 0, 1073741824)]
+config.decl @hrx2.stride.${op}4d.src1_nb2 : %value: index where [range(%value, 0, 1073741824)]
+config.decl @hrx2.stride.${op}4d.src1_nb3 : %value: index where [range(%value, 0, 1073741824)]
+config.decl @hrx2.stride.${op}4d.dst_nb0 : %value: index where [range(%value, 0, 1073741824)]
+config.decl @hrx2.stride.${op}4d.dst_nb1 : %value: index where [range(%value, 0, 1073741824)]
+config.decl @hrx2.stride.${op}4d.dst_nb2 : %value: index where [range(%value, 0, 1073741824)]
+config.decl @hrx2.stride.${op}4d.dst_nb3 : %value: index where [range(%value, 0, 1073741824)]
+config.decl @hrx2.tuning.${op}4d.workgroup_size : %value: index where [range(%value, 32, 1024), mul(%value, 32)]
 
-kernel.def export("add_f32_generic_4d") @add_f32_generic_4d() {
+kernel.def export("${op}_f32_generic_4d") @${op}_f32_generic_4d() {
   %unit = index.constant 1 : index
   %minus_one = index.constant -1 : index
-  %ne0 = config.get @hrx2.shape.add4d.ne0 : index
-  %ne1 = config.get @hrx2.shape.add4d.ne1 : index
-  %ne2 = config.get @hrx2.shape.add4d.ne2 : index
-  %ne3 = config.get @hrx2.shape.add4d.ne3 : index
-  %workgroup_size = config.get @hrx2.tuning.add4d.workgroup_size : index
+  %ne0 = config.get @hrx2.shape.${op}4d.ne0 : index
+  %ne1 = config.get @hrx2.shape.${op}4d.ne1 : index
+  %ne2 = config.get @hrx2.shape.${op}4d.ne2 : index
+  %ne3 = config.get @hrx2.shape.${op}4d.ne3 : index
+  %workgroup_size = config.get @hrx2.tuning.${op}4d.workgroup_size : index
   %ne01 = index.mul %ne0, %ne1 : index
   %ne012 = index.mul %ne01, %ne2 : index
   %total = index.mul %ne012, %ne3 : index
@@ -41,31 +41,31 @@ kernel.def export("add_f32_generic_4d") @add_f32_generic_4d() {
   kernel.launch.config workgroups(%workgroups, %unit, %unit) workgroup_size(%workgroup_size, %unit, %unit) : index
 } launch(%src0: buffer, %src1: buffer, %dst: buffer) {
   %base = index.constant 0 : offset
-  %ne0 = config.get @hrx2.shape.add4d.ne0 : index
-  %ne1 = config.get @hrx2.shape.add4d.ne1 : index
-  %ne2 = config.get @hrx2.shape.add4d.ne2 : index
-  %ne3 = config.get @hrx2.shape.add4d.ne3 : index
-  %src0_ne0 = config.get @hrx2.shape.add4d.src0_ne0 : index
-  %src0_ne1 = config.get @hrx2.shape.add4d.src0_ne1 : index
-  %src0_ne2 = config.get @hrx2.shape.add4d.src0_ne2 : index
-  %src0_ne3 = config.get @hrx2.shape.add4d.src0_ne3 : index
-  %src1_ne0 = config.get @hrx2.shape.add4d.src1_ne0 : index
-  %src1_ne1 = config.get @hrx2.shape.add4d.src1_ne1 : index
-  %src1_ne2 = config.get @hrx2.shape.add4d.src1_ne2 : index
-  %src1_ne3 = config.get @hrx2.shape.add4d.src1_ne3 : index
-  %src0_nb0 = config.get @hrx2.stride.add4d.src0_nb0 : index
-  %src0_nb1 = config.get @hrx2.stride.add4d.src0_nb1 : index
-  %src0_nb2 = config.get @hrx2.stride.add4d.src0_nb2 : index
-  %src0_nb3 = config.get @hrx2.stride.add4d.src0_nb3 : index
-  %src1_nb0 = config.get @hrx2.stride.add4d.src1_nb0 : index
-  %src1_nb1 = config.get @hrx2.stride.add4d.src1_nb1 : index
-  %src1_nb2 = config.get @hrx2.stride.add4d.src1_nb2 : index
-  %src1_nb3 = config.get @hrx2.stride.add4d.src1_nb3 : index
-  %dst_nb0 = config.get @hrx2.stride.add4d.dst_nb0 : index
-  %dst_nb1 = config.get @hrx2.stride.add4d.dst_nb1 : index
-  %dst_nb2 = config.get @hrx2.stride.add4d.dst_nb2 : index
-  %dst_nb3 = config.get @hrx2.stride.add4d.dst_nb3 : index
-  %workgroup_size = config.get @hrx2.tuning.add4d.workgroup_size : index
+  %ne0 = config.get @hrx2.shape.${op}4d.ne0 : index
+  %ne1 = config.get @hrx2.shape.${op}4d.ne1 : index
+  %ne2 = config.get @hrx2.shape.${op}4d.ne2 : index
+  %ne3 = config.get @hrx2.shape.${op}4d.ne3 : index
+  %src0_ne0 = config.get @hrx2.shape.${op}4d.src0_ne0 : index
+  %src0_ne1 = config.get @hrx2.shape.${op}4d.src0_ne1 : index
+  %src0_ne2 = config.get @hrx2.shape.${op}4d.src0_ne2 : index
+  %src0_ne3 = config.get @hrx2.shape.${op}4d.src0_ne3 : index
+  %src1_ne0 = config.get @hrx2.shape.${op}4d.src1_ne0 : index
+  %src1_ne1 = config.get @hrx2.shape.${op}4d.src1_ne1 : index
+  %src1_ne2 = config.get @hrx2.shape.${op}4d.src1_ne2 : index
+  %src1_ne3 = config.get @hrx2.shape.${op}4d.src1_ne3 : index
+  %src0_nb0 = config.get @hrx2.stride.${op}4d.src0_nb0 : index
+  %src0_nb1 = config.get @hrx2.stride.${op}4d.src0_nb1 : index
+  %src0_nb2 = config.get @hrx2.stride.${op}4d.src0_nb2 : index
+  %src0_nb3 = config.get @hrx2.stride.${op}4d.src0_nb3 : index
+  %src1_nb0 = config.get @hrx2.stride.${op}4d.src1_nb0 : index
+  %src1_nb1 = config.get @hrx2.stride.${op}4d.src1_nb1 : index
+  %src1_nb2 = config.get @hrx2.stride.${op}4d.src1_nb2 : index
+  %src1_nb3 = config.get @hrx2.stride.${op}4d.src1_nb3 : index
+  %dst_nb0 = config.get @hrx2.stride.${op}4d.dst_nb0 : index
+  %dst_nb1 = config.get @hrx2.stride.${op}4d.dst_nb1 : index
+  %dst_nb2 = config.get @hrx2.stride.${op}4d.dst_nb2 : index
+  %dst_nb3 = config.get @hrx2.stride.${op}4d.dst_nb3 : index
+  %workgroup_size = config.get @hrx2.tuning.${op}4d.workgroup_size : index
   %ne0_bounded = index.assume %ne0 [range(%ne0, 1, 1073741824)] : index
   %ne1_bounded = index.assume %ne1 [range(%ne1, 1, 1073741824)] : index
   %ne2_bounded = index.assume %ne2 [range(%ne2, 1, 1073741824)] : index
@@ -144,20 +144,20 @@ kernel.def export("add_f32_generic_4d") @add_f32_generic_4d() {
 
     %a = view.load %src0_view[%src0_idx] : view<1073741824xf32, #dense> -> f32
     %b = view.load %src1_view[%src1_idx] : view<1073741824xf32, #dense> -> f32
-    %result = scalar.addf<nnan|ninf|nsz> %a, %b : f32
+    %result = ${f32_compute_expr}
     view.store %result, %dst_view[%dst_idx] : f32, view<1073741824xf32, #dense>
   }
   kernel.return
 }
 
-kernel.def export("add_f16_generic_4d") @add_f16_generic_4d() {
+kernel.def export("${op}_f16_generic_4d") @${op}_f16_generic_4d() {
   %unit = index.constant 1 : index
   %minus_one = index.constant -1 : index
-  %ne0 = config.get @hrx2.shape.add4d.ne0 : index
-  %ne1 = config.get @hrx2.shape.add4d.ne1 : index
-  %ne2 = config.get @hrx2.shape.add4d.ne2 : index
-  %ne3 = config.get @hrx2.shape.add4d.ne3 : index
-  %workgroup_size = config.get @hrx2.tuning.add4d.workgroup_size : index
+  %ne0 = config.get @hrx2.shape.${op}4d.ne0 : index
+  %ne1 = config.get @hrx2.shape.${op}4d.ne1 : index
+  %ne2 = config.get @hrx2.shape.${op}4d.ne2 : index
+  %ne3 = config.get @hrx2.shape.${op}4d.ne3 : index
+  %workgroup_size = config.get @hrx2.tuning.${op}4d.workgroup_size : index
   %ne01 = index.mul %ne0, %ne1 : index
   %ne012 = index.mul %ne01, %ne2 : index
   %total = index.mul %ne012, %ne3 : index
@@ -167,31 +167,31 @@ kernel.def export("add_f16_generic_4d") @add_f16_generic_4d() {
   kernel.launch.config workgroups(%workgroups, %unit, %unit) workgroup_size(%workgroup_size, %unit, %unit) : index
 } launch(%src0: buffer, %src1: buffer, %dst: buffer) {
   %base = index.constant 0 : offset
-  %ne0 = config.get @hrx2.shape.add4d.ne0 : index
-  %ne1 = config.get @hrx2.shape.add4d.ne1 : index
-  %ne2 = config.get @hrx2.shape.add4d.ne2 : index
-  %ne3 = config.get @hrx2.shape.add4d.ne3 : index
-  %src0_ne0 = config.get @hrx2.shape.add4d.src0_ne0 : index
-  %src0_ne1 = config.get @hrx2.shape.add4d.src0_ne1 : index
-  %src0_ne2 = config.get @hrx2.shape.add4d.src0_ne2 : index
-  %src0_ne3 = config.get @hrx2.shape.add4d.src0_ne3 : index
-  %src1_ne0 = config.get @hrx2.shape.add4d.src1_ne0 : index
-  %src1_ne1 = config.get @hrx2.shape.add4d.src1_ne1 : index
-  %src1_ne2 = config.get @hrx2.shape.add4d.src1_ne2 : index
-  %src1_ne3 = config.get @hrx2.shape.add4d.src1_ne3 : index
-  %src0_nb0 = config.get @hrx2.stride.add4d.src0_nb0 : index
-  %src0_nb1 = config.get @hrx2.stride.add4d.src0_nb1 : index
-  %src0_nb2 = config.get @hrx2.stride.add4d.src0_nb2 : index
-  %src0_nb3 = config.get @hrx2.stride.add4d.src0_nb3 : index
-  %src1_nb0 = config.get @hrx2.stride.add4d.src1_nb0 : index
-  %src1_nb1 = config.get @hrx2.stride.add4d.src1_nb1 : index
-  %src1_nb2 = config.get @hrx2.stride.add4d.src1_nb2 : index
-  %src1_nb3 = config.get @hrx2.stride.add4d.src1_nb3 : index
-  %dst_nb0 = config.get @hrx2.stride.add4d.dst_nb0 : index
-  %dst_nb1 = config.get @hrx2.stride.add4d.dst_nb1 : index
-  %dst_nb2 = config.get @hrx2.stride.add4d.dst_nb2 : index
-  %dst_nb3 = config.get @hrx2.stride.add4d.dst_nb3 : index
-  %workgroup_size = config.get @hrx2.tuning.add4d.workgroup_size : index
+  %ne0 = config.get @hrx2.shape.${op}4d.ne0 : index
+  %ne1 = config.get @hrx2.shape.${op}4d.ne1 : index
+  %ne2 = config.get @hrx2.shape.${op}4d.ne2 : index
+  %ne3 = config.get @hrx2.shape.${op}4d.ne3 : index
+  %src0_ne0 = config.get @hrx2.shape.${op}4d.src0_ne0 : index
+  %src0_ne1 = config.get @hrx2.shape.${op}4d.src0_ne1 : index
+  %src0_ne2 = config.get @hrx2.shape.${op}4d.src0_ne2 : index
+  %src0_ne3 = config.get @hrx2.shape.${op}4d.src0_ne3 : index
+  %src1_ne0 = config.get @hrx2.shape.${op}4d.src1_ne0 : index
+  %src1_ne1 = config.get @hrx2.shape.${op}4d.src1_ne1 : index
+  %src1_ne2 = config.get @hrx2.shape.${op}4d.src1_ne2 : index
+  %src1_ne3 = config.get @hrx2.shape.${op}4d.src1_ne3 : index
+  %src0_nb0 = config.get @hrx2.stride.${op}4d.src0_nb0 : index
+  %src0_nb1 = config.get @hrx2.stride.${op}4d.src0_nb1 : index
+  %src0_nb2 = config.get @hrx2.stride.${op}4d.src0_nb2 : index
+  %src0_nb3 = config.get @hrx2.stride.${op}4d.src0_nb3 : index
+  %src1_nb0 = config.get @hrx2.stride.${op}4d.src1_nb0 : index
+  %src1_nb1 = config.get @hrx2.stride.${op}4d.src1_nb1 : index
+  %src1_nb2 = config.get @hrx2.stride.${op}4d.src1_nb2 : index
+  %src1_nb3 = config.get @hrx2.stride.${op}4d.src1_nb3 : index
+  %dst_nb0 = config.get @hrx2.stride.${op}4d.dst_nb0 : index
+  %dst_nb1 = config.get @hrx2.stride.${op}4d.dst_nb1 : index
+  %dst_nb2 = config.get @hrx2.stride.${op}4d.dst_nb2 : index
+  %dst_nb3 = config.get @hrx2.stride.${op}4d.dst_nb3 : index
+  %workgroup_size = config.get @hrx2.tuning.${op}4d.workgroup_size : index
   %ne0_bounded = index.assume %ne0 [range(%ne0, 1, 1073741824)] : index
   %ne1_bounded = index.assume %ne1 [range(%ne1, 1, 1073741824)] : index
   %ne2_bounded = index.assume %ne2 [range(%ne2, 1, 1073741824)] : index
@@ -272,7 +272,7 @@ kernel.def export("add_f16_generic_4d") @add_f16_generic_4d() {
     %b_f16 = view.load %src1_view[%src1_idx] : view<1073741824xf16, #dense> -> f16
     %a = scalar.extf %a_f16 : f16 to f32
     %b = scalar.extf %b_f16 : f16 to f32
-    %result_f32 = scalar.addf<nnan|ninf|nsz> %a, %b : f32
+    %result_f32 = ${f16_compute_expr}
     %result = scalar.fptrunc %result_f32 : f32 to f16
     view.store %result, %dst_view[%dst_idx] : f16, view<1073741824xf16, #dense>
   }

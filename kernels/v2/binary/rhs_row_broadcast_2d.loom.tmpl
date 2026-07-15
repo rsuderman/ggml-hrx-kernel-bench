@@ -2,7 +2,7 @@ config.decl @hrx2.shape.pointwise.d0 : %value: index where [range(%value, 1, 655
 config.decl @hrx2.shape.pointwise.d1 : %value: index where [range(%value, 1, 1048576)]
 config.decl @hrx2.tuning.pointwise.workgroup_size : %value: index where [range(%value, 32, 1024), mul(%value, 32)]
 
-kernel.def export("mul_f32_rhs_row_broadcast_2d") @mul_f32_rhs_row_broadcast_2d() {
+kernel.def export("${op}_f32_rhs_row_broadcast_2d") @${op}_f32_rhs_row_broadcast_2d() {
   %unit = index.constant 1 : index
   %minus_one = index.constant -1 : index
   %d0 = config.get @hrx2.shape.pointwise.d0 : index
@@ -45,13 +45,13 @@ kernel.def export("mul_f32_rhs_row_broadcast_2d") @mul_f32_rhs_row_broadcast_2d(
     %idx = index.assume %idx0 [range(%idx0, 0, 1073741823)] : index
     %a = view.load %src0_view[%idx] : view<1073741824xf32, #dense> -> f32
     %b = view.load %src1_view[%col] : view<1073741824xf32, #dense> -> f32
-    %result = scalar.mulf<nnan|ninf|nsz> %a, %b : f32
+    %result = ${f32_compute_expr}
     view.store %result, %dst_view[%idx] : f32, view<1073741824xf32, #dense>
   }
   kernel.return
 }
 
-kernel.def export("mul_f16_rhs_row_broadcast_2d") @mul_f16_rhs_row_broadcast_2d() {
+kernel.def export("${op}_f16_rhs_row_broadcast_2d") @${op}_f16_rhs_row_broadcast_2d() {
   %unit = index.constant 1 : index
   %minus_one = index.constant -1 : index
   %d0 = config.get @hrx2.shape.pointwise.d0 : index
@@ -96,7 +96,7 @@ kernel.def export("mul_f16_rhs_row_broadcast_2d") @mul_f16_rhs_row_broadcast_2d(
     %b_f16 = view.load %src1_view[%col] : view<1073741824xf16, #dense> -> f16
     %a = scalar.extf %a_f16 : f16 to f32
     %b = scalar.extf %b_f16 : f16 to f32
-    %result_f32 = scalar.mulf<nnan|ninf|nsz> %a, %b : f32
+    %result_f32 = ${f16_compute_expr}
     %result = scalar.fptrunc %result_f32 : f32 to f16
     view.store %result, %dst_view[%idx] : f16, view<1073741824xf16, #dense>
   }

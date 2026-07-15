@@ -1,25 +1,25 @@
 {
-  "id": "sub_f32_rhs_row_broadcast_2d",
-  "family": "sub_f32",
+  "id": "${route_id}",
+  "family": "${family}",
   "kernel": {
-    "source_id": "sub_pointwise_f32",
-    "path": "sub/rhs_row_broadcast_2d.loom",
-    "root_symbol": "@sub_f32_rhs_row_broadcast_2d",
-    "export_name": "sub_f32_rhs_row_broadcast_2d"
+    "source_id": "${source_id}",
+    "path": "${kernel_path}",
+    "root_symbol": "${root_symbol}",
+    "export_name": "${export_name}"
   },
   "tensors": {
     "src0": {
-      "dtype": "F32",
+      "dtype": "${dtype}",
       "dimensions": "src0_dimensions",
       "strides": "src0_strides"
     },
     "src1": {
-      "dtype": "F32",
+      "dtype": "${dtype}",
       "dimensions": "src1_dimensions",
       "strides": "src1_strides"
     },
     "dst": {
-      "dtype": "F32",
+      "dtype": "${dtype}",
       "dimensions": "dst_dimensions",
       "strides": "dst_strides"
     }

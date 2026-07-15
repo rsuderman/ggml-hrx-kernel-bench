@@ -1,25 +1,25 @@
 {
-  "id": "mul_f32_rhs_row_broadcast_2d",
-  "family": "mul_f32",
+  "id": "${route_id}",
+  "family": "${family}",
   "kernel": {
-    "source_id": "mul_pointwise_f32",
-    "path": "mul/rhs_row_broadcast_2d.loom",
-    "root_symbol": "@mul_f32_rhs_row_broadcast_2d",
-    "export_name": "mul_f32_rhs_row_broadcast_2d"
+    "source_id": "${source_id}",
+    "path": "${kernel_path}",
+    "root_symbol": "${root_symbol}",
+    "export_name": "${export_name}"
   },
   "tensors": {
     "src0": {
-      "dtype": "F32",
+      "dtype": "${dtype}",
       "dimensions": "src0_dimensions",
       "strides": "src0_strides"
     },
     "src1": {
-      "dtype": "F32",
+      "dtype": "${dtype}",
       "dimensions": "src1_dimensions",
       "strides": "src1_strides"
     },
     "dst": {
-      "dtype": "F32",
+      "dtype": "${dtype}",
       "dimensions": "dst_dimensions",
       "strides": "dst_strides"
     }
@@ -50,6 +50,7 @@
     {
       "equals": [
         "src0_dimensions",
+        "src1_dimensions",
         "dst_dimensions"
       ]
     },
@@ -57,26 +58,9 @@
       "equals": [
         "contiguous_strides",
         "src0_strides",
+        "src1_strides",
         "dst_strides"
       ]
-    },
-    {
-      "name": "src1_dimensions",
-      "index": 1,
-      "min": 1,
-      "max": 1
-    },
-    {
-      "name": "src1_strides",
-      "index": 0,
-      "min": 1,
-      "max": 1
-    },
-    {
-      "name": "src1_strides",
-      "index": 1,
-      "min": 0,
-      "max": 0
     }
   ],
   "launch": {

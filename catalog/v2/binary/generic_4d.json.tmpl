@@ -1,25 +1,25 @@
 {
-  "id": "add_f16_generic_4d",
-  "family": "add_f16",
+  "id": "${route_id}",
+  "family": "${family}",
   "kernel": {
-    "source_id": "add_f16",
-    "path": "add/generic_4d.loom",
-    "root_symbol": "@add_f16_generic_4d",
-    "export_name": "add_f16_generic_4d"
+    "source_id": "${source_id}",
+    "path": "${kernel_path}",
+    "root_symbol": "${root_symbol}",
+    "export_name": "${export_name}"
   },
   "tensors": {
     "src0": {
-      "dtype": "F16",
+      "dtype": "${dtype}",
       "dimensions": "src0_dimensions",
       "strides": "src0_strides"
     },
     "src1": {
-      "dtype": "F16",
+      "dtype": "${dtype}",
       "dimensions": "src1_dimensions",
       "strides": "src1_strides"
     },
     "dst": {
-      "dtype": "F16",
+      "dtype": "${dtype}",
       "dimensions": "dst_dimensions",
       "strides": "dst_strides"
     }
@@ -63,103 +63,103 @@
   "config": {
     "bindings": [
       {
-        "key": "@hrx2.shape.add4d.ne0",
+        "key": "@hrx2.shape.${op}4d.ne0",
         "source": "tensor.dst.dimensions.d0.size"
       },
       {
-        "key": "@hrx2.shape.add4d.ne1",
+        "key": "@hrx2.shape.${op}4d.ne1",
         "source": "tensor.dst.dimensions.d1.size"
       },
       {
-        "key": "@hrx2.shape.add4d.ne2",
+        "key": "@hrx2.shape.${op}4d.ne2",
         "source": "tensor.dst.dimensions.d2.size"
       },
       {
-        "key": "@hrx2.shape.add4d.ne3",
+        "key": "@hrx2.shape.${op}4d.ne3",
         "source": "tensor.dst.dimensions.d3.size"
       },
       {
-        "key": "@hrx2.shape.add4d.src0_ne0",
+        "key": "@hrx2.shape.${op}4d.src0_ne0",
         "source": "tensor.src0.dimensions.d0.size"
       },
       {
-        "key": "@hrx2.shape.add4d.src0_ne1",
+        "key": "@hrx2.shape.${op}4d.src0_ne1",
         "source": "tensor.src0.dimensions.d1.size"
       },
       {
-        "key": "@hrx2.shape.add4d.src0_ne2",
+        "key": "@hrx2.shape.${op}4d.src0_ne2",
         "source": "tensor.src0.dimensions.d2.size"
       },
       {
-        "key": "@hrx2.shape.add4d.src0_ne3",
+        "key": "@hrx2.shape.${op}4d.src0_ne3",
         "source": "tensor.src0.dimensions.d3.size"
       },
       {
-        "key": "@hrx2.shape.add4d.src1_ne0",
+        "key": "@hrx2.shape.${op}4d.src1_ne0",
         "source": "tensor.src1.dimensions.d0.size"
       },
       {
-        "key": "@hrx2.shape.add4d.src1_ne1",
+        "key": "@hrx2.shape.${op}4d.src1_ne1",
         "source": "tensor.src1.dimensions.d1.size"
       },
       {
-        "key": "@hrx2.shape.add4d.src1_ne2",
+        "key": "@hrx2.shape.${op}4d.src1_ne2",
         "source": "tensor.src1.dimensions.d2.size"
       },
       {
-        "key": "@hrx2.shape.add4d.src1_ne3",
+        "key": "@hrx2.shape.${op}4d.src1_ne3",
         "source": "tensor.src1.dimensions.d3.size"
       },
       {
-        "key": "@hrx2.stride.add4d.src0_nb0",
+        "key": "@hrx2.stride.${op}4d.src0_nb0",
         "source": "tensor.src0.dimensions.d0.stride"
       },
       {
-        "key": "@hrx2.stride.add4d.src0_nb1",
+        "key": "@hrx2.stride.${op}4d.src0_nb1",
         "source": "tensor.src0.dimensions.d1.stride"
       },
       {
-        "key": "@hrx2.stride.add4d.src0_nb2",
+        "key": "@hrx2.stride.${op}4d.src0_nb2",
         "source": "tensor.src0.dimensions.d2.stride"
       },
       {
-        "key": "@hrx2.stride.add4d.src0_nb3",
+        "key": "@hrx2.stride.${op}4d.src0_nb3",
         "source": "tensor.src0.dimensions.d3.stride"
       },
       {
-        "key": "@hrx2.stride.add4d.src1_nb0",
+        "key": "@hrx2.stride.${op}4d.src1_nb0",
         "source": "tensor.src1.dimensions.d0.stride"
       },
       {
-        "key": "@hrx2.stride.add4d.src1_nb1",
+        "key": "@hrx2.stride.${op}4d.src1_nb1",
         "source": "tensor.src1.dimensions.d1.stride"
       },
       {
-        "key": "@hrx2.stride.add4d.src1_nb2",
+        "key": "@hrx2.stride.${op}4d.src1_nb2",
         "source": "tensor.src1.dimensions.d2.stride"
       },
       {
-        "key": "@hrx2.stride.add4d.src1_nb3",
+        "key": "@hrx2.stride.${op}4d.src1_nb3",
         "source": "tensor.src1.dimensions.d3.stride"
       },
       {
-        "key": "@hrx2.stride.add4d.dst_nb0",
+        "key": "@hrx2.stride.${op}4d.dst_nb0",
         "source": "tensor.dst.dimensions.d0.stride"
       },
       {
-        "key": "@hrx2.stride.add4d.dst_nb1",
+        "key": "@hrx2.stride.${op}4d.dst_nb1",
         "source": "tensor.dst.dimensions.d1.stride"
       },
       {
-        "key": "@hrx2.stride.add4d.dst_nb2",
+        "key": "@hrx2.stride.${op}4d.dst_nb2",
         "source": "tensor.dst.dimensions.d2.stride"
       },
       {
-        "key": "@hrx2.stride.add4d.dst_nb3",
+        "key": "@hrx2.stride.${op}4d.dst_nb3",
         "source": "tensor.dst.dimensions.d3.stride"
       },
       {
-        "key": "@hrx2.tuning.add4d.workgroup_size",
+        "key": "@hrx2.tuning.${op}4d.workgroup_size",
         "value": "256"
       }
     ]
