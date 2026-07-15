@@ -4,21 +4,45 @@ config.decl @hrx2.tuning.pointwise.workgroup_size : %value: index where [range(%
 kernel.def export("${op}_f32_contiguous") @${op}_f32_contiguous() {
   %unit = index.constant 1 : index
   %minus_one = index.constant -1 : index
+  %max_workgroups_x = index.constant 65535 : index
   %total = config.get @hrx2.shape.pointwise.total_size : index
   %workgroup_size = config.get @hrx2.tuning.pointwise.workgroup_size : index
   %rounding = index.add %workgroup_size, %minus_one : index
   %rounded = index.add %total, %rounding : index
-  %workgroups = index.div %rounded, %workgroup_size : index
-  kernel.launch.config workgroups(%workgroups, %unit, %unit) workgroup_size(%workgroup_size, %unit, %unit) : index
+  %flat_workgroups = index.div %rounded, %workgroup_size : index
+  %y_rounding = index.add %flat_workgroups, %minus_one : index
+  %y_rounded = index.add %y_rounding, %max_workgroups_x : index
+  %workgroups_y = index.div %y_rounded, %max_workgroups_x : index
+  %x_rounding = index.add %workgroups_y, %minus_one : index
+  %x_rounded = index.add %flat_workgroups, %x_rounding : index
+  %workgroups_x = index.div %x_rounded, %workgroups_y : index
+  kernel.launch.config workgroups(%workgroups_x, %workgroups_y, %unit) workgroup_size(%workgroup_size, %unit, %unit) : index
 } launch(%src0: buffer, %src1: buffer, %dst: buffer) {
   %base = index.constant 0 : offset
+  %minus_one = index.constant -1 : index
   %total = config.get @hrx2.shape.pointwise.total_size : index
   %workgroup_size = config.get @hrx2.tuning.pointwise.workgroup_size : index
+  %max_workgroups_x = index.constant 65535 : index
   %total_bounded = index.assume %total [range(%total, 1, 1073741824)] : index
-  %workgroup0 = kernel.workgroup.id<x> : index
+  %rounding = index.add %workgroup_size, %minus_one : index
+  %rounded = index.add %total_bounded, %rounding : index
+  %flat_workgroups = index.div %rounded, %workgroup_size : index
+  %y_rounding = index.add %flat_workgroups, %minus_one : index
+  %y_rounded = index.add %y_rounding, %max_workgroups_x : index
+  %workgroups_y = index.div %y_rounded, %max_workgroups_x : index
+  %x_rounding = index.add %workgroups_y, %minus_one : index
+  %x_rounded = index.add %flat_workgroups, %x_rounding : index
+  %workgroups_x = index.div %x_rounded, %workgroups_y : index
+  %workgroup_x0 = kernel.workgroup.id<x> : index
+  %workgroup_y0 = kernel.workgroup.id<y> : index
   %lane0 = kernel.workitem.id<x> : index
-  %workgroup = index.assume %workgroup0 [range(%workgroup0, 0, 4194303)] : index
+  %workgroup_x = index.assume %workgroup_x0 [range(%workgroup_x0, 0, 65534)] : index
+  %workgroup_y = index.assume %workgroup_y0 [range(%workgroup_y0, 0, 64)] : index
   %lane = index.assume %lane0 [range(%lane0, 0, 1023)] : index
+  %workgroup_y_base0 = index.mul %workgroup_y, %workgroups_x : index
+  %workgroup_y_base = index.assume %workgroup_y_base0 [range(%workgroup_y_base0, 0, 4194240)] : index
+  %workgroup0 = index.add %workgroup_y_base, %workgroup_x : index
+  %workgroup = index.assume %workgroup0 [range(%workgroup0, 0, 4194303)] : index
   %linear_base0 = index.mul %workgroup, %workgroup_size : index
   %linear_base = index.assume %linear_base0 [range(%linear_base0, 0, 1073741823)] : index
   %linear0 = index.add %linear_base, %lane : index
@@ -44,21 +68,45 @@ kernel.def export("${op}_f32_contiguous") @${op}_f32_contiguous() {
 kernel.def export("${op}_f16_contiguous") @${op}_f16_contiguous() {
   %unit = index.constant 1 : index
   %minus_one = index.constant -1 : index
+  %max_workgroups_x = index.constant 65535 : index
   %total = config.get @hrx2.shape.pointwise.total_size : index
   %workgroup_size = config.get @hrx2.tuning.pointwise.workgroup_size : index
   %rounding = index.add %workgroup_size, %minus_one : index
   %rounded = index.add %total, %rounding : index
-  %workgroups = index.div %rounded, %workgroup_size : index
-  kernel.launch.config workgroups(%workgroups, %unit, %unit) workgroup_size(%workgroup_size, %unit, %unit) : index
+  %flat_workgroups = index.div %rounded, %workgroup_size : index
+  %y_rounding = index.add %flat_workgroups, %minus_one : index
+  %y_rounded = index.add %y_rounding, %max_workgroups_x : index
+  %workgroups_y = index.div %y_rounded, %max_workgroups_x : index
+  %x_rounding = index.add %workgroups_y, %minus_one : index
+  %x_rounded = index.add %flat_workgroups, %x_rounding : index
+  %workgroups_x = index.div %x_rounded, %workgroups_y : index
+  kernel.launch.config workgroups(%workgroups_x, %workgroups_y, %unit) workgroup_size(%workgroup_size, %unit, %unit) : index
 } launch(%src0: buffer, %src1: buffer, %dst: buffer) {
   %base = index.constant 0 : offset
+  %minus_one = index.constant -1 : index
   %total = config.get @hrx2.shape.pointwise.total_size : index
   %workgroup_size = config.get @hrx2.tuning.pointwise.workgroup_size : index
+  %max_workgroups_x = index.constant 65535 : index
   %total_bounded = index.assume %total [range(%total, 1, 1073741824)] : index
-  %workgroup0 = kernel.workgroup.id<x> : index
+  %rounding = index.add %workgroup_size, %minus_one : index
+  %rounded = index.add %total_bounded, %rounding : index
+  %flat_workgroups = index.div %rounded, %workgroup_size : index
+  %y_rounding = index.add %flat_workgroups, %minus_one : index
+  %y_rounded = index.add %y_rounding, %max_workgroups_x : index
+  %workgroups_y = index.div %y_rounded, %max_workgroups_x : index
+  %x_rounding = index.add %workgroups_y, %minus_one : index
+  %x_rounded = index.add %flat_workgroups, %x_rounding : index
+  %workgroups_x = index.div %x_rounded, %workgroups_y : index
+  %workgroup_x0 = kernel.workgroup.id<x> : index
+  %workgroup_y0 = kernel.workgroup.id<y> : index
   %lane0 = kernel.workitem.id<x> : index
-  %workgroup = index.assume %workgroup0 [range(%workgroup0, 0, 4194303)] : index
+  %workgroup_x = index.assume %workgroup_x0 [range(%workgroup_x0, 0, 65534)] : index
+  %workgroup_y = index.assume %workgroup_y0 [range(%workgroup_y0, 0, 64)] : index
   %lane = index.assume %lane0 [range(%lane0, 0, 1023)] : index
+  %workgroup_y_base0 = index.mul %workgroup_y, %workgroups_x : index
+  %workgroup_y_base = index.assume %workgroup_y_base0 [range(%workgroup_y_base0, 0, 4194240)] : index
+  %workgroup0 = index.add %workgroup_y_base, %workgroup_x : index
+  %workgroup = index.assume %workgroup0 [range(%workgroup0, 0, 4194303)] : index
   %linear_base0 = index.mul %workgroup, %workgroup_size : index
   %linear_base = index.assume %linear_base0 [range(%linear_base0, 0, 1073741823)] : index
   %linear0 = index.add %linear_base, %lane : index

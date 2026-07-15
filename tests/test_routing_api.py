@@ -1039,6 +1039,50 @@ def test_v2_catalog_rejects_binding_with_source_and_value(tmp_path: Path) -> Non
         load_route_catalog(routing_dir)
 
 
+def test_v2_binary_contiguous_large_dispatch_uses_2d_tiles() -> None:
+    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
+    route = next(route for route in routes_for_op(catalog, "ADD") if route.id == "add_f32_contiguous")
+
+    candidate = candidate_from_shape(
+        kernel_dir=ACTUAL_V2_KERNEL_DIR,
+        route=route,
+        shape={"d0": 64, "d1": 262144, "d2": 1, "d3": 1},
+    )
+
+    assert candidate.status == "planned"
+    assert candidate.dispatch["workgroup_count"] == [32768, 2, 1]
+    assert candidate.config["@hrx2.shape.pointwise.total_size"] == "16777216"
+
+
+def test_v2_binary_non_contiguous_large_dispatch_uses_2d_tiles() -> None:
+    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
+    route = next(route for route in routes_for_op(catalog, "ADD") if route.id == "add_f32_non_contiguous_4d")
+
+    candidate = candidate_from_shape(
+        kernel_dir=ACTUAL_V2_KERNEL_DIR,
+        route=route,
+        shape={
+            "d0": 256,
+            "d1": 1,
+            "d2": 65536,
+            "d3": 1,
+            "src0_d0": 256,
+            "src0_d1": 1,
+            "src0_d2": 65536,
+            "src0_d3": 1,
+            "src1_d0": 1,
+            "src1_d1": 1,
+            "src1_d2": 65536,
+            "src1_d3": 1,
+        },
+    )
+
+    assert candidate.status == "planned"
+    assert candidate.dispatch["workgroup_count"] == [32768, 2, 1]
+    assert candidate.config["@hrx2.shape.add4d.ne0"] == "256"
+    assert candidate.config["@hrx2.shape.add4d.src1_ne0"] == "1"
+
+
 def test_v2_catalog_objects_are_immutable(tmp_path: Path) -> None:
     kernel_dir = tmp_path / "kernels"
     routing_dir = tmp_path / "routing"

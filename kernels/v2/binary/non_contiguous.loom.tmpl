@@ -27,6 +27,7 @@ config.decl @hrx2.tuning.${op}4d.workgroup_size : %value: index where [range(%va
 kernel.def export("${op}_f32_non_contiguous") @${op}_f32_non_contiguous() {
   %unit = index.constant 1 : index
   %minus_one = index.constant -1 : index
+  %max_workgroups_x = index.constant 65535 : index
   %ne0 = config.get @hrx2.shape.${op}4d.ne0 : index
   %ne1 = config.get @hrx2.shape.${op}4d.ne1 : index
   %ne2 = config.get @hrx2.shape.${op}4d.ne2 : index
@@ -37,10 +38,17 @@ kernel.def export("${op}_f32_non_contiguous") @${op}_f32_non_contiguous() {
   %total = index.mul %ne012, %ne3 : index
   %rounding = index.add %workgroup_size, %minus_one : index
   %rounded = index.add %total, %rounding : index
-  %workgroups = index.div %rounded, %workgroup_size : index
-  kernel.launch.config workgroups(%workgroups, %unit, %unit) workgroup_size(%workgroup_size, %unit, %unit) : index
+  %flat_workgroups = index.div %rounded, %workgroup_size : index
+  %y_rounding = index.add %flat_workgroups, %minus_one : index
+  %y_rounded = index.add %y_rounding, %max_workgroups_x : index
+  %workgroups_y = index.div %y_rounded, %max_workgroups_x : index
+  %x_rounding = index.add %workgroups_y, %minus_one : index
+  %x_rounded = index.add %flat_workgroups, %x_rounding : index
+  %workgroups_x = index.div %x_rounded, %workgroups_y : index
+  kernel.launch.config workgroups(%workgroups_x, %workgroups_y, %unit) workgroup_size(%workgroup_size, %unit, %unit) : index
 } launch(%src0: buffer, %src1: buffer, %dst: buffer) {
   %base = index.constant 0 : offset
+  %minus_one = index.constant -1 : index
   %ne0 = config.get @hrx2.shape.${op}4d.ne0 : index
   %ne1 = config.get @hrx2.shape.${op}4d.ne1 : index
   %ne2 = config.get @hrx2.shape.${op}4d.ne2 : index
@@ -66,6 +74,7 @@ kernel.def export("${op}_f32_non_contiguous") @${op}_f32_non_contiguous() {
   %dst_nb2 = config.get @hrx2.stride.${op}4d.dst_nb2 : index
   %dst_nb3 = config.get @hrx2.stride.${op}4d.dst_nb3 : index
   %workgroup_size = config.get @hrx2.tuning.${op}4d.workgroup_size : index
+  %max_workgroups_x = index.constant 65535 : index
   %ne0_bounded = index.assume %ne0 [range(%ne0, 1, 1073741824)] : index
   %ne1_bounded = index.assume %ne1 [range(%ne1, 1, 1073741824)] : index
   %ne2_bounded = index.assume %ne2 [range(%ne2, 1, 1073741824)] : index
@@ -78,10 +87,29 @@ kernel.def export("${op}_f32_non_contiguous") @${op}_f32_non_contiguous() {
   %src1_ne1_bounded = index.assume %src1_ne1 [range(%src1_ne1, 1, 1073741824)] : index
   %src1_ne2_bounded = index.assume %src1_ne2 [range(%src1_ne2, 1, 1073741824)] : index
   %src1_ne3_bounded = index.assume %src1_ne3 [range(%src1_ne3, 1, 1073741824)] : index
-  %workgroup0 = kernel.workgroup.id<x> : index
+  %ne01_pre = index.mul %ne0_bounded, %ne1_bounded : index
+  %ne012_pre = index.mul %ne01_pre, %ne2_bounded : index
+  %total_pre0 = index.mul %ne012_pre, %ne3_bounded : index
+  %total_pre = index.assume %total_pre0 [range(%total_pre0, 1, 1073741824)] : index
+  %rounding = index.add %workgroup_size, %minus_one : index
+  %rounded = index.add %total_pre, %rounding : index
+  %flat_workgroups = index.div %rounded, %workgroup_size : index
+  %y_rounding = index.add %flat_workgroups, %minus_one : index
+  %y_rounded = index.add %y_rounding, %max_workgroups_x : index
+  %workgroups_y = index.div %y_rounded, %max_workgroups_x : index
+  %x_rounding = index.add %workgroups_y, %minus_one : index
+  %x_rounded = index.add %flat_workgroups, %x_rounding : index
+  %workgroups_x = index.div %x_rounded, %workgroups_y : index
+  %workgroup_x0 = kernel.workgroup.id<x> : index
+  %workgroup_y0 = kernel.workgroup.id<y> : index
   %lane0 = kernel.workitem.id<x> : index
-  %workgroup = index.assume %workgroup0 [range(%workgroup0, 0, 4194303)] : index
+  %workgroup_x = index.assume %workgroup_x0 [range(%workgroup_x0, 0, 65534)] : index
+  %workgroup_y = index.assume %workgroup_y0 [range(%workgroup_y0, 0, 64)] : index
   %lane = index.assume %lane0 [range(%lane0, 0, 1023)] : index
+  %workgroup_y_base0 = index.mul %workgroup_y, %workgroups_x : index
+  %workgroup_y_base = index.assume %workgroup_y_base0 [range(%workgroup_y_base0, 0, 4194240)] : index
+  %workgroup0 = index.add %workgroup_y_base, %workgroup_x : index
+  %workgroup = index.assume %workgroup0 [range(%workgroup0, 0, 4194303)] : index
   %linear_base0 = index.mul %workgroup, %workgroup_size : index
   %linear_base = index.assume %linear_base0 [range(%linear_base0, 0, 1073741823)] : index
   %linear0 = index.add %linear_base, %lane : index
@@ -153,6 +181,7 @@ kernel.def export("${op}_f32_non_contiguous") @${op}_f32_non_contiguous() {
 kernel.def export("${op}_f16_non_contiguous") @${op}_f16_non_contiguous() {
   %unit = index.constant 1 : index
   %minus_one = index.constant -1 : index
+  %max_workgroups_x = index.constant 65535 : index
   %ne0 = config.get @hrx2.shape.${op}4d.ne0 : index
   %ne1 = config.get @hrx2.shape.${op}4d.ne1 : index
   %ne2 = config.get @hrx2.shape.${op}4d.ne2 : index
@@ -163,10 +192,17 @@ kernel.def export("${op}_f16_non_contiguous") @${op}_f16_non_contiguous() {
   %total = index.mul %ne012, %ne3 : index
   %rounding = index.add %workgroup_size, %minus_one : index
   %rounded = index.add %total, %rounding : index
-  %workgroups = index.div %rounded, %workgroup_size : index
-  kernel.launch.config workgroups(%workgroups, %unit, %unit) workgroup_size(%workgroup_size, %unit, %unit) : index
+  %flat_workgroups = index.div %rounded, %workgroup_size : index
+  %y_rounding = index.add %flat_workgroups, %minus_one : index
+  %y_rounded = index.add %y_rounding, %max_workgroups_x : index
+  %workgroups_y = index.div %y_rounded, %max_workgroups_x : index
+  %x_rounding = index.add %workgroups_y, %minus_one : index
+  %x_rounded = index.add %flat_workgroups, %x_rounding : index
+  %workgroups_x = index.div %x_rounded, %workgroups_y : index
+  kernel.launch.config workgroups(%workgroups_x, %workgroups_y, %unit) workgroup_size(%workgroup_size, %unit, %unit) : index
 } launch(%src0: buffer, %src1: buffer, %dst: buffer) {
   %base = index.constant 0 : offset
+  %minus_one = index.constant -1 : index
   %ne0 = config.get @hrx2.shape.${op}4d.ne0 : index
   %ne1 = config.get @hrx2.shape.${op}4d.ne1 : index
   %ne2 = config.get @hrx2.shape.${op}4d.ne2 : index
@@ -192,6 +228,7 @@ kernel.def export("${op}_f16_non_contiguous") @${op}_f16_non_contiguous() {
   %dst_nb2 = config.get @hrx2.stride.${op}4d.dst_nb2 : index
   %dst_nb3 = config.get @hrx2.stride.${op}4d.dst_nb3 : index
   %workgroup_size = config.get @hrx2.tuning.${op}4d.workgroup_size : index
+  %max_workgroups_x = index.constant 65535 : index
   %ne0_bounded = index.assume %ne0 [range(%ne0, 1, 1073741824)] : index
   %ne1_bounded = index.assume %ne1 [range(%ne1, 1, 1073741824)] : index
   %ne2_bounded = index.assume %ne2 [range(%ne2, 1, 1073741824)] : index
@@ -204,10 +241,29 @@ kernel.def export("${op}_f16_non_contiguous") @${op}_f16_non_contiguous() {
   %src1_ne1_bounded = index.assume %src1_ne1 [range(%src1_ne1, 1, 1073741824)] : index
   %src1_ne2_bounded = index.assume %src1_ne2 [range(%src1_ne2, 1, 1073741824)] : index
   %src1_ne3_bounded = index.assume %src1_ne3 [range(%src1_ne3, 1, 1073741824)] : index
-  %workgroup0 = kernel.workgroup.id<x> : index
+  %ne01_pre = index.mul %ne0_bounded, %ne1_bounded : index
+  %ne012_pre = index.mul %ne01_pre, %ne2_bounded : index
+  %total_pre0 = index.mul %ne012_pre, %ne3_bounded : index
+  %total_pre = index.assume %total_pre0 [range(%total_pre0, 1, 1073741824)] : index
+  %rounding = index.add %workgroup_size, %minus_one : index
+  %rounded = index.add %total_pre, %rounding : index
+  %flat_workgroups = index.div %rounded, %workgroup_size : index
+  %y_rounding = index.add %flat_workgroups, %minus_one : index
+  %y_rounded = index.add %y_rounding, %max_workgroups_x : index
+  %workgroups_y = index.div %y_rounded, %max_workgroups_x : index
+  %x_rounding = index.add %workgroups_y, %minus_one : index
+  %x_rounded = index.add %flat_workgroups, %x_rounding : index
+  %workgroups_x = index.div %x_rounded, %workgroups_y : index
+  %workgroup_x0 = kernel.workgroup.id<x> : index
+  %workgroup_y0 = kernel.workgroup.id<y> : index
   %lane0 = kernel.workitem.id<x> : index
-  %workgroup = index.assume %workgroup0 [range(%workgroup0, 0, 4194303)] : index
+  %workgroup_x = index.assume %workgroup_x0 [range(%workgroup_x0, 0, 65534)] : index
+  %workgroup_y = index.assume %workgroup_y0 [range(%workgroup_y0, 0, 64)] : index
   %lane = index.assume %lane0 [range(%lane0, 0, 1023)] : index
+  %workgroup_y_base0 = index.mul %workgroup_y, %workgroups_x : index
+  %workgroup_y_base = index.assume %workgroup_y_base0 [range(%workgroup_y_base0, 0, 4194240)] : index
+  %workgroup0 = index.add %workgroup_y_base, %workgroup_x : index
+  %workgroup = index.assume %workgroup0 [range(%workgroup0, 0, 4194303)] : index
   %linear_base0 = index.mul %workgroup, %workgroup_size : index
   %linear_base = index.assume %linear_base0 [range(%linear_base0, 0, 1073741823)] : index
   %linear0 = index.add %linear_base, %lane : index

@@ -646,6 +646,15 @@ def _ceil_div(lhs: int, rhs: int) -> int:
     return (lhs + rhs - 1) // rhs
 
 
+def _total_size_workgroup_count(total_size: int, lane_count: int, route: V2Route) -> list[int]:
+    flat_workgroups = _ceil_div(total_size, lane_count)
+    max_workgroups_x = route.launch.get("max_workgroups_x")
+    if isinstance(max_workgroups_x, int) and max_workgroups_x > 0 and flat_workgroups > max_workgroups_x:
+        workgroups_y = _ceil_div(flat_workgroups, max_workgroups_x)
+        return [_ceil_div(flat_workgroups, workgroups_y), workgroups_y, 1]
+    return [flat_workgroups, 1, 1]
+
+
 def route_dispatch(
     route: V2Route,
     shape: Mapping[str, int],
@@ -674,7 +683,7 @@ def route_dispatch(
         if isinstance(resolved, int):
             total_size = resolved
     if total_size is not None:
-        workgroup_count = [_ceil_div(total_size, lane_count), 1, 1]
+        workgroup_count = _total_size_workgroup_count(total_size, lane_count, route)
     elif route.family.startswith("mul_mat"):
         rows_per_workgroup = int(route.launch.get("rows_per_workgroup", 1) or 1)
         cols_per_workgroup = int(route.launch.get("cols_per_workgroup", 1) or 1)
