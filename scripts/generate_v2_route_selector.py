@@ -218,6 +218,12 @@ def _render_constraint(route: V2Route, check: ConstraintCheck) -> str:
     return f"scalar_bounds({name}, {minimum}, {maximum}, {multiple_of})"
 
 
+def _constraint_references_attribute(check: ConstraintCheck) -> bool:
+    if check.name is not None and check.name.startswith("attribute."):
+        return True
+    return any(name.startswith("attribute.") for name in (*check.equals, *check.divides))
+
+
 def _render_entries(entries: Iterable[str]) -> str:
     return "\n".join(f"                {entry}," for entry in entries)
 
@@ -240,7 +246,11 @@ def _render_route(route: V2Route) -> list[str]:
         )
 
     values = [_render_value(route, value) for value in route.values]
-    constraints = [_render_constraint(route, check) for check in route.constraints.checks]
+    constraints = [
+        _render_constraint(route, check)
+        for check in route.constraints.checks
+        if not _constraint_references_attribute(check)
+    ]
     return _ROUTE_TEMPLATE.substitute(
         route_id=json.dumps(route.id),
         tensors=_render_entries(tensors),

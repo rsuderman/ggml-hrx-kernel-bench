@@ -486,14 +486,11 @@ def _selector_accepts_tensors(route: V2Route, tensors: Mapping[str, ConcreteTens
     )
 
 
-def route_accepts_tensors(
+def _python_accepts_tensors(
     route: V2Route,
     tensors: Mapping[str, ConcreteTensor],
     attributes: Mapping[str, Any] | None = None,
 ) -> bool:
-    if attributes is None:
-        return _selector_accepts_tensors(route, tensors)
-
     captures = route_captures(route, tensors)
     if captures is None:
         return False
@@ -501,12 +498,23 @@ def route_accepts_tensors(
     if resolved is None:
         return False
     values = {**captures, **resolved}
-    values.update(attribute_captures(attributes))
+    if attributes is not None:
+        values.update(attribute_captures(attributes))
     return constraints_accept(
         route.constraints,
         values,
-        ignore_missing_attribute_constraints=False,
+        ignore_missing_attribute_constraints=attributes is None,
     )
+
+
+def route_accepts_tensors(
+    route: V2Route,
+    tensors: Mapping[str, ConcreteTensor],
+    attributes: Mapping[str, Any] | None = None,
+) -> bool:
+    if attributes is None:
+        return _selector_accepts_tensors(route, tensors) or _python_accepts_tensors(route, tensors)
+    return _python_accepts_tensors(route, tensors, attributes)
 
 
 def route_values(

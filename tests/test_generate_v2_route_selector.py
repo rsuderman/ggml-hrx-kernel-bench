@@ -104,7 +104,7 @@ def test_generator_preserves_every_materialized_operation_and_route_order(
     }
     generated = _generated_route_ids(output.read_text(encoding="utf-8"))
     assert len(expected) == 52
-    assert sum(len(route_ids) for route_ids in expected.values()) == 222
+    assert sum(len(route_ids) for route_ids in expected.values()) == 214
     assert list(generated) == sorted(expected)
     assert generated == expected
 
@@ -304,6 +304,26 @@ def test_generator_renders_every_materialized_value_and_constraint_form(
         assert helper in contents
     assert "indexed_bounds(\"dst_dimensions\", 0" in contents
     assert ", 512)" in contents
+
+
+def test_generator_omits_attribute_constraints_from_native_tensor_selector(
+    materialized_routing_dir: Path,
+    tmp_path: Path,
+) -> None:
+    output = tmp_path / "flash_attn_ext.inc.cpp"
+
+    result = _run_generator(
+        routing_dir=materialized_routing_dir,
+        output=output,
+        operations=("FLASH_ATTN_EXT",),
+    )
+
+    assert result.returncode == 0, result.stderr
+    contents = output.read_text(encoding="utf-8")
+    assert '"attribute.precision"' not in contents
+    assert '"attribute.sinks"' not in contents
+    assert '"attribute.logit_softcap_enabled"' not in contents
+    assert '"attribute.max_bias_enabled"' not in contents
 
 
 def test_generator_renders_schema_supported_iota_constraint(
