@@ -119,6 +119,8 @@ SCALAR_F32_FAMILIES = {"scale_f32", "clamp_f32"}
 SCALAR_F16_FAMILIES = {"clamp_f16"}
 NORMALIZATION_F32_FAMILIES = {"rms_norm_f32"}
 GATED_ACTIVATION_F32_FAMILIES = {"swiglu_f32"}
+GATED_ACTIVATION_F16_FAMILIES = {"swiglu_f16"}
+APPROXIMATE_F16_CLOSE_FAMILIES = APPROXIMATE_UNARY_F16_FAMILIES
 SOFTMAX_F32_FAMILIES = {"soft_max_f32"}
 FLASH_ATTN_FAMILIES = {"flash_attn_ext_f32_f16"}
 ROPE_F32_FAMILIES = {"rope_f32", "rope_neox_f32"}
@@ -168,6 +170,7 @@ SUPPORTED_BUFFER_FAMILIES = (
     SUPPORTED_F32_BUFFER_FAMILIES
     | BINARY_F16_FAMILIES
     | UNARY_F16_FAMILIES
+    | GATED_ACTIVATION_F16_FAMILIES
     | SCALAR_F16_FAMILIES
     | ROPE_F16_FAMILIES
     | INDEX_F32_FAMILIES
@@ -422,7 +425,7 @@ def _required_abi_fixtures(entries: list[dict[str, Any]]) -> set[str]:
 
 
 def _uses_approximate_unary_f16_expected(family: str, entry: dict[str, Any]) -> bool:
-    return family in APPROXIMATE_UNARY_F16_FAMILIES and entry["kind"] == "output" and str(entry["dtype"]) == "f16"
+    return family in APPROXIMATE_F16_CLOSE_FAMILIES and entry["kind"] == "output" and str(entry["dtype"]) == "f16"
 
 
 def _materialize_approximate_unary_f16_expected_arrays(
@@ -431,7 +434,7 @@ def _materialize_approximate_unary_f16_expected_arrays(
     arrays: dict[str, Path],
     family: str,
 ) -> dict[str, Path]:
-    if family not in APPROXIMATE_UNARY_F16_FAMILIES:
+    if family not in APPROXIMATE_F16_CLOSE_FAMILIES:
         return arrays
     np = require_numpy()
     result = dict(arrays)
@@ -441,6 +444,8 @@ def _materialize_approximate_unary_f16_expected_arrays(
         expect_fixture = str(entry["expect"]["fixture"])
         source_path = arrays[expect_fixture]
         expected_bits = np.load(source_path, allow_pickle=False)
+        if expected_bits.ndim == 1 and str(expected_bits.dtype) == "float16":
+            continue
         _expect(
             expected_bits.ndim == 1 and str(expected_bits.dtype) == "int16",
             f"{source_path} must be a one-dimensional int16 f16 storage npy array",
@@ -505,7 +510,7 @@ def _descriptor_bindings_from_execution_abi(
             expect_fixture = str(expect["fixture"])
             output_tolerance = tolerance
             if (
-                family in APPROXIMATE_UNARY_F16_FAMILIES
+                family in APPROXIMATE_F16_CLOSE_FAMILIES
                 and str(entry["dtype"]) == "f16"
             ):
                 output_tolerance = {

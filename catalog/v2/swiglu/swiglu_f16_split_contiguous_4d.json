@@ -1,0 +1,159 @@
+{
+  "id": "swiglu_f16_split_contiguous_4d",
+  "family": "swiglu_f16",
+  "kernel": {
+    "source_id": "swiglu_f16",
+    "path": "swiglu/split_strided_f16_4d.loom",
+    "root_symbol": "@hrx2_swiglu_f16_split",
+    "export_name": "hrx2_swiglu_f16_split"
+  },
+  "tensors": {
+    "src0": {
+      "dtype": "F16",
+      "dimensions": "src0_dimensions",
+      "strides": "src0_strides"
+    },
+    "src1": {
+      "dtype": "F16",
+      "dimensions": "src1_dimensions",
+      "strides": "src1_strides"
+    },
+    "dst": {
+      "dtype": "F16",
+      "dimensions": "dst_dimensions",
+      "strides": "dst_strides"
+    }
+  },
+  "values": [
+    {
+      "name": "src0_contiguous_strides",
+      "contiguous_strides": "src0_dimensions"
+    },
+    {
+      "name": "src1_contiguous_strides",
+      "contiguous_strides": "src1_dimensions"
+    },
+    {
+      "name": "dst_contiguous_strides",
+      "contiguous_strides": "dst_dimensions"
+    },
+    {
+      "name": "total_size",
+      "product": "dst_dimensions"
+    },
+    {
+      "name": "nrows_dims",
+      "tail": {
+        "source": "dst_dimensions",
+        "drop": 1
+      }
+    },
+    {
+      "name": "nrows",
+      "product": "nrows_dims"
+    }
+  ],
+  "constraints": [
+    {
+      "name": "total_size",
+      "min": 1,
+      "max": 1073741824
+    },
+    {
+      "name": "src0_dimensions",
+      "length": 4
+    },
+    {
+      "name": "src1_dimensions",
+      "length": 4
+    },
+    {
+      "name": "dst_dimensions",
+      "length": 4
+    },
+    {
+      "equals": [
+        "src0_dimensions",
+        "src1_dimensions",
+        "dst_dimensions"
+      ]
+    },
+    {
+      "equals": [
+        "src0_contiguous_strides",
+        "src0_strides"
+      ]
+    },
+    {
+      "equals": [
+        "src1_contiguous_strides",
+        "src1_strides"
+      ]
+    },
+    {
+      "equals": [
+        "dst_contiguous_strides",
+        "dst_strides"
+      ]
+    }
+  ],
+  "launch": {
+    "workgroup_size": [
+      256,
+      1,
+      1
+    ]
+  },
+  "config": {
+    "bindings": [
+      {
+        "key": "@shape.swiglu.ncols",
+        "source": "tensor.dst.dimensions.d0.size"
+      },
+      {
+        "key": "@shape.swiglu.nrows",
+        "source": "value.nrows"
+      },
+      {
+        "key": "@shape.swiglu.d1",
+        "source": "tensor.dst.dimensions.d1.size"
+      },
+      {
+        "key": "@shape.swiglu.d2",
+        "source": "tensor.dst.dimensions.d2.size"
+      },
+      {
+        "key": "@shape.swiglu.d3",
+        "source": "tensor.dst.dimensions.d3.size"
+      },
+      {
+        "key": "@shape.swiglu.src0_stride1",
+        "source": "tensor.src0.dimensions.d1.stride"
+      },
+      {
+        "key": "@shape.swiglu.src0_stride2",
+        "source": "tensor.src0.dimensions.d2.stride"
+      },
+      {
+        "key": "@shape.swiglu.src0_stride3",
+        "source": "tensor.src0.dimensions.d3.stride"
+      },
+      {
+        "key": "@shape.swiglu.src1_stride1",
+        "source": "tensor.src1.dimensions.d1.stride"
+      },
+      {
+        "key": "@shape.swiglu.src1_stride2",
+        "source": "tensor.src1.dimensions.d2.stride"
+      },
+      {
+        "key": "@shape.swiglu.src1_stride3",
+        "source": "tensor.src1.dimensions.d3.stride"
+      },
+      {
+        "key": "@tuning.swiglu.workgroup_size",
+        "value": "256"
+      }
+    ]
+  }
+}

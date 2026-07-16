@@ -53,6 +53,30 @@ Use that workflow unless the user explicitly asks for a different process.
   including the worktree path, final coverage delta, validation results, and
   any blocked or intentionally deferred cases.
 
+## Kernel Coverage Expansion Goals
+
+- Coverage expansion is for basic functional correctness first, not
+  performance. Do not hand-optimize kernels while the operation surface is still
+  mostly unsupported.
+- Minimize the number of new `.loom` kernels needed for correctness. Later
+  performance work is expected to add specialized variants, so coverage work
+  should avoid creating that variant explosion early.
+- Before adding kernels, analyze which missing cases can overlap through shared
+  route attributes, constraints, tensor layouts, and kernel configuration.
+- Prefer tiled implementations for new functional kernels. Tiling should make
+  shape and layout coverage explicit and easier to validate, not serve as a
+  performance-tuning exercise.
+- Loom kernels should primarily encode semantic special cases, required
+  compile-time values, ABI differences, and configuration constraints. Avoid
+  hand-tuned schedules or micro-optimizations in initial coverage kernels.
+- Generalized functional kernels are fallback coverage paths. In `router.json`,
+  list them after more specific or optimized routes for the same operation so
+  they are selected only when preferred routes do not match.
+- For a small number of dtype variants, direct replication of an established
+  pattern is acceptable. If the dtype/layout/mode matrix becomes large, prefer
+  a generator or shared template mechanism over hand-maintaining many similar
+  kernels and routes.
+
 ## Validation Policy
 
 - Run targeted import materialization before broader coverage gates.
@@ -77,6 +101,9 @@ Use that workflow unless the user explicitly asks for a different process.
   dropping them.
 - Prefer extending importer lowering, family specs, route predicates, or kernel
   configuration before creating a new `.loom` kernel.
+- When route support can be widened through attributes and constraints, bind
+  those values by name and validate them through the constraint system instead
+  of hardcoding a shape-specific route.
 - When a new `.loom` kernel is unavoidable, document why an existing kernel or
   route could not be widened to cover the case.
 - When a routed kernel variant is added or ported, keep it in its own `.loom`

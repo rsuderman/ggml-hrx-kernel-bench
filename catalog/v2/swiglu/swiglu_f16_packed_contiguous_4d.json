@@ -1,11 +1,11 @@
 {
-  "id": "swiglu_f32_packed_contiguous_4d",
-  "family": "swiglu_f32",
+  "id": "swiglu_f16_packed_contiguous_4d",
+  "family": "swiglu_f16",
   "kernel": {
-    "source_id": "swiglu_f32",
-    "path": "swiglu/contiguous_4d.loom",
-    "root_symbol": "@hrx2_swiglu_f32",
-    "export_name": "hrx2_swiglu_f32"
+    "source_id": "swiglu_f16",
+    "path": "swiglu/contiguous_f16_4d.loom",
+    "root_symbol": "@hrx2_swiglu_f16",
+    "export_name": "hrx2_swiglu_f16"
   },
   "attributes": {
     "swapped": {
@@ -14,12 +14,12 @@
   },
   "tensors": {
     "src0": {
-      "dtype": "F32",
+      "dtype": "F16",
       "dimensions": "src0_dimensions",
       "strides": "src0_strides"
     },
     "dst": {
-      "dtype": "F32",
+      "dtype": "F16",
       "dimensions": "dst_dimensions",
       "strides": "dst_strides"
     }
@@ -48,6 +48,17 @@
       }
     },
     {
+      "name": "ncols_dims",
+      "head": {
+        "source": "dst_dimensions",
+        "take": 1
+      }
+    },
+    {
+      "name": "ncols",
+      "product": "ncols_dims"
+    },
+    {
       "name": "flattened_trailing_dimensions",
       "product": "dst_trailing_dimensions"
     },
@@ -74,6 +85,11 @@
       "name": "attribute.swapped",
       "min": 0,
       "max": 1
+    },
+    {
+      "name": "ncols",
+      "min": 64,
+      "max": 65536
     },
     {
       "equals": [

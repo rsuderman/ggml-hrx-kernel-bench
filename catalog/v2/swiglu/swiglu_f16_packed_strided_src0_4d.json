@@ -1,11 +1,11 @@
 {
-  "id": "swiglu_f32_packed_contiguous_4d",
-  "family": "swiglu_f32",
+  "id": "swiglu_f16_packed_strided_src0_4d",
+  "family": "swiglu_f16",
   "kernel": {
-    "source_id": "swiglu_f32",
-    "path": "swiglu/contiguous_4d.loom",
-    "root_symbol": "@hrx2_swiglu_f32",
-    "export_name": "hrx2_swiglu_f32"
+    "source_id": "swiglu_f16",
+    "path": "swiglu/packed_strided_src0_f16_4d.loom",
+    "root_symbol": "@hrx2_swiglu_f16_packed_strided_src0",
+    "export_name": "hrx2_swiglu_f16_packed_strided_src0"
   },
   "attributes": {
     "swapped": {
@@ -14,21 +14,17 @@
   },
   "tensors": {
     "src0": {
-      "dtype": "F32",
+      "dtype": "F16",
       "dimensions": "src0_dimensions",
       "strides": "src0_strides"
     },
     "dst": {
-      "dtype": "F32",
+      "dtype": "F16",
       "dimensions": "dst_dimensions",
       "strides": "dst_strides"
     }
   },
   "values": [
-    {
-      "name": "src0_contiguous_strides",
-      "contiguous_strides": "src0_dimensions"
-    },
     {
       "name": "dst_contiguous_strides",
       "contiguous_strides": "dst_dimensions"
@@ -83,12 +79,6 @@
     },
     {
       "equals": [
-        "src0_contiguous_strides",
-        "src0_strides"
-      ]
-    },
-    {
-      "equals": [
         "dst_contiguous_strides",
         "dst_strides"
       ]
@@ -110,6 +100,30 @@
       {
         "key": "@shape.swiglu.nrows",
         "source": "value.flattened_trailing_dimensions"
+      },
+      {
+        "key": "@shape.swiglu.d1",
+        "source": "tensor.dst.dimensions.d1.size"
+      },
+      {
+        "key": "@shape.swiglu.d2",
+        "source": "tensor.dst.dimensions.d2.size"
+      },
+      {
+        "key": "@shape.swiglu.d3",
+        "source": "tensor.dst.dimensions.d3.size"
+      },
+      {
+        "key": "@shape.swiglu.src0_stride1",
+        "source": "tensor.src0.dimensions.d1.stride"
+      },
+      {
+        "key": "@shape.swiglu.src0_stride2",
+        "source": "tensor.src0.dimensions.d2.stride"
+      },
+      {
+        "key": "@shape.swiglu.src0_stride3",
+        "source": "tensor.src0.dimensions.d3.stride"
       },
       {
         "key": "@shape.swiglu.swapped",

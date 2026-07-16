@@ -599,8 +599,8 @@ def _generated_swiglu_config() -> dict[str, object]:
     route_id = "swiglu_f32_packed_contiguous_4d"
     return {
         "kernel": "swiglu_f32",
-        "params": ["d0", "d1", "d2", "d3", "src0_d0"],
-        "cases": [[4, 2, 1, 1, 8]],
+        "params": ["d0", "d1", "d2", "d3", "src0_d0", "swiglu.swapped"],
+        "cases": [[4, 2, 1, 1, 8, 0]],
         "route_id": route_id,
         "execution_abi": _unary_f32_execution_abi(route_id),
     }
@@ -1430,7 +1430,7 @@ def test_descriptor_from_generated_swiglu_f32_case_uses_packed_input(tmp_path: P
     result = descriptor_from_generated_case(
         config_data=_generated_swiglu_config(),
         case_id="d0-4-d1-2-d2-1-d3-1-src0-d0-8",
-        case_values=[4, 2, 1, 1, 8],
+        case_values=[4, 2, 1, 1, 8, 0],
         kernel_dir=assets / "kernels" / "v2",
         routing_dir=assets / "catalog" / "v2",
         target="gfx1100",
@@ -1443,6 +1443,7 @@ def test_descriptor_from_generated_swiglu_f32_case_uses_packed_input(tmp_path: P
     assert result.descriptor is not None
     descriptor = result.descriptor
     assert descriptor["root"] == "@hrx2_swiglu_f32"
+    assert descriptor["configs"]["@shape.swiglu.swapped"] == "0"
     assert descriptor["metadata"]["element_counts"] == {"dst": 8, "src0": 16}
     assert [binding["name"] for binding in descriptor["bindings"]] == ["src0", "dst"]
     src0 = np.load(tmp_path / descriptor["bindings"][0]["path"])

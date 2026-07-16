@@ -228,6 +228,49 @@ after a single proof route or fallback kernel. When complete, the agent must
 notify the spawning agent with the worktree path, final coverage delta,
 validation results, and any blocked or intentionally deferred cases.
 
+## Coverage Expansion Goals
+
+Coverage expansion should establish basic functional correctness, not final
+performance. The initial goal is to make unsupported YAML cases route,
+materialize, execute, and compare correctly with the smallest maintainable
+kernel surface. Performance-specialized kernels can be added later after the
+semantic surface is validated.
+
+Before writing or porting a kernel, analyze overlap across the missing cases:
+
+- common tensor ranks, layouts, and storage patterns
+- shared scalar attributes and mode flags
+- values that can be bound by name and checked through route constraints
+- dtype families that can reuse the same route shape or kernel structure
+- cases that need separate ABI, semantic, or compile-time treatment
+
+Prefer widening route predicates, value bindings, attributes, constraints, and
+kernel configuration over adding more `.loom` files. When a new kernel is
+needed, start with a tiled functional implementation that exposes the relevant
+shape/configuration knobs. Tiling is preferred because it keeps the control
+flow, bounds, and compile-time values explicit; it should not be treated as a
+hand-optimization pass.
+
+Generalized functional kernels are coverage fallbacks. They should guarantee
+that valid cases have an executing route, but they should not preempt more
+specific or optimized implementations. In `router.json`, keep these generalized
+routes at the lowest preference for the operation, after specialized tiled,
+shape-specific, or optimized routes.
+
+Loom kernels added for coverage should focus on:
+
+- semantic special cases such as packed versus split inputs
+- required compile-time values and configuration declarations
+- ABI differences that cannot be expressed by a single route
+- layout constraints that the route system can validate
+
+Avoid hand-tuned schedules, shape-specific micro-optimizations, or performance
+specialization in initial coverage kernels. A small amount of dtype replication
+is acceptable when it mirrors an existing proven pattern. If the matrix of
+dtype, layout, mode, and attribute variants becomes large, use a generator or
+shared template mechanism rather than hand-maintaining a large number of
+near-identical routes and kernels.
+
 ## Kernel Source Layout
 
 When route support needs a new or ported kernel variant, keep one routed variant

@@ -97,7 +97,13 @@
     ],
     "SUB": [],
     "SWIGLU": [
-      "swiglu/swiglu_f32_packed_contiguous_4d.json"
+      "swiglu/swiglu_f32_packed_contiguous_4d.json",
+      "swiglu/swiglu_f16_packed_contiguous_4d.json",
+      "swiglu/swiglu_f32_packed_strided_src0_4d.json",
+      "swiglu/swiglu_f16_packed_strided_src0_4d.json",
+      "swiglu/swiglu_f32_split_strided_4d.json",
+      "swiglu/swiglu_f16_split_contiguous_4d.json",
+      "swiglu/swiglu_f16_split_strided_4d.json"
     ]
   }
 }

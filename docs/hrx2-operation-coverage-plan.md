@@ -114,10 +114,51 @@ implementation slices for the selected operation. The plan should cover all
 visible unsupported cases that can be handled with known semantics and current
 tool support, even if the first validation checkpoint is deliberately narrow.
 
+The implementation plan must also describe how the missing cases overlap. Note
+which cases can share route attributes, constraint checks, tensor layouts,
+kernel configuration, and generated code. The purpose is to minimize the number
+of functional kernels while still keeping unsupported or ambiguous cases visible
+in the route-import artifacts.
+
 Do not hide unsupported cases by filtering them out of importer outputs.
 Any test that requires HSA resources must be run outside of the normal sandboxed
 harness path. If runtime validation cannot run, record the exact blocker instead
 of treating a sandboxed or prepare-only result as sufficient.
+
+## Coverage Expansion Goals
+
+Coverage expansion is a functional-correctness activity. The goal is to make
+the broadest reasonable set of YAML cases route, materialize descriptors,
+execute, and compare correctly. It is not a performance optimization pass.
+
+Use the minimum number of kernels that can express the validated functional
+surface. Later optimization work is expected to add more specialized kernels,
+so coverage work should avoid creating a large variant set prematurely. Prefer
+routes, constraints, attributes, and kernel configuration when they can express
+the variation safely.
+
+When new kernels are required, prefer simple tiled implementations first. Tiled
+kernels should make bounds, layout, and compile-time configuration explicit and
+easy to validate. Do not spend initial coverage work on hand-tuned schedules,
+shape-specific micro-optimizations, or performance-only special cases.
+
+Generalized functional kernels are fallback coverage paths. They should be used
+to guarantee correctness coverage for cases that do not match preferred routes,
+not to run ahead of more specific or optimized kernels. In `router.json`, place
+generalized routes at the lowest preference for the operation, after
+specialized tiled, shape-specific, or optimized routes.
+
+Loom kernel sources for coverage should primarily encode:
+
+- semantic ABI differences, such as packed versus split inputs
+- special values that affect correctness
+- compile-time values that Loom needs as configuration
+- constraints that define the safe executing surface
+
+Small dtype replication is acceptable when the variants are few and directly
+mirror an established pattern. If the dtype/layout/mode matrix is large or
+mechanically repetitive, prefer a generator or template-backed route/kernel
+source over hand-written copies.
 
 ## Implementation Execution Policy
 
@@ -150,9 +191,14 @@ Prefer fixes in this order:
 
 1. Descriptor materialization in `yaml_route_import.py`.
 2. Existing route predicate or value binding adjustments.
-3. Catalog descriptor additions that target existing kernels.
-4. Narrow kernel-surface additions when no existing route/kernel can express the
-   case.
+3. Attribute declarations and constraint-system checks that bind variation by
+   name instead of hardcoding shape-specific routes.
+4. Catalog descriptor additions that target existing kernels.
+5. Kernel configuration changes that generalize an existing functional kernel.
+6. Narrow tiled kernel-surface additions when no existing route/kernel can
+   express the case.
+7. Generators or shared templates when the number of dtype/layout/mode variants
+   would otherwise create excessive hand-maintained repetition.
 
 When a new `.loom` kernel is unavoidable, document why the existing route/kernel
 could not be widened safely.

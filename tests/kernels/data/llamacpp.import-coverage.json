@@ -1,8 +1,8 @@
 {
   "schema": "ggml_hrx_kernel_bench.import_test_coverage.v1",
   "operation_count": 115,
-  "total_pass_case_count": 1079,
-  "total_fail_case_count": 10118,
+  "total_pass_case_count": 1098,
+  "total_fail_case_count": 10099,
   "operations": [
     {
       "op": "ABS",
@@ -531,8 +531,8 @@
     },
     {
       "op": "SWIGLU",
-      "pass_case_count": 4,
-      "fail_case_count": 20
+      "pass_case_count": 23,
+      "fail_case_count": 1
     },
     {
       "op": "SWIGLU_OAI",

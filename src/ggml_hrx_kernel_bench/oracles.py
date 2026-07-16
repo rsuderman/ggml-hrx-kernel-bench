@@ -1654,28 +1654,123 @@ def _add_rms_norm_mul_arrays(np: Any, candidate: Candidate, seed: int) -> dict[s
 
 def _swiglu_arrays(np: Any, candidate: Candidate, seed: int) -> dict[str, Any]:
     ncols, nrows, elems = _dims(candidate)
+    f16_family = candidate.family == "swiglu_f16"
     x = f32_pattern(np, (nrows, ncols), seed=seed)
     gate = f32_pattern(np, (nrows, ncols), seed=seed + 1)
+    if f16_family:
+        x = x.astype(np.float16)
+        gate = gate.astype(np.float16)
+    x_compute = x.astype(np.float32)
+    gate_compute = gate.astype(np.float32)
     if "geglu" in candidate.root_symbol:
-        inner = x * (np.float32(1.0) + np.float32(0.044715) * x * x)
-        gelu = x / (np.float32(1.0) + np.exp(-np.float32(1.5957691216057308) * inner, dtype=np.float32))
+        inner = x_compute * (np.float32(1.0) + np.float32(0.044715) * x_compute * x_compute)
+        gelu = x_compute / (np.float32(1.0) + np.exp(-np.float32(1.5957691216057308) * inner, dtype=np.float32))
         activated = gelu.astype(np.float32)
     else:
-        activated = (x / (np.float32(1.0) + np.exp(-x, dtype=np.float32))).astype(np.float32)
-    expected = (activated * gate).astype(np.float32)
+        activated = (x_compute / (np.float32(1.0) + np.exp(-x_compute, dtype=np.float32))).astype(np.float32)
+    expected_f32 = (activated * gate_compute).astype(np.float32)
+    src0_dims = _swiglu_tensor_dims(candidate, "src0", ncols=ncols)
+    src0_strides = _swiglu_tensor_strides(candidate, "src0", src0_dims)
+    store_dtype = np.int16 if f16_family else np.float32
+    expected = _f16_bits(np, expected_f32.astype(np.float16)) if f16_family else expected_f32.reshape(elems)
     arrays: dict[str, Any] = {
-        "dst_init": f32_pattern(np, (elems,), seed=seed + 2, scale=0.25),
-        "expected": expected.reshape(elems),
+        "dst_init": np.zeros((elems,), dtype=np.int16) if f16_family else f32_pattern(np, (elems,), seed=seed + 2, scale=0.25),
+        "expected": expected,
     }
     if candidate.root_symbol.endswith("_split"):
-        arrays["src0"] = x.reshape(elems)
-        arrays["src1"] = gate.reshape(elems)
+        src1_dims = _swiglu_tensor_dims(candidate, "src1", ncols=ncols)
+        src1_strides = _swiglu_tensor_strides(candidate, "src1", src1_dims)
+        arrays["src0"] = _swiglu_store_rows(np, x, src0_dims, src0_strides, dtype=store_dtype)
+        arrays["src1"] = _swiglu_store_rows(np, gate, src1_dims, src1_strides, dtype=store_dtype)
     else:
-        arrays["src0"] = np.concatenate([x, gate], axis=1).reshape(elems * 2)
+        swapped = _swiglu_swapped(candidate)
+        first, second = (gate, x) if swapped else (x, gate)
+        if str(candidate.route_id) in {"swiglu_f32_packed_contiguous_4d", "swiglu_f16_packed_contiguous_4d"}:
+            packed = np.concatenate([first, second], axis=1)
+            arrays["src0"] = _f16_bits(np, packed.astype(np.float16)) if f16_family else packed.reshape(elems * 2)
+        else:
+            arrays["src0"] = _swiglu_store_packed_rows(np, first, second, src0_dims, src0_strides, ncols, dtype=store_dtype)
     return {
         "arrays": arrays,
-        "metadata": {"activation": "gelu" if "geglu" in candidate.root_symbol else "silu"},
+        "metadata": {"activation": "gelu" if "geglu" in candidate.root_symbol else "silu", "dst_type": "i16" if f16_family else "f32"},
     }
+
+
+def _swiglu_swapped(candidate: Candidate) -> bool:
+    for key in ("swiglu.swapped", "attribute.swapped"):
+        value = candidate.values.get(key, candidate.shape.get(key))
+        if value is not None:
+            return int(value) != 0
+    value = candidate.config.get("@shape.swiglu.swapped")
+    return value is not None and int(value) != 0
+
+
+def _swiglu_tensor_dims(candidate: Candidate, tensor_name: str, *, ncols: int) -> tuple[int, int, int, int]:
+    default_d0 = int(candidate.shape.get("d0", ncols))
+    if tensor_name == "src0" and not str(candidate.root_symbol).endswith("_split"):
+        default_d0 = max(default_d0 * 2, int(candidate.shape.get("src0_d0", default_d0)))
+    return tuple(
+        int(candidate.shape.get(f"{tensor_name}_d{index}", candidate.shape.get(f"d{index}", default_d0 if index == 0 else 1)))
+        for index in range(4)
+    )
+
+
+def _swiglu_tensor_strides(candidate: Candidate, tensor_name: str, dims: tuple[int, int, int, int]) -> tuple[int, int, int, int]:
+    defaults = _contiguous_strides(dims)
+    return tuple(
+        int(candidate.shape.get(f"{tensor_name}_d{index}_stride", defaults[index]))
+        for index in range(4)
+    )
+
+
+def _strided_storage_elements(dims: tuple[int, ...], strides: tuple[int, ...]) -> int:
+    return sum((int(dim) - 1) * int(stride) for dim, stride in zip(dims, strides, strict=True)) + 1
+
+
+def _swiglu_store_rows(
+    np: Any,
+    rows: Any,
+    dims: tuple[int, int, int, int],
+    strides: tuple[int, int, int, int],
+    *,
+    dtype: Any = None,
+) -> Any:
+    storage_dtype = dtype if dtype is not None else np.float32
+    storage = np.zeros((_strided_storage_elements(dims, strides),), dtype=storage_dtype)
+    stored_rows = _f16_bits(np, rows.astype(np.float16)).reshape(rows.shape) if storage_dtype == np.int16 else rows
+    row_index = 0
+    for i3 in range(dims[3]):
+        for i2 in range(dims[2]):
+            for i1 in range(dims[1]):
+                base = i1 * strides[1] + i2 * strides[2] + i3 * strides[3]
+                storage[base : base + rows.shape[1]] = stored_rows[row_index]
+                row_index += 1
+    return storage
+
+
+def _swiglu_store_packed_rows(
+    np: Any,
+    first: Any,
+    second: Any,
+    dims: tuple[int, int, int, int],
+    strides: tuple[int, int, int, int],
+    ncols: int,
+    *,
+    dtype: Any = None,
+) -> Any:
+    storage_dtype = dtype if dtype is not None else np.float32
+    storage = np.zeros((_strided_storage_elements(dims, strides),), dtype=storage_dtype)
+    first_rows = _f16_bits(np, first.astype(np.float16)).reshape(first.shape) if storage_dtype == np.int16 else first
+    second_rows = _f16_bits(np, second.astype(np.float16)).reshape(second.shape) if storage_dtype == np.int16 else second
+    row_index = 0
+    for i3 in range(dims[3]):
+        for i2 in range(dims[2]):
+            for i1 in range(dims[1]):
+                base = i1 * strides[1] + i2 * strides[2] + i3 * strides[3]
+                storage[base : base + ncols] = first_rows[row_index]
+                storage[base + ncols : base + ncols * 2] = second_rows[row_index]
+                row_index += 1
+    return storage
 
 
 def _sum_rows_arrays(np: Any, candidate: Candidate, seed: int) -> dict[str, Any]:
@@ -2573,6 +2668,7 @@ LOGICAL_ORACLE_SPECS: tuple[LogicalOracleSpec, ...] = (
     LogicalOracleSpec(("flash_attn_ext_f32_f16",), "flash_attn_ext_f32_f16_numpy_logical", {"atol": 0.08, "rtol": 0.02}, _flash_attn_ext_arrays),
     LogicalOracleSpec(("sum_rows_f32",), "sum_rows_f32_numpy", {"atol": 1e-5, "rtol": 1e-5}, _sum_rows_arrays),
     LogicalOracleSpec(("swiglu_f32",), "swiglu_f32_numpy", {"atol": 1e-5, "rtol": 1e-5}, _swiglu_arrays),
+    LogicalOracleSpec(("swiglu_f16",), "swiglu_f16_numpy", {"atol": 1e-3, "rtol": 1e-3}, _swiglu_arrays),
 )
 
 
@@ -2963,26 +3059,40 @@ def _write_pointwise_workbench(candidate: Candidate, linked_source: Path, workbe
 
 def _write_swiglu_workbench(candidate: Candidate, linked_source: Path, workbench_path: Path, fixture_dir: Path) -> tuple[str, dict[str, Any]]:
     ncols, nrows, elems = _dims(candidate)
-    src0_elems = elems if candidate.root_symbol.endswith("_split") else elems * 2
+    f16_family = candidate.family == "swiglu_f16"
+    scalar_type = "i16" if f16_family else "f32"
+    reader = _read_i16 if f16_family else _read_f32
+    if str(candidate.route_id) in {"swiglu_f32_packed_contiguous_4d", "swiglu_f16_packed_contiguous_4d"}:
+        src0_elems = elems * 2
+    else:
+        src0_dims = _swiglu_tensor_dims(candidate, "src0", ncols=ncols)
+        src0_strides = _swiglu_tensor_strides(candidate, "src0", src0_dims)
+        src0_elems = _strided_storage_elements(src0_dims, src0_strides)
     case_name, bench_name = _case_names(candidate)
     lines = [
-        _read_f32(workbench_path, fixture_dir, "src0", src0_elems),
+        reader(workbench_path, fixture_dir, "src0", src0_elems),
     ]
     if candidate.root_symbol.endswith("_split"):
-        lines.append(_read_f32(workbench_path, fixture_dir, "src1", elems))
+        src1_dims = _swiglu_tensor_dims(candidate, "src1", ncols=ncols)
+        src1_strides = _swiglu_tensor_strides(candidate, "src1", src1_dims)
+        src1_elems = _strided_storage_elements(src1_dims, src1_strides)
+        lines.append(reader(workbench_path, fixture_dir, "src1", src1_elems))
         call_args = "%src0, %src1, %dst"
-        call_types = f"tensor<{src0_elems}xf32>, tensor<{elems}xf32>, tensor<{elems}xf32>"
+        call_types = f"tensor<{src0_elems}x{scalar_type}>, tensor<{src1_elems}x{scalar_type}>, tensor<{elems}x{scalar_type}>"
     else:
         call_args = "%src0, %dst"
-        call_types = f"tensor<{src0_elems}xf32>, tensor<{elems}xf32>"
+        call_types = f"tensor<{src0_elems}x{scalar_type}>, tensor<{elems}x{scalar_type}>"
     lines.extend(
         [
-            _read_f32(workbench_path, fixture_dir, "dst_init", elems).replace("%dst_init", "%dst"),
-            _read_f32(workbench_path, fixture_dir, "expected", elems),
+            reader(workbench_path, fixture_dir, "dst_init", elems).replace("%dst_init", "%dst"),
+            reader(workbench_path, fixture_dir, "expected", elems),
             f"  func.call {candidate.root_symbol}({call_args}) : ({call_types})",
-            f"  check.expect.close actual(%dst) expected(%expected) atol(0.0001) rtol(0.0001) nan(same) : tensor<{elems}xf32>",
         ]
     )
+    if f16_family:
+        lines.append(f"  check.expect.equal actual(%dst) expected(%expected) : tensor<{elems}x{scalar_type}>")
+    else:
+        lines.append(f"  check.expect.close actual(%dst) expected(%expected) atol(0.0001) rtol(0.0001) nan(same) : tensor<{elems}x{scalar_type}>")
     return _emit_case(linked_source, workbench_path, case_name, bench_name, "\n".join(lines))
 
 
@@ -3513,6 +3623,11 @@ ORACLE_SPECS: tuple[OracleSpec, ...] = (
     OracleSpec(
         family_ids=("swiglu_f32",),
         generate=_logical_generate(LogicalOracleSpec(("swiglu_f32",), "swiglu_f32_numpy", {"atol": 1e-4, "rtol": 1e-4}, _swiglu_arrays, exact_kernel_abi=True)),
+        write_workbench=_write_swiglu_workbench,
+    ),
+    OracleSpec(
+        family_ids=("swiglu_f16",),
+        generate=_logical_generate(LogicalOracleSpec(("swiglu_f16",), "swiglu_f16_numpy", {"atol": 1e-3, "rtol": 1e-3}, _swiglu_arrays, exact_kernel_abi=True)),
         write_workbench=_write_swiglu_workbench,
     ),
     OracleSpec(
