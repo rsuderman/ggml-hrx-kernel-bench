@@ -156,6 +156,62 @@ def test_tensor_descriptor_rejects_non_iota_permutation_capture() -> None:
     ) is False
 
 
+def test_route_constraints_accept_named_attributes_by_literal_and_range() -> None:
+    route = V2Route(
+        id="attribute_checked_route",
+        family="test_f32",
+        op="TEST",
+        source_id="test_f32",
+        kernel_path="test.loom",
+        root_symbol="@test",
+        export_name="test",
+        tensors={
+            "src0": TensorDescriptor(
+                dtype="F32",
+                dimensions_capture="src0_dimensions",
+                strides_capture="src0_strides",
+            ),
+            "dst": TensorDescriptor(
+                dtype="F32",
+                dimensions_capture="dst_dimensions",
+                strides_capture="dst_strides",
+            ),
+        },
+        values=(),
+        constraints=RouteConstraints(
+            checks=(
+                ConstraintCheck(equals=("src0_dimensions", "dst_dimensions")),
+                ConstraintCheck(name="attribute.mode", value=0, has_value=True),
+                ConstraintCheck(name="attribute.n_dims", min=2, max=128, multiple_of=2),
+                ConstraintCheck(name="attribute.nr23", value=[1, 1], has_value=True),
+            )
+        ),
+        launch={"workgroup_size": [64, 1, 1]},
+        bindings=(),
+    )
+    tensors = {
+        "src0": ConcreteTensor(
+            dtype="F32",
+            dimensions=(
+                ConcreteTensorDimension(name="d0", size=64, stride=1),
+                ConcreteTensorDimension(name="d1", size=2, stride=64),
+            ),
+        ),
+        "dst": ConcreteTensor(
+            dtype="F32",
+            dimensions=(
+                ConcreteTensorDimension(name="d0", size=64, stride=1),
+                ConcreteTensorDimension(name="d1", size=2, stride=64),
+            ),
+        ),
+    }
+
+    assert route_accepts_tensors(route, tensors, {"mode": 0, "n_dims": 64, "nr23": [1, 1]}) is True
+    assert route_accepts_tensors(route, tensors, {"mode": 2, "n_dims": 64, "nr23": [1, 1]}) is False
+    assert route_accepts_tensors(route, tensors, {"mode": 0, "n_dims": 63, "nr23": [1, 1]}) is False
+    assert route_accepts_tensors(route, tensors, {"mode": 0, "n_dims": 64}) is False
+
+
 def test_route_values_can_chain_permutations_and_derive_strides() -> None:
     route = V2Route(
         id="copy_f32_f32_non_contiguous_4d",

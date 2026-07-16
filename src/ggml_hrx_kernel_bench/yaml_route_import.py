@@ -39,23 +39,33 @@ STATIC_SCALAR_ABI_BY_FAMILY: dict[str, tuple[dict[str, Any], ...]] = {
         {"role": "min", "dtype": "f32", "value": -0.45},
         {"role": "max", "dtype": "f32", "value": 0.55},
     ),
-    "soft_max_f32": (
-        {"role": "scale", "dtype": "f32", "value": 0.75},
-    ),
     "rope_f32": (
         {"role": "theta_scale", "dtype": "f32", "value": 0.75},
-        {"role": "freq_scale", "dtype": "f32", "value": 1.1},
-        {"role": "attn_factor", "dtype": "f32", "value": 0.9},
     ),
     "rope_neox_f32": (
         {"role": "theta_scale", "dtype": "f32", "value": 0.75},
-        {"role": "freq_scale", "dtype": "f32", "value": 1.1},
-        {"role": "attn_factor", "dtype": "f32", "value": 0.9},
     ),
 }
 ATTRIBUTE_SCALAR_ABI_BY_FAMILY: dict[str, tuple[dict[str, Any], ...]] = {
     "rms_norm_f32": (
         {"role": "eps", "dtype": "f32", "attribute": "eps"},
+    ),
+    "soft_max_f32": (
+        {"role": "scale", "dtype": "f32", "attribute": "scale", "default": 0.75},
+    ),
+    "rope_f32": (
+        {"role": "freq_scale", "dtype": "f32", "attribute": "freq_scale", "default": 1.1},
+        {"role": "attn_factor", "dtype": "f32", "attribute": "attn_factor", "default": 0.9},
+    ),
+    "rope_neox_f32": (
+        {"role": "freq_scale", "dtype": "f32", "attribute": "freq_scale", "default": 1.1},
+        {"role": "attn_factor", "dtype": "f32", "attribute": "attn_factor", "default": 0.9},
+    ),
+    "flash_attn_ext_f32_f16": (
+        {"role": "scale", "dtype": "f32", "attribute": "scale", "default": 0.08838834764831843},
+    ),
+    "softmax_kqv_f32_f16": (
+        {"role": "scale", "dtype": "f32", "attribute": "scale", "default": 0.75},
     ),
 }
 FIXTURE_BY_FAMILY_ROLE: dict[tuple[str, str], str] = {
@@ -540,12 +550,37 @@ def _shape_binding_defaults(
     return defaults
 
 
+def _shape_binding_attribute_defaults(
+    route: V2Route,
+    attributes: Mapping[str, Any] | None,
+    existing: dict[str, int],
+) -> dict[str, int]:
+    if attributes is None:
+        return {}
+    defaults: dict[str, int] = {}
+    for binding in route.bindings:
+        if binding.source is None or not binding.source.startswith("attribute."):
+            continue
+        if not binding.key.startswith("@shape."):
+            continue
+        shape_key = binding.key.removeprefix("@shape.")
+        if shape_key in existing or shape_key in defaults:
+            continue
+        attribute_key = binding.source.removeprefix("attribute.")
+        value = attributes.get(attribute_key)
+        if isinstance(value, bool) or not isinstance(value, int):
+            continue
+        defaults[shape_key] = int(value)
+    return defaults
+
+
 def _shape_binding_value_defaults(
     route: V2Route,
     tensors: dict[str, ConcreteTensor],
     existing: dict[str, int],
+    attributes: Mapping[str, Any] | None = None,
 ) -> dict[str, int]:
-    values = route_values(route, tensors)
+    values = route_values(route, tensors, attributes)
     if values is None:
         return {}
     defaults: dict[str, int] = {}
@@ -593,9 +628,14 @@ def _resolve_shape_binding_default(
     return None
 
 
-def _shape_for_matched_route(route: V2Route, tensors: dict[str, ConcreteTensor]) -> EncodedRouteShape:
+def _shape_for_matched_route(
+    route: V2Route,
+    tensors: dict[str, ConcreteTensor],
+    attributes: Mapping[str, Any] | None = None,
+) -> EncodedRouteShape:
     encoded = dict(encode_route_shape(route, tensors).items)
-    encoded.update(_shape_binding_value_defaults(route, tensors, encoded))
+    encoded.update(_shape_binding_value_defaults(route, tensors, encoded, attributes))
+    encoded.update(_shape_binding_attribute_defaults(route, attributes, encoded))
     encoded.update(_shape_binding_defaults(route, tensors, encoded))
     return EncodedRouteShape(items=tuple(encoded.items()))
 
@@ -660,7 +700,7 @@ def _match_case(case: YamlCase, routes: list[Any]) -> dict[str, Any]:
         if required_tensor_names != tensor_names or not route_accepts_attributes(route, case.attributes):
             continue
         route_tensors = _route_tensors_for_case(route, case)
-        if route_tensors is None or not route_accepts_tensors(route, route_tensors):
+        if route_tensors is None or not route_accepts_tensors(route, route_tensors, case.attributes):
             continue
         candidate_matches.append(route)
         route_tensors_by_id[route.id] = route_tensors
@@ -834,9 +874,10 @@ def _attribute_scalar_values_for_route(route: V2Route, attributes: Mapping[str, 
     values: dict[str, Any] = {}
     for scalar in ATTRIBUTE_SCALAR_ABI_BY_FAMILY.get(route.family, ()):
         attribute_name = str(scalar["attribute"])
-        if attribute_name not in attributes:
-            continue
-        values[attribute_name] = attributes[attribute_name]
+        if attribute_name in attributes:
+            values[attribute_name] = attributes[attribute_name]
+        elif "default" in scalar:
+            values[attribute_name] = scalar["default"]
     return values
 
 
@@ -968,7 +1009,7 @@ def _emit_compact_configs(
         route_tensors = _route_tensors_for_case(route, case)
         if route_tensors is None:
             raise RuntimeError(f"matched route {route.id!r} could not materialize route tensors for {case.source_id}")
-        shape = _shape_for_matched_route(route, route_tensors)
+        shape = _shape_for_matched_route(route, route_tensors, case.attributes)
         params_key = tuple(shape.params)
         values_key = tuple(shape.values)
         attribute_key = _attribute_scalar_key(route, case.attributes)

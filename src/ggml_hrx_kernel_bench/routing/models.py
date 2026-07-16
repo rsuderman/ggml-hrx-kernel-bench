@@ -20,7 +20,7 @@ class Candidate:
     route_id: str | None
     route: dict[str, Any] | None
     shape: dict[str, int]
-    values: dict[str, int | str]
+    values: dict[str, int | float | str]
     config: dict[str, str]
     dispatch: dict[str, Any]
     supports: dict[str, Any]

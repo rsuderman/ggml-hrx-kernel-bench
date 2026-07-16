@@ -8,11 +8,21 @@
     "export_name": "hrx2_flash_attn_ext_f32_f16_tiled_decode_d128_h32_hkv8_kv512_8192_t1"
   },
   "attributes": {
-    "precision": 10,
-    "sinks": 0,
-    "scale": 0.08838834764831843,
-    "logit_softcap_enabled": false,
-    "max_bias_enabled": false
+    "logit_softcap_enabled": {
+      "type": "bool"
+    },
+    "max_bias_enabled": {
+      "type": "bool"
+    },
+    "precision": {
+      "type": "i32"
+    },
+    "scale": {
+      "type": "f32"
+    },
+    "sinks": {
+      "type": "i32"
+    }
   },
   "tensors": {
     "src0": {
@@ -163,6 +173,22 @@
     {
       "name": "dst_dimensions",
       "length": 4
+    },
+    {
+      "name": "attribute.precision",
+      "value": 10
+    },
+    {
+      "name": "attribute.sinks",
+      "value": 0
+    },
+    {
+      "name": "attribute.logit_softcap_enabled",
+      "value": false
+    },
+    {
+      "name": "attribute.max_bias_enabled",
+      "value": false
     },
     {
       "name": "head_dim",

@@ -7,6 +7,23 @@
     "root_symbol": "@hrx2_soft_max_f32",
     "export_name": "hrx2_soft_max_f32"
   },
+  "attributes": {
+    "mask": {
+      "type": "i32"
+    },
+    "max_bias": {
+      "type": "f32"
+    },
+    "nr23": {
+      "type": "i32[]"
+    },
+    "scale": {
+      "type": "f32"
+    },
+    "sinks": {
+      "type": "i32"
+    }
+  },
   "tensors": {
     "src0": {
       "dtype": "F32",

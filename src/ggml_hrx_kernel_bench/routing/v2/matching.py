@@ -23,7 +23,7 @@ from .models import (
 )
 
 
-CapturedValue = tuple[int, ...] | int
+CapturedValue = Any
 
 _ROUTE_SELECTOR_ENV_VAR = "GGML_HRX_V2_ROUTE_SELECTOR"
 _ROUTE_SELECTOR_TIMEOUT_SECONDS = 10.0
@@ -83,16 +83,42 @@ def _attribute_values_equal(lhs: Any, rhs: Any) -> bool:
     return lhs == rhs
 
 
+def _is_attribute_declaration(value: Any) -> bool:
+    return isinstance(value, Mapping) and set(value) == {"type"} and isinstance(value["type"], str)
+
+
+def _value_matches_attribute_type(value: Any, declared_type: str) -> bool:
+    if declared_type == "bool":
+        return isinstance(value, bool)
+    if declared_type in {"i32", "i64"}:
+        return isinstance(value, int) and not isinstance(value, bool)
+    if declared_type in {"f32", "f64"}:
+        return isinstance(value, int | float) and not isinstance(value, bool)
+    if declared_type == "string":
+        return isinstance(value, str)
+    if not declared_type.endswith("[]"):
+        return False
+    if not isinstance(value, list | tuple):
+        return False
+    element_type = declared_type[:-2]
+    return all(_value_matches_attribute_type(element, element_type) for element in value)
+
+
 def route_accepts_attributes(route: V2Route, attributes: Mapping[str, Any]) -> bool:
     for key, expected in route.attributes.items():
         if key not in attributes:
             return False
+        if _is_attribute_declaration(expected):
+            declared_type = str(expected["type"])
+            if not _value_matches_attribute_type(attributes[key], declared_type):
+                return False
+            continue
         if not _attribute_values_equal(expected, attributes[key]):
             return False
     return True
 
 
-def _bounds_accept(lower: int | None, upper: int | None, value: int) -> bool:
+def _bounds_accept(lower: float | None, upper: float | None, value: float) -> bool:
     if lower is not None and value < lower:
         return False
     if upper is not None and value > upper:
@@ -100,10 +126,12 @@ def _bounds_accept(lower: int | None, upper: int | None, value: int) -> bool:
     return True
 
 
-def _multiple_of_accept(divisor: int | None, value: int) -> bool:
+def _multiple_of_accept(divisor: int | None, value: float) -> bool:
     if divisor is None:
         return True
-    return value % divisor == 0
+    if not float(value).is_integer():
+        return False
+    return int(value) % divisor == 0
 
 
 def _product(dimensions: tuple[int, ...]) -> int:
@@ -111,6 +139,30 @@ def _product(dimensions: tuple[int, ...]) -> int:
     for size in dimensions:
         total *= int(size)
     return total
+
+
+def _attribute_capture_value(value: Any) -> Any:
+    if isinstance(value, list):
+        return tuple(_attribute_capture_value(current) for current in value)
+    if isinstance(value, tuple):
+        return tuple(_attribute_capture_value(current) for current in value)
+    if isinstance(value, Mapping):
+        return {str(key): _attribute_capture_value(current) for key, current in value.items()}
+    return value
+
+
+def attribute_captures(attributes: Mapping[str, Any]) -> dict[str, CapturedValue]:
+    captures: dict[str, CapturedValue] = {}
+
+    def visit(prefix: str, value: Any) -> None:
+        captures[prefix] = _attribute_capture_value(value)
+        if isinstance(value, Mapping):
+            for key, inner in value.items():
+                visit(f"{prefix}.{key}", inner)
+
+    for key, value in attributes.items():
+        visit(f"attribute.{key}", value)
+    return captures
 
 
 def _rank_accepts(
@@ -240,12 +292,35 @@ def _resolve_values(
     return resolved
 
 
-def _constraint_accepts(check: ConstraintCheck, values: Mapping[str, CapturedValue]) -> bool:
+def _numeric_constraint_value(value: Any) -> float | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int | float):
+        return float(value)
+    return None
+
+
+def _constraint_accepts(
+    check: ConstraintCheck,
+    values: Mapping[str, CapturedValue],
+    *,
+    ignore_missing_attribute_constraints: bool = False,
+) -> bool:
     if check.equals:
         first = values.get(check.equals[0])
         if first is None:
+            if ignore_missing_attribute_constraints and check.equals[0].startswith("attribute."):
+                return True
             return False
-        return all(values.get(name) == first for name in check.equals[1:])
+        for name in check.equals[1:]:
+            current = values.get(name)
+            if current is None:
+                if ignore_missing_attribute_constraints and name.startswith("attribute."):
+                    continue
+                return False
+            if current != first:
+                return False
+        return True
     if check.divides:
         first = values.get(check.divides[0])
         if not isinstance(first, tuple):
@@ -262,7 +337,18 @@ def _constraint_accepts(check: ConstraintCheck, values: Mapping[str, CapturedVal
         return False
     captured = values.get(check.name)
     if captured is None:
+        if ignore_missing_attribute_constraints and check.name.startswith("attribute."):
+            return True
         return False
+    if check.has_value:
+        current = captured
+        if check.index is not None:
+            if not isinstance(captured, list | tuple):
+                return False
+            if check.index < 0 or check.index >= len(captured):
+                return False
+            current = captured[check.index]
+        return _attribute_values_equal(check.value, current)
     if check.iota:
         if not isinstance(captured, tuple):
             return False
@@ -280,16 +366,28 @@ def _constraint_accepts(check: ConstraintCheck, values: Mapping[str, CapturedVal
             return False
         if check.index < 0 or check.index >= len(captured):
             return False
-        value = int(captured[check.index])
-        return _bounds_accept(check.min, check.max, value) and _multiple_of_accept(check.multiple_of, value)
+        value = _numeric_constraint_value(captured[check.index])
+        return value is not None and _bounds_accept(check.min, check.max, value) and _multiple_of_accept(check.multiple_of, value)
     if isinstance(captured, tuple):
         return False
-    value = int(captured)
-    return _bounds_accept(check.min, check.max, value) and _multiple_of_accept(check.multiple_of, value)
+    value = _numeric_constraint_value(captured)
+    return value is not None and _bounds_accept(check.min, check.max, value) and _multiple_of_accept(check.multiple_of, value)
 
 
-def constraints_accept(route_constraints: RouteConstraints, values: Mapping[str, CapturedValue]) -> bool:
-    return all(_constraint_accepts(check, values) for check in route_constraints.checks)
+def constraints_accept(
+    route_constraints: RouteConstraints,
+    values: Mapping[str, CapturedValue],
+    *,
+    ignore_missing_attribute_constraints: bool = False,
+) -> bool:
+    return all(
+        _constraint_accepts(
+            check,
+            values,
+            ignore_missing_attribute_constraints=ignore_missing_attribute_constraints,
+        )
+        for check in route_constraints.checks
+    )
 
 
 def tensor_accepts_descriptor(
@@ -324,7 +422,7 @@ def route_captures(
     return captures
 
 
-def route_accepts_tensors(route: V2Route, tensors: Mapping[str, ConcreteTensor]) -> bool:
+def _selector_accepts_tensors(route: V2Route, tensors: Mapping[str, ConcreteTensor]) -> bool:
     selector_override = os.environ.get(_ROUTE_SELECTOR_ENV_VAR)
     selector_path = Path(selector_override) if selector_override else _DEFAULT_ROUTE_SELECTOR
 
@@ -388,14 +486,44 @@ def route_accepts_tensors(route: V2Route, tensors: Mapping[str, ConcreteTensor])
     )
 
 
-def route_values(route: V2Route, tensors: Mapping[str, ConcreteTensor]) -> dict[str, CapturedValue] | None:
+def route_accepts_tensors(
+    route: V2Route,
+    tensors: Mapping[str, ConcreteTensor],
+    attributes: Mapping[str, Any] | None = None,
+) -> bool:
+    if attributes is None:
+        return _selector_accepts_tensors(route, tensors)
+
+    captures = route_captures(route, tensors)
+    if captures is None:
+        return False
+    resolved = _resolve_values(route.values, captures)
+    if resolved is None:
+        return False
+    values = {**captures, **resolved}
+    values.update(attribute_captures(attributes))
+    return constraints_accept(
+        route.constraints,
+        values,
+        ignore_missing_attribute_constraints=False,
+    )
+
+
+def route_values(
+    route: V2Route,
+    tensors: Mapping[str, ConcreteTensor],
+    attributes: Mapping[str, Any] | None = None,
+) -> dict[str, CapturedValue] | None:
     captures = route_captures(route, tensors)
     if captures is None:
         return None
     resolved = _resolve_values(route.values, captures)
     if resolved is None:
         return None
-    return {**captures, **resolved}
+    values = {**captures, **resolved}
+    if attributes is not None:
+        values.update(attribute_captures(attributes))
+    return values
 
 
 def shape_from_tensors(tensors: Mapping[str, ConcreteTensor]) -> dict[str, int]:
@@ -640,6 +768,15 @@ def value_from_route_source(
             return None
         return int(value[index])
     return None
+
+
+def value_from_attribute_source(
+    source: str,
+    attributes: Mapping[str, Any],
+) -> int | float | str | bool | tuple[Any, ...] | None:
+    if not source.startswith("attribute."):
+        return None
+    return attribute_captures(attributes).get(source)
 
 
 def _ceil_div(lhs: int, rhs: int) -> int:

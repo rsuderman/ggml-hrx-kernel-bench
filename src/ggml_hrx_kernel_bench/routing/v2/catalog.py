@@ -370,6 +370,14 @@ def _parse_divides_constraint(path: Path, route_index: Any, raw: Any) -> Constra
     return ConstraintCheck(divides=tuple(str(name) for name in names))
 
 
+def _parse_numeric_bound(path: Path, route_index: Any, field: str, raw: Any) -> int | float:
+    if isinstance(raw, bool) or not isinstance(raw, int | float):
+        raise RuntimeError(f"v2 route {route_index} constraint {field} must be numeric: {path}")
+    if isinstance(raw, int):
+        return int(raw)
+    return float(raw)
+
+
 def _parse_capture_constraint(path: Path, route_index: Any, raw: Any) -> ConstraintCheck:
     name = str(raw.get("name") or "").strip()
     if not name:
@@ -382,6 +390,19 @@ def _parse_capture_constraint(path: Path, route_index: Any, raw: Any) -> Constra
     upper = raw.get("max")
     multiple_of = raw.get("multiple_of")
     iota = raw.get("iota")
+    has_value = "value" in raw
+    value = raw.get("value")
+    if has_value:
+        if length is not None or rank_min is not None or rank_max is not None or lower is not None or upper is not None or multiple_of is not None or iota is not None:
+            raise RuntimeError(
+                f"v2 route {route_index} literal value constraints cannot mix length/rank/min/max/multiple_of/iota fields: {path}"
+            )
+        return ConstraintCheck(
+            name=name,
+            index=None if index is None else int(index),
+            value=value,
+            has_value=True,
+        )
     if rank_min is not None or rank_max is not None:
         if length is not None or index is not None or lower is not None or upper is not None or multiple_of is not None or iota is not None:
             raise RuntimeError(
@@ -421,8 +442,8 @@ def _parse_capture_constraint(path: Path, route_index: Any, raw: Any) -> Constra
     return ConstraintCheck(
         name=name,
         index=None if index is None else int(index),
-        min=None if lower is None else int(lower),
-        max=None if upper is None else int(upper),
+        min=None if lower is None else _parse_numeric_bound(path, route_index, "min", lower),
+        max=None if upper is None else _parse_numeric_bound(path, route_index, "max", upper),
         multiple_of=None if multiple_of is None else int(multiple_of),
     )
 
@@ -451,7 +472,37 @@ def _parse_attributes(path: Path, route_index: Any, raw: Any) -> dict[str, Any]:
         return {}
     if not isinstance(raw, dict):
         raise RuntimeError(f"v2 route {route_index} attributes must be a JSON object: {path}")
-    return {str(key): value for key, value in raw.items()}
+    parsed: dict[str, Any] = {}
+    supported_types = {
+        "bool",
+        "f32",
+        "f32[]",
+        "f64",
+        "f64[]",
+        "i32",
+        "i32[]",
+        "i64",
+        "i64[]",
+        "string",
+        "string[]",
+    }
+    for key, value in raw.items():
+        name = str(key)
+        if not isinstance(value, dict):
+            parsed[name] = value
+            continue
+        extra_keys = set(value) - {"type"}
+        if extra_keys:
+            raise RuntimeError(
+                f"v2 route {route_index} attribute {name!r} has unsupported keys {sorted(extra_keys)!r}: {path}"
+            )
+        declared_type = _parse_non_empty_string(path, f"v2 route {route_index} attribute {name!r}.type", value.get("type"))
+        if declared_type not in supported_types:
+            raise RuntimeError(
+                f"v2 route {route_index} attribute {name!r}.type has unsupported value {declared_type!r}: {path}"
+            )
+        parsed[name] = {"type": declared_type}
+    return parsed
 
 
 def _parse_non_empty_string(path: Path, context: str, raw: Any) -> str:

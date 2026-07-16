@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 from ..models import Candidate, CandidateQuery
 from .layout import encode_route_shape
@@ -9,6 +10,7 @@ from .matching import (
     materialize_route_tensors,
     route_dispatch,
     route_values,
+    value_from_attribute_source,
     value_from_route_source,
     value_from_tensor_source,
 )
@@ -22,10 +24,12 @@ def build_config(
     route: V2Route,
     shape: dict[str, int],
     tensors: dict[str, ConcreteTensor],
-    resolved_values: dict[str, int | tuple[int, ...]],
-) -> tuple[dict[str, str], dict[str, int | str], list[str]]:
+    resolved_values: dict[str, Any],
+    attributes: dict[str, object] | None = None,
+) -> tuple[dict[str, str], dict[str, int | float | str], list[str]]:
     config: dict[str, str] = {}
-    values: dict[str, int | str] = dict(shape)
+    values: dict[str, int | float | str] = dict(shape)
+    route_attributes = route.attributes if attributes is None else attributes
     missing: list[str] = []
     for binding in route.bindings:
         key = str(binding.key)
@@ -33,10 +37,19 @@ def build_config(
             source = str(binding.source)
             value = value_from_route_source(source, resolved_values)
             if value is None:
+                value = shape.get(source)
+            if value is None and key.startswith("@shape."):
+                value = shape.get(key.removeprefix("@shape."))
+            if value is None:
                 value = value_from_tensor_source(source, tensors)
+            if value is None:
+                value = value_from_attribute_source(source, route_attributes)
             if value is None:
                 value = resolve_shape_source(source, shape)
             if value is None:
+                missing.append(source)
+                continue
+            if isinstance(value, bool) or not isinstance(value, int | float | str):
                 missing.append(source)
                 continue
             config[key] = str(value)

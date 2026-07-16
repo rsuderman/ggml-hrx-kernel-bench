@@ -38,12 +38,14 @@ class ConstraintCheck:
     rank_min: int | None = None
     rank_max: int | None = None
     index: int | None = None
-    min: int | None = None
-    max: int | None = None
+    min: int | float | None = None
+    max: int | float | None = None
     multiple_of: int | None = None
     iota: bool = False
     equals: tuple[str, ...] = ()
     divides: tuple[str, ...] = ()
+    value: Any = None
+    has_value: bool = False
 
 
 @dataclass(frozen=True)

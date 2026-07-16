@@ -8,13 +8,27 @@
     "export_name": "hrx2_rope_normal_f32"
   },
   "attributes": {
-    "attn_factor": 1.0,
-    "ext_factor": 0.0,
-    "has_freq_factors": 0,
-    "freq_scale": 1.0,
-    "mode": 0,
-    "n_ctx": 512,
-    "n_dims": 128
+    "attn_factor": {
+      "type": "f32"
+    },
+    "ext_factor": {
+      "type": "f32"
+    },
+    "freq_scale": {
+      "type": "f32"
+    },
+    "has_freq_factors": {
+      "type": "i32"
+    },
+    "mode": {
+      "type": "i32"
+    },
+    "n_ctx": {
+      "type": "i32"
+    },
+    "n_dims": {
+      "type": "i32"
+    }
   },
   "tensors": {
     "src0": {
@@ -149,20 +163,21 @@
     {
       "name": "dst_dimensions",
       "index": 0,
-      "min": 128,
-      "max": 128
+      "min": 2,
+      "max": 4096,
+      "multiple_of": 2
     },
     {
       "name": "dst_dimensions",
       "index": 1,
-      "min": 32,
-      "max": 64
+      "min": 1,
+      "max": 256
     },
     {
       "name": "dst_dimensions",
       "index": 2,
-      "min": 2,
-      "max": 2
+      "min": 1,
+      "max": 4096
     },
     {
       "name": "dst_dimensions",
@@ -185,14 +200,32 @@
     {
       "name": "src1_dimensions",
       "index": 2,
-      "min": 2,
-      "max": 2
+      "min": 1,
+      "max": 4096
     },
     {
       "name": "src1_dimensions",
       "index": 3,
       "min": 1,
       "max": 1
+    },
+    {
+      "name": "attribute.mode",
+      "value": 0
+    },
+    {
+      "name": "attribute.ext_factor",
+      "value": 0.0
+    },
+    {
+      "name": "attribute.has_freq_factors",
+      "value": 0
+    },
+    {
+      "name": "attribute.n_dims",
+      "min": 2,
+      "max": 4096,
+      "multiple_of": 2
     },
     {
       "equals": [
@@ -228,7 +261,7 @@
       },
       {
         "key": "@shape.rope.n_dims",
-        "source": "shape.rope.n_dims"
+        "source": "attribute.n_dims"
       },
       {
         "key": "@shape.rope.nheads",

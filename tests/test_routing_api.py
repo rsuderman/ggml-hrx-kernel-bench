@@ -1471,7 +1471,7 @@ def test_yaml_route_import_matches_unmasked_rank4_soft_max_descriptor(tmp_path: 
             "role": "scale",
             "kind": "scalar",
             "dtype": "f32",
-            "value": 0.75,
+            "value": 0.1,
         },
         {
             "position": 1,
@@ -1498,7 +1498,7 @@ def test_yaml_route_import_matches_unmasked_rank4_soft_max_descriptor(tmp_path: 
             "role": "scale",
             "kind": "scalar",
             "dtype": "f32",
-            "value": 0.75,
+            "value": 0.1,
         },
         {
             "position": 1,
@@ -1720,14 +1720,14 @@ def test_yaml_route_import_matches_default_rank4_rope_descriptor(tmp_path: Path)
             "role": "freq_scale",
             "kind": "scalar",
             "dtype": "f32",
-            "value": 1.1,
+            "value": 1.0,
         },
         {
             "position": 2,
             "role": "attn_factor",
             "kind": "scalar",
             "dtype": "f32",
-            "value": 0.9,
+            "value": 1.0,
         },
         {
             "position": 3,

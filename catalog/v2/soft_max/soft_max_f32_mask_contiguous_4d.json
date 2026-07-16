@@ -8,13 +8,21 @@
     "export_name": "hrx2_soft_max_f32_mask"
   },
   "attributes": {
-    "mask": 1,
-    "sinks": 0,
-    "max_bias": 0.0,
-    "nr23": [
-      1,
-      1
-    ]
+    "mask": {
+      "type": "i32"
+    },
+    "max_bias": {
+      "type": "f32"
+    },
+    "nr23": {
+      "type": "i32[]"
+    },
+    "scale": {
+      "type": "f32"
+    },
+    "sinks": {
+      "type": "i32"
+    }
   },
   "tensors": {
     "src0": {
@@ -98,6 +106,25 @@
       "name": "nrows",
       "min": 1,
       "max": 1048576
+    },
+    {
+      "name": "attribute.mask",
+      "value": 1
+    },
+    {
+      "name": "attribute.sinks",
+      "value": 0
+    },
+    {
+      "name": "attribute.max_bias",
+      "value": 0.0
+    },
+    {
+      "name": "attribute.nr23",
+      "value": [
+        1,
+        1
+      ]
     },
     {
       "equals": [

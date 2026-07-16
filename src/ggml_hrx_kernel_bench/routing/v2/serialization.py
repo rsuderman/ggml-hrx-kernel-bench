@@ -90,6 +90,19 @@ def tensor_constraints_json(route: V2Route) -> list[dict[str, Any]]:
         if check.divides:
             payload.append({"divides": list(check.divides)})
             continue
+        if check.has_value:
+            payload.append(
+                {
+                    key: value
+                    for key, value in (
+                        ("name", check.name),
+                        ("index", check.index),
+                        ("value", check.value),
+                    )
+                    if value is not None
+                }
+            )
+            continue
         payload.append(
             {
                 key: value

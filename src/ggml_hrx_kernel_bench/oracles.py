@@ -1677,9 +1677,20 @@ def _sum_rows_arrays(np: Any, candidate: Candidate, seed: int) -> dict[str, Any]
     return {"arrays": {"src0": src.reshape(nrows * ncols), "expected": expected}}
 
 
+def _candidate_f32_value(candidate: Candidate, name: str, default: float) -> float:
+    value = candidate.values.get(name)
+    if value is None:
+        return float(default)
+    return float(value)
+
+
+def _candidate_f32_literal(candidate: Candidate, name: str, default: float) -> str:
+    return format(_candidate_f32_value(candidate, name, default), ".17g")
+
+
 def _softmax_arrays(np: Any, candidate: Candidate, seed: int) -> dict[str, Any]:
     ncols, nrows, elems = _dims(candidate)
-    scale = np.float32(0.75)
+    scale = np.float32(_candidate_f32_value(candidate, "scale", 0.75))
     src = f32_pattern(np, (nrows, ncols), seed=seed)
     arrays: dict[str, Any] = {
         "src0": src.reshape(elems),
@@ -2171,7 +2182,7 @@ def _rope_arrays(np: Any, candidate: Candidate, seed: int) -> dict[str, Any]:
         if src0_dims is None or dst_dims is None or idx_dims is None:
             raise ValueError("rope_set_rows_f32 oracle requires encoded src0, src1, and dst tensor dimensions")
         ncols = int(candidate.values.get("shape.rope.ncols") or src0_dims[0])
-        n_dims = int(candidate.values.get("shape.rope.n_dims") or ncols)
+        n_dims = int(candidate.values.get("shape.rope.n_dims") or candidate.values.get("attribute.n_dims") or ncols)
         nheads = int(candidate.values.get("shape.rope.nheads") or src0_dims[1])
         ntokens = int(candidate.values.get("shape.rope.ntokens") or src0_dims[2])
         src_elems = src0_dims[0] * src0_dims[1] * src0_dims[2] * src0_dims[3]
@@ -2186,9 +2197,9 @@ def _rope_arrays(np: Any, candidate: Candidate, seed: int) -> dict[str, Any]:
         half_dims = max(n_dims // 2, 1)
         freq = (np.arange(half_dims, dtype=np.float32) * np.float32(0.125) + np.float32(1.0)).astype(np.float32)
         indices = (np.arange(idx_elems, dtype=np.int64) + np.int64(1)) % np.int64(dst_dims[1])
-        theta_scale = np.float32(0.75)
-        freq_scale = np.float32(1.1)
-        attn_factor = np.float32(0.9)
+        theta_scale = np.float32(_candidate_f32_value(candidate, "theta_scale", 0.75))
+        freq_scale = np.float32(_candidate_f32_value(candidate, "freq_scale", 1.1))
+        attn_factor = np.float32(_candidate_f32_value(candidate, "attn_factor", 0.9))
         src_view = src.reshape(src0_dims[3], src0_dims[2], src0_dims[1], src0_dims[0])
         dst_init = f16_pattern(np, (dst_elems,), seed=seed + 2, scale=0.25).reshape(dst_dims[3], dst_dims[2], dst_dims[1], dst_dims[0])
         expected = dst_init.copy()
@@ -2249,7 +2260,7 @@ def _rope_arrays(np: Any, candidate: Candidate, seed: int) -> dict[str, Any]:
         }
 
     ncols = int(candidate.values.get("shape.rope.ncols") or candidate.shape.get("ncols", 1))
-    n_dims = int(candidate.values.get("shape.rope.n_dims") or candidate.shape.get("n_dims", ncols))
+    n_dims = int(candidate.values.get("shape.rope.n_dims") or candidate.values.get("attribute.n_dims") or candidate.shape.get("n_dims", ncols))
     nheads = int(candidate.values.get("shape.rope.nheads") or candidate.shape.get("rows", 1))
     ntokens = int(candidate.values.get("shape.rope.ntokens") or candidate.shape.get("cols", 1))
     src_head_stride = int(candidate.values.get("shape.rope.src0_head_stride") or ncols)
@@ -2267,10 +2278,10 @@ def _rope_arrays(np: Any, candidate: Candidate, seed: int) -> dict[str, Any]:
         positions[token * pos_token_stride] = token + 1
     half_cols = ncols // 2
     half_dims = n_dims // 2
-    theta_scale = np.float32(0.75)
-    freq_scale = np.float32(1.1)
-    attn_factor = np.float32(0.9)
-    output_scale = np.float32(0.5)
+    theta_scale = np.float32(_candidate_f32_value(candidate, "theta_scale", 0.75))
+    freq_scale = np.float32(_candidate_f32_value(candidate, "freq_scale", 1.1))
+    attn_factor = np.float32(_candidate_f32_value(candidate, "attn_factor", 0.9))
+    output_scale = np.float32(_candidate_f32_value(candidate, "output_scale", 0.5))
     has_freq = "freq" in candidate.root_symbol
     freq = (np.arange(max(half_dims, 1), dtype=np.float32) * np.float32(0.125) + np.float32(1.0)).astype(np.float32)
     neox = "neox" in candidate.root_symbol
@@ -2358,7 +2369,7 @@ def _rope_arrays(np: Any, candidate: Candidate, seed: int) -> dict[str, Any]:
 
 
 def _softmax_kqv_arrays(np: Any, candidate: Candidate, seed: int) -> dict[str, Any]:
-    scale = np.float32(0.75)
+    scale = np.float32(_candidate_f32_value(candidate, "scale", 0.75))
     k, rows, cols = _matmul_dims(candidate)
     nheads_kv = int(candidate.shape.get("nheads_kv", 8))
     if nheads_kv <= 0:
@@ -2434,7 +2445,7 @@ def _flash_attn_ext_arrays(np: Any, candidate: Candidate, seed: int) -> dict[str
     v = src2_buffer.reshape(src2_dims, order="F").astype(np.float32)
     mask = src3_buffer.reshape(src3_dims, order="F").astype(np.float32)
     out = expected.reshape(dst_dims, order="F")
-    scale = np.float32(1.0 / math.sqrt(float(head_dim)))
+    scale = np.float32(_candidate_f32_value(candidate, "scale", 1.0 / math.sqrt(float(head_dim))))
     heads_per_kv = heads // kv_heads
     for token in range(tokens):
         mask_for_token = mask[:, token, 0, 0]
@@ -3018,7 +3029,7 @@ def _write_softmax_workbench(candidate: Candidate, linked_source: Path, workbenc
     ncols, nrows, elems = _dims(candidate)
     case_name, bench_name = _case_names(candidate)
     lines = [
-        "  %scale = check.literal value(0.75) : f32",
+        f"  %scale = check.literal value({_candidate_f32_literal(candidate, 'scale', 0.75)}) : f32",
         _read_f32(workbench_path, fixture_dir, "src0", elems),
     ]
     if "mask" in candidate.root_symbol:
@@ -3200,7 +3211,7 @@ def _write_softmax_kqv_workbench(
     dst_elems = rows * cols
     case_name, bench_name = _case_names(candidate)
     lines = [
-        "  %scale = check.literal value(0.75) : f32",
+        f"  %scale = check.literal value({_candidate_f32_literal(candidate, 'scale', 0.75)}) : f32",
         _read_f32(workbench_path, fixture_dir, "kq", src0_elems),
         _read_f32(workbench_path, fixture_dir, "mask", mask_elems),
         _read_f16(workbench_path, fixture_dir, "v", src1_elems),
@@ -3227,7 +3238,10 @@ def _write_rope_workbench(candidate: Candidate, linked_source: Path, workbench_p
         idx_elems = idx_dims[0] * idx_dims[1] * idx_dims[2] * idx_dims[3]
         ntokens = int(candidate.values.get("shape.rope.ntokens") or src0_dims[2])
         pos_elems = int(candidate.values.get("shape.rope.pos_token_stride") or 1) * ntokens
-        freq_elems = max(int(candidate.values.get("shape.rope.n_dims") or src0_dims[0]) // 2, 1)
+        freq_elems = max(int(candidate.values.get("shape.rope.n_dims") or candidate.values.get("attribute.n_dims") or src0_dims[0]) // 2, 1)
+        theta_scale = _candidate_f32_literal(candidate, "theta_scale", 0.75)
+        freq_scale = _candidate_f32_literal(candidate, "freq_scale", 1.1)
+        attn_factor = _candidate_f32_literal(candidate, "attn_factor", 0.9)
         case_name, bench_name = _case_names(candidate)
         unpack_symbol = f"@hrx2_test_unpack_f16_to_f32_{candidate.id}"
         suffix = f"""
@@ -3265,9 +3279,9 @@ kernel.def export("hrx2_test_unpack_f16_to_f32_{candidate.id}") {unpack_symbol}(
 }}
 
 check.case public {case_name} {{
-  %theta_scale = check.literal value(0.75) : f32
-  %freq_scale = check.literal value(1.1) : f32
-  %attn_factor = check.literal value(0.9) : f32
+  %theta_scale = check.literal value({theta_scale}) : f32
+  %freq_scale = check.literal value({freq_scale}) : f32
+  %attn_factor = check.literal value({attn_factor}) : f32
 {_read_f32(workbench_path, fixture_dir, "src0", src0_elems)}
 {_read_i32(workbench_path, fixture_dir, "positions", pos_elems).replace("%positions", "%pos")}
 {_read_f32(workbench_path, fixture_dir, "freq", freq_elems)}
@@ -3286,7 +3300,7 @@ check.benchmark<{case_name}> {bench_name}
         _source_plus_case(linked_source, workbench_path, suffix)
         return bench_name, {"status": "ok", "workbench_path": str(workbench_path)}
     ncols = int(candidate.values.get("shape.rope.ncols") or candidate.shape.get("ncols", 1))
-    n_dims = int(candidate.values.get("shape.rope.n_dims") or candidate.shape.get("n_dims", ncols))
+    n_dims = int(candidate.values.get("shape.rope.n_dims") or candidate.values.get("attribute.n_dims") or candidate.shape.get("n_dims", ncols))
     nheads = int(candidate.values.get("shape.rope.nheads") or candidate.shape.get("rows", 1))
     ntokens = int(candidate.values.get("shape.rope.ntokens") or candidate.shape.get("cols", 1))
     src_token_stride = int(candidate.values.get("shape.rope.src0_token_stride") or (ncols * nheads))
@@ -3300,12 +3314,12 @@ check.benchmark<{case_name}> {bench_name}
     scale_output = "scale" in candidate.root_symbol
     case_name, bench_name = _case_names(candidate)
     lines = [
-        "  %theta_scale = check.literal value(0.75) : f32",
-        "  %freq_scale = check.literal value(1.1) : f32",
-        "  %attn_factor = check.literal value(0.9) : f32",
+        f"  %theta_scale = check.literal value({_candidate_f32_literal(candidate, 'theta_scale', 0.75)}) : f32",
+        f"  %freq_scale = check.literal value({_candidate_f32_literal(candidate, 'freq_scale', 1.1)}) : f32",
+        f"  %attn_factor = check.literal value({_candidate_f32_literal(candidate, 'attn_factor', 0.9)}) : f32",
     ]
     if scale_output:
-        lines.append("  %output_scale = check.literal value(0.5) : f32")
+        lines.append(f"  %output_scale = check.literal value({_candidate_f32_literal(candidate, 'output_scale', 0.5)}) : f32")
     lines.extend(
         [
             _read_f32(workbench_path, fixture_dir, "src0", src_elems),

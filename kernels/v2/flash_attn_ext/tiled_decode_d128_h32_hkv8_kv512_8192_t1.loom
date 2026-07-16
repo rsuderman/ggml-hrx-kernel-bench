@@ -12,7 +12,7 @@ kernel.def target(@hrx2_gfx1100_wave64) export("hrx2_flash_attn_ext_f32_f16_tile
   %heads = config.get @shape.flash_attn_ext.heads : index
   %wg = config.get @tuning.flash_attn_ext.workgroup_size : index
   kernel.launch.config workgroups(%heads, %head_dim, %one) workgroup_size(%wg, %one, %one) : index
-} launch(%q: buffer, %kbuf: buffer, %vbuf: buffer, %mask: buffer, %dst: buffer) {
+} launch(%scale: f32, %q: buffer, %kbuf: buffer, %vbuf: buffer, %mask: buffer, %dst: buffer) {
   %base = index.constant 0 : offset
   %zero = index.constant 0 : index
   %one = index.constant 1 : index
@@ -28,7 +28,6 @@ kernel.def target(@hrx2_gfx1100_wave64) export("hrx2_flash_attn_ext_f32_f16_tile
   %wg = index.assume %wg0 [range(%wg0, 256, 256), mul(%wg0, 256)] : index
   %zero_f32 = scalar.constant 0.0 : f32
   %minus_inf = scalar.constant -3.4028234663852886e+38 : f32
-  %scale = scalar.constant 0.08838834764831845 : f32
 
   %head0 = kernel.workgroup.id<x> : index
   %dim0 = kernel.workgroup.id<y> : index
