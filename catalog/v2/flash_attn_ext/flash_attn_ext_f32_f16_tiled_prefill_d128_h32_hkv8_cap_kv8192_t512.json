@@ -1,0 +1,456 @@
+{
+  "id": "flash_attn_ext_f32_f16_tiled_prefill_d128_h32_hkv8_cap_kv8192_t512",
+  "family": "flash_attn_ext_f32_f16",
+  "kernel": {
+    "source_id": "flash_attn_ext_f32_f16",
+    "path": "flash_attn_ext/tiled_prefill_d128_h32_hkv8_cap_kv8192_t512.loom",
+    "root_symbol": "@hrx2_flash_attn_ext_f32_f16_tiled_prefill_d128_h32_hkv8_cap_kv8192_t512",
+    "export_name": "hrx2_flash_attn_ext_f32_f16_tiled_prefill_d128_h32_hkv8_cap_kv8192_t512"
+  },
+  "attributes": {
+    "logit_softcap_enabled": {
+      "type": "bool"
+    },
+    "max_bias_enabled": {
+      "type": "bool"
+    },
+    "precision": {
+      "type": "i32"
+    },
+    "scale": {
+      "type": "f32"
+    },
+    "sinks": {
+      "type": "i32"
+    }
+  },
+  "tensors": {
+    "src0": {
+      "dtype": "F32",
+      "dimensions": "src0_dimensions",
+      "strides": "src0_strides",
+      "permutation": "src0_permutation"
+    },
+    "src1": {
+      "dtype": "F16",
+      "dimensions": "src1_dimensions",
+      "strides": "src1_strides",
+      "permutation": "src1_permutation"
+    },
+    "src2": {
+      "dtype": "F16",
+      "dimensions": "src2_dimensions",
+      "strides": "src2_strides",
+      "permutation": "src2_permutation"
+    },
+    "src3": {
+      "dtype": "F16",
+      "dimensions": "src3_dimensions",
+      "strides": "src3_strides"
+    },
+    "dst": {
+      "dtype": "F32",
+      "dimensions": "dst_dimensions",
+      "strides": "dst_strides"
+    }
+  },
+  "values": [
+    {
+      "name": "src0_contiguous_strides",
+      "contiguous_strides": "src0_dimensions"
+    },
+    {
+      "name": "src1_contiguous_strides",
+      "contiguous_strides": "src1_dimensions"
+    },
+    {
+      "name": "src2_contiguous_strides",
+      "contiguous_strides": "src2_dimensions"
+    },
+    {
+      "name": "src3_contiguous_strides",
+      "contiguous_strides": "src3_dimensions"
+    },
+    {
+      "name": "dst_contiguous_strides",
+      "contiguous_strides": "dst_dimensions"
+    },
+    {
+      "name": "head_dim",
+      "element": {
+        "source": "dst_dimensions",
+        "index": 0
+      }
+    },
+    {
+      "name": "heads",
+      "element": {
+        "source": "dst_dimensions",
+        "index": 1
+      }
+    },
+    {
+      "name": "tokens",
+      "element": {
+        "source": "dst_dimensions",
+        "index": 2
+      }
+    },
+    {
+      "name": "src0_tokens",
+      "element": {
+        "source": "src0_dimensions",
+        "index": 1
+      }
+    },
+    {
+      "name": "src0_heads",
+      "element": {
+        "source": "src0_dimensions",
+        "index": 2
+      }
+    },
+    {
+      "name": "kv_len",
+      "element": {
+        "source": "src1_dimensions",
+        "index": 1
+      }
+    },
+    {
+      "name": "kv_heads",
+      "element": {
+        "source": "src1_dimensions",
+        "index": 2
+      }
+    },
+    {
+      "name": "src2_kv_len",
+      "element": {
+        "source": "src2_dimensions",
+        "index": 1
+      }
+    },
+    {
+      "name": "src2_kv_heads",
+      "element": {
+        "source": "src2_dimensions",
+        "index": 2
+      }
+    },
+    {
+      "name": "mask_kv_len",
+      "element": {
+        "source": "src3_dimensions",
+        "index": 0
+      }
+    },
+    {
+      "name": "mask_tokens",
+      "element": {
+        "source": "src3_dimensions",
+        "index": 1
+      }
+    }
+  ],
+  "constraints": [
+    {
+      "name": "src0_dimensions",
+      "length": 4
+    },
+    {
+      "name": "src1_dimensions",
+      "length": 4
+    },
+    {
+      "name": "src2_dimensions",
+      "length": 4
+    },
+    {
+      "name": "src3_dimensions",
+      "length": 4
+    },
+    {
+      "name": "dst_dimensions",
+      "length": 4
+    },
+    {
+      "name": "attribute.precision",
+      "value": 10
+    },
+    {
+      "name": "attribute.sinks",
+      "value": 0
+    },
+    {
+      "name": "attribute.logit_softcap_enabled",
+      "value": false
+    },
+    {
+      "name": "attribute.max_bias_enabled",
+      "value": false
+    },
+    {
+      "name": "head_dim",
+      "min": 128,
+      "max": 128
+    },
+    {
+      "name": "heads",
+      "min": 32,
+      "max": 32
+    },
+    {
+      "name": "tokens",
+      "min": 2,
+      "max": 512
+    },
+    {
+      "name": "kv_len",
+      "min": 512,
+      "max": 8192,
+      "multiple_of": 512
+    },
+    {
+      "name": "kv_heads",
+      "min": 8,
+      "max": 8
+    },
+    {
+      "name": "src0_dimensions",
+      "index": 0,
+      "min": 128,
+      "max": 128
+    },
+    {
+      "name": "src1_dimensions",
+      "index": 0,
+      "min": 128,
+      "max": 128
+    },
+    {
+      "name": "src2_dimensions",
+      "index": 0,
+      "min": 128,
+      "max": 128
+    },
+    {
+      "name": "src0_dimensions",
+      "index": 3,
+      "min": 1,
+      "max": 1
+    },
+    {
+      "name": "src1_dimensions",
+      "index": 3,
+      "min": 1,
+      "max": 1
+    },
+    {
+      "name": "src2_dimensions",
+      "index": 3,
+      "min": 1,
+      "max": 1
+    },
+    {
+      "name": "src3_dimensions",
+      "index": 2,
+      "min": 1,
+      "max": 1
+    },
+    {
+      "name": "src3_dimensions",
+      "index": 3,
+      "min": 1,
+      "max": 1
+    },
+    {
+      "name": "dst_dimensions",
+      "index": 3,
+      "min": 1,
+      "max": 1
+    },
+    {
+      "name": "src0_permutation",
+      "length": 4
+    },
+    {
+      "name": "src1_permutation",
+      "length": 4
+    },
+    {
+      "name": "src2_permutation",
+      "length": 4
+    },
+    {
+      "name": "src0_permutation",
+      "index": 0,
+      "min": 0,
+      "max": 0
+    },
+    {
+      "name": "src0_permutation",
+      "index": 1,
+      "min": 2,
+      "max": 2
+    },
+    {
+      "name": "src0_permutation",
+      "index": 2,
+      "min": 1,
+      "max": 1
+    },
+    {
+      "name": "src0_permutation",
+      "index": 3,
+      "min": 3,
+      "max": 3
+    },
+    {
+      "name": "src1_permutation",
+      "index": 0,
+      "min": 0,
+      "max": 0
+    },
+    {
+      "name": "src1_permutation",
+      "index": 1,
+      "min": 2,
+      "max": 2
+    },
+    {
+      "name": "src1_permutation",
+      "index": 2,
+      "min": 1,
+      "max": 1
+    },
+    {
+      "name": "src1_permutation",
+      "index": 3,
+      "min": 3,
+      "max": 3
+    },
+    {
+      "name": "src2_permutation",
+      "index": 0,
+      "min": 0,
+      "max": 0
+    },
+    {
+      "name": "src2_permutation",
+      "index": 1,
+      "min": 2,
+      "max": 2
+    },
+    {
+      "name": "src2_permutation",
+      "index": 2,
+      "min": 1,
+      "max": 1
+    },
+    {
+      "name": "src2_permutation",
+      "index": 3,
+      "min": 3,
+      "max": 3
+    },
+    {
+      "equals": [
+        "tokens",
+        "src0_tokens",
+        "mask_tokens"
+      ]
+    },
+    {
+      "equals": [
+        "heads",
+        "src0_heads"
+      ]
+    },
+    {
+      "equals": [
+        "kv_len",
+        "src2_kv_len",
+        "mask_kv_len"
+      ]
+    },
+    {
+      "equals": [
+        "kv_heads",
+        "src2_kv_heads"
+      ]
+    },
+    {
+      "equals": [
+        "src0_contiguous_strides",
+        "src0_strides"
+      ]
+    },
+    {
+      "equals": [
+        "src1_contiguous_strides",
+        "src1_strides"
+      ]
+    },
+    {
+      "equals": [
+        "src2_contiguous_strides",
+        "src2_strides"
+      ]
+    },
+    {
+      "equals": [
+        "src3_contiguous_strides",
+        "src3_strides"
+      ]
+    },
+    {
+      "equals": [
+        "dst_contiguous_strides",
+        "dst_strides"
+      ]
+    }
+  ],
+  "launch": {
+    "workgroup_size": [
+      256,
+      1,
+      1
+    ],
+    "workgroup_count_sources": [
+      "value.heads",
+      "value.head_dim",
+      "value.tokens"
+    ],
+    "rows_per_workgroup": 1,
+    "cols_per_workgroup": 1
+  },
+  "config": {
+    "bindings": [
+      {
+        "key": "@shape.flash_attn_ext.head_dim",
+        "source": "value.head_dim"
+      },
+      {
+        "key": "@shape.flash_attn_ext.heads",
+        "source": "value.heads"
+      },
+      {
+        "key": "@shape.flash_attn_ext.tokens",
+        "source": "value.tokens"
+      },
+      {
+        "key": "@shape.flash_attn_ext.kv_len",
+        "source": "value.kv_len"
+      },
+      {
+        "key": "@shape.flash_attn_ext.kv_heads",
+        "source": "value.kv_heads"
+      },
+      {
+        "key": "@tuning.flash_attn_ext.workgroup_size",
+        "value": "256"
+      }
+    ]
+  }
+}

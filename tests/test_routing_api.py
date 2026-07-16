@@ -614,6 +614,87 @@ def test_v2_soft_max_dispatch_uses_flattened_trailing_rows(route_id: str) -> Non
     assert candidate.dispatch["workgroup_count"] == [64, 1, 1]
 
 
+def test_v2_flash_attn_ext_prefill_dispatch_uses_token_workgroups() -> None:
+    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
+    route = next(
+        current
+        for current in routes_for_op(catalog, "FLASH_ATTN_EXT")
+        if current.id == "flash_attn_ext_f32_f16_tiled_prefill_d128_h32_hkv8_cap_kv8192_t512"
+    )
+
+    max_capacity_candidate = candidate_from_shape(
+        kernel_dir=ACTUAL_V2_KERNEL_DIR,
+        route=route,
+        shape={
+            "d0": 128,
+            "d1": 32,
+            "d2": 512,
+            "d3": 1,
+            "src0_d1": 512,
+            "src0_d2": 32,
+            "src0_perm0": 0,
+            "src0_perm1": 2,
+            "src0_perm2": 1,
+            "src0_perm3": 3,
+            "src1_d1": 8192,
+            "src1_d2": 8,
+            "src1_perm0": 0,
+            "src1_perm1": 2,
+            "src1_perm2": 1,
+            "src1_perm3": 3,
+            "src2_d1": 8192,
+            "src2_d2": 8,
+            "src2_perm0": 0,
+            "src2_perm1": 2,
+            "src2_perm2": 1,
+            "src2_perm3": 3,
+            "src3_d0": 8192,
+            "src3_d1": 512,
+            "src3_d2": 1,
+        },
+    )
+
+    assert max_capacity_candidate.config["@shape.flash_attn_ext.tokens"] == "512"
+    assert max_capacity_candidate.config["@shape.flash_attn_ext.kv_len"] == "8192"
+    assert max_capacity_candidate.dispatch["workgroup_count"] == [32, 128, 512]
+
+    smaller_candidate = candidate_from_shape(
+        kernel_dir=ACTUAL_V2_KERNEL_DIR,
+        route=route,
+        shape={
+            "d0": 128,
+            "d1": 32,
+            "d2": 128,
+            "d3": 1,
+            "src0_d1": 128,
+            "src0_d2": 32,
+            "src0_perm0": 0,
+            "src0_perm1": 2,
+            "src0_perm2": 1,
+            "src0_perm3": 3,
+            "src1_d1": 512,
+            "src1_d2": 8,
+            "src1_perm0": 0,
+            "src1_perm1": 2,
+            "src1_perm2": 1,
+            "src1_perm3": 3,
+            "src2_d1": 512,
+            "src2_d2": 8,
+            "src2_perm0": 0,
+            "src2_perm1": 2,
+            "src2_perm2": 1,
+            "src2_perm3": 3,
+            "src3_d0": 512,
+            "src3_d1": 128,
+            "src3_d2": 1,
+        },
+    )
+
+    assert smaller_candidate.config["@shape.flash_attn_ext.tokens"] == "128"
+    assert smaller_candidate.config["@shape.flash_attn_ext.kv_len"] == "512"
+    assert smaller_candidate.dispatch["workgroup_count"] == [32, 128, 128]
+
+
 @pytest.mark.parametrize(
     ("route_id", "shape", "expected_workgroup_count"),
     [

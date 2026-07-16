@@ -801,6 +801,26 @@ def route_dispatch(
     normalized_shape = {str(name): int(value) for name, value in shape.items()}
     workgroup_size = list(route.launch.get("workgroup_size", [None, None, None]))
     lane_count = int(workgroup_size[0] or 1)
+    workgroup_count_sources = route.launch.get("workgroup_count_sources")
+    if isinstance(workgroup_count_sources, tuple) and values is not None and len(workgroup_count_sources) == 3:
+        resolved_workgroup_count: list[int] = []
+        for source in workgroup_count_sources:
+            if not isinstance(source, str):
+                break
+            resolved = value_from_route_source(source, values)
+            if not isinstance(resolved, int):
+                break
+            resolved_workgroup_count.append(resolved)
+        if len(resolved_workgroup_count) == 3:
+            return {
+                "workgroup_count": resolved_workgroup_count,
+                "workgroup_size": workgroup_size,
+                "rows_per_workgroup": int(route.launch.get("rows_per_workgroup", 1) or 1),
+                "cols_per_workgroup": int(route.launch.get("cols_per_workgroup", 1) or 1),
+                "metadata_source": "route_descriptor_v2",
+                "has_static_dispatch_workgroup_count": False,
+                "has_static_workgroup_size": bool(route.launch.get("workgroup_size")),
+            }
     workgroup_count_source = route.launch.get("workgroup_count_source")
     if isinstance(workgroup_count_source, str) and values is not None:
         resolved = value_from_route_source(workgroup_count_source, values)
