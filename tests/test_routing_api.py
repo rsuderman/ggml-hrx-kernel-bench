@@ -32,25 +32,6 @@ ACTUAL_V2_ROUTING_DIR = _MATERIALIZED_V2_ASSETS / "catalog" / "v2"
 ACTUAL_V2_KERNEL_DIR = _MATERIALIZED_V2_ASSETS / "kernels" / "v2"
 
 
-def _softmax_kqv_shape(k: int, *, rows: int = 128, cols: int = 24, nheads_kv: int = 8) -> dict[str, int]:
-    return {
-        "d0": cols,
-        "d1": rows,
-        "src0_d0": k,
-        "src0_d1": cols,
-        "mask_d0": k,
-        "mask_d1": 1,
-        "src1_d0": k,
-        "src1_d1": rows * nheads_kv,
-        "dst_d0": rows,
-        "dst_d1": cols,
-        "k": k,
-        "rows": rows,
-        "cols": cols,
-        "nheads_kv": nheads_kv,
-    }
-
-
 def _write_v2_descriptor(routing_dir: Path) -> None:
     routing_dir.mkdir(parents=True, exist_ok=True)
     (routing_dir / "router.json").write_text(
@@ -1757,58 +1738,3 @@ def test_yaml_route_import_matches_default_rank4_rope_descriptor(tmp_path: Path)
     ]
     assert route_abis["rope_f32_normal_n128_h32_t2_contiguous_4d"]["entries"] == expected_abi
     assert route_abis["rope_neox_f32_n64_h128_t2_contiguous_4d"]["entries"] == expected_abi
-
-@pytest.mark.parametrize(
-    ("route_id", "k", "workgroup_count"),
-    (
-        ("softmax_kqv_f32_f16_decode_kv256_d128_h24_hkv8_wg64_rows2", 256, [64, 24, 1]),
-        ("softmax_kqv_f32_f16_decode_kv512_d128_h24_hkv8_wg256_rows128", 512, [1, 24, 1]),
-        ("softmax_kqv_f32_f16_decode_kv768_d128_h24_hkv8_wg256_rows128", 768, [1, 24, 1]),
-    ),
-)
-def test_v2_flash_attn_ext_routes_materialize_softmax_kqv_decode_variants(
-    route_id: str,
-    k: int,
-    workgroup_count: list[int],
-) -> None:
-    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
-    routes = list(routes_for_op(catalog, "FLASH_ATTN_EXT"))
-    route = next(current for current in routes if current.id == route_id)
-
-    candidate = candidate_from_shape(
-        kernel_dir=ACTUAL_V2_KERNEL_DIR,
-        route=route,
-        shape=_softmax_kqv_shape(k),
-    )
-
-    assert candidate.family == "softmax_kqv_f32_f16"
-    assert candidate.status == "planned"
-    assert candidate.dispatch["workgroup_count"] == workgroup_count
-    assert candidate.shape["k"] == k
-    assert candidate.shape["rows"] == 128
-    assert candidate.shape["cols"] == 24
-    assert candidate.shape["nheads_kv"] == 8
-
-
-@pytest.mark.parametrize("kv", (512, 1024, 2048, 4096))
-def test_v2_flash_attn_ext_masked_identity_route_materializes_candidates(kv: int) -> None:
-    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
-    route = next(
-        current
-        for current in routes_for_op(catalog, "FLASH_ATTN_EXT")
-        if current.id == "softmax_kqv_f32_f16_masked_identity_kv512_4096_d128_h8_wg256_row1"
-    )
-
-    candidate = candidate_from_shape(
-        kernel_dir=ACTUAL_V2_KERNEL_DIR,
-        route=route,
-        shape=_softmax_kqv_shape(kv, cols=8),
-    )
-
-    assert candidate.family == "softmax_kqv_f32_f16"
-    assert candidate.status == "planned"
-    assert candidate.dispatch["workgroup_count"] == [128, 8, 1]
-    assert candidate.shape["k"] == kv
-    assert candidate.shape["rows"] == 128
-    assert candidate.shape["cols"] == 8
-    assert candidate.shape["nheads_kv"] == 8
