@@ -7,6 +7,12 @@ set(_ggml_hrx_v2_route_selector_generated_include
 set(_ggml_hrx_v2_route_selector_route_template
   ${CMAKE_CURRENT_SOURCE_DIR}/templates/route_descriptor.inc.cpp.tmpl
 )
+set(_ggml_hrx_v2_route_selector_catalog_module
+  ${PROJECT_SOURCE_DIR}/src/ggml_hrx_kernel_bench/routing/v2/catalog.py
+)
+set(_ggml_hrx_v2_route_selector_models_module
+  ${PROJECT_SOURCE_DIR}/src/ggml_hrx_kernel_bench/routing/v2/models.py
+)
 
 add_custom_command(
   OUTPUT ${_ggml_hrx_v2_route_selector_generated_include}
@@ -15,10 +21,12 @@ add_custom_command(
     ${PROJECT_SOURCE_DIR}/scripts/generate_v2_route_selector.py
     --routing-dir ${GGML_HRX_ASSET_ROOT}/catalog/v2
     --output ${_ggml_hrx_v2_route_selector_generated_include}
-    --op ABS
+    --all
   DEPENDS
     ${PROJECT_SOURCE_DIR}/scripts/generate_v2_route_selector.py
     ${_ggml_hrx_v2_route_selector_route_template}
+    ${_ggml_hrx_v2_route_selector_catalog_module}
+    ${_ggml_hrx_v2_route_selector_models_module}
     ${GGML_HRX_RUNTIME_ASSET_TARGET}
     ${GGML_HRX_ASSET_ROOT}/.materialized.stamp
   COMMENT "Generating native v2 route descriptors"
@@ -54,36 +62,3 @@ target_include_directories(
     ${_ggml_hrx_v2_route_selector_generated_dir}
 )
 target_compile_features(ggml_hrx_v2_route_selector_core PUBLIC cxx_std_17)
-set_target_properties(
-  ggml_hrx_v2_route_selector_core
-  PROPERTIES
-    POSITION_INDEPENDENT_CODE ON
-)
-
-nanobind_add_module(
-  _ggml_hrx_v2_selector_native
-  NB_STATIC
-  src/python_module.cpp
-)
-target_compile_features(_ggml_hrx_v2_selector_native PRIVATE cxx_std_17)
-target_link_libraries(
-  _ggml_hrx_v2_selector_native
-  PRIVATE
-    ggml_hrx_v2_route_selector_core
-)
-
-set_target_properties(
-  _ggml_hrx_v2_selector_native
-  PROPERTIES
-    LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/python"
-    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/python"
-)
-
-# Keep the extension's type information next to the built module so editors and
-# static analyzers resolve it through the same build/python path.
-file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/python")
-configure_file(
-  "${CMAKE_CURRENT_SOURCE_DIR}/src/_ggml_hrx_v2_selector_native.pyi"
-  "${CMAKE_BINARY_DIR}/python/_ggml_hrx_v2_selector_native.pyi"
-  COPYONLY
-)

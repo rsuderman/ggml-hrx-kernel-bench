@@ -1176,6 +1176,57 @@ def test_v2_router_executes_matching_case(tmp_path: Path, monkeypatch) -> None:
     assert result["correctness_ok"] is True
     assert result["shape"] == {"d0": 16, "d1": 64, "d2": 1, "d3": 1}
 
+
+def test_v2_router_rejects_explicit_route_constraint_before_running_candidate(
+    tmp_path: Path, monkeypatch
+) -> None:
+    kernel_dir = tmp_path / "kernels"
+    routing_dir = tmp_path / "routing"
+    _write_kernel(kernel_dir)
+    _write_v2_descriptor(routing_dir)
+    router = create_router(version="v2", kernel_dir=kernel_dir, routing_dir=routing_dir)
+    runner_called = False
+
+    def fake_run_candidate_test_row(*args, **kwargs):
+        nonlocal runner_called
+        runner_called = True
+        pytest.fail("candidate runner must not be called for a rejected route")
+
+    monkeypatch.setattr(
+        "ggml_hrx_kernel_bench.routing.v2.runtime.run_candidate_test_row",
+        fake_run_candidate_test_row,
+    )
+
+    with pytest.raises(RuntimeError) as exc_info:
+        router.execute_case(
+            RuntimeCaseRequest(
+                kernel_dir=kernel_dir,
+                routing_dir=routing_dir,
+                config_data={
+                    "kernel": "add_f32",
+                    "route_id": "add_f32_generic_4d",
+                    "params": ["d0", "d1", "d2", "d3", "src0_d0"],
+                    "cases": [[16, 64, 1, 1, 3]],
+                },
+                current_case_id="d016_d164_d21_d31_src0_d03",
+                current_case_values=[16, 64, 1, 1, 3],
+                tool_dir=None,
+                target="gfx1100",
+                rocm_path=None,
+                iterations=1,
+                warmup_iterations=0,
+                max_batches=1,
+                output_dir=tmp_path / "out",
+                require_tool=lambda name, tool_dir=None: "/bin/true",
+            )
+        )
+
+    assert str(exc_info.value) == (
+        "v2 route 'add_f32_generic_4d' does not accept shape "
+        '{"d0": 16, "d1": 64, "d2": 1, "d3": 1, "src0_d0": 3}'
+    )
+    assert runner_called is False
+
 @pytest.mark.parametrize(
     ("src0_dtype", "src0_shape", "src1_shape", "dst_shape", "expected_route_id", "expected_shape"),
     (

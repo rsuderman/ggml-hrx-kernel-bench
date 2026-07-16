@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
+import tempfile
 from pathlib import Path
 from string import Template
 from typing import Iterable, Sequence
@@ -25,8 +27,12 @@ from ggml_hrx_kernel_bench.routing.v2.models import (  # noqa: E402
 _INT64_MIN = -(1 << 63)
 _INT64_MAX = (1 << 63) - 1
 _SUPPORTED_VALUE_KINDS = {
+    "chain_permutations": "chain_permutations",
     "contiguous_strides": "contiguous_strides",
+    "element": "element",
     "head": "head",
+    "inverse_permutation": "inverse_permutation",
+    "permuted_contiguous_strides": "permuted_contiguous_strides",
     "product": "product",
     "tail": "tail",
 }
@@ -76,23 +82,36 @@ def _cpp_optional_size(value: int | None, *, context: str) -> str:
     return str(_require_size(value, context=context, positive=True))
 
 
+def _cpp_optional_string(value: str | None) -> str:
+    if value is None:
+        return "std::nullopt"
+    return json.dumps(value)
+
+
 def _render_value(route: V2Route, value: ValueDefinition) -> str:
     kind = _SUPPORTED_VALUE_KINDS.get(value.operation_kind)
     if kind is None:
         raise UnsupportedRouteDescriptor(
             f"route {route.id!r} uses unsupported value operation {value.operation_kind!r}"
         )
-    if len(value.sources) != 1:
+    expected_sources = (
+        2
+        if value.operation_kind
+        in {"chain_permutations", "permuted_contiguous_strides"}
+        else 1
+    )
+    if len(value.sources) != expected_sources:
         raise UnsupportedRouteDescriptor(
-            f"route {route.id!r} value {value.name!r} must have exactly one source"
+            f"route {route.id!r} value {value.name!r} must have exactly "
+            f"{expected_sources} source(s)"
         )
 
     fields = [
         json.dumps(value.name),
         f"ValueKind::{kind}",
-        json.dumps(value.sources[0]),
+        "{" + ", ".join(json.dumps(source) for source in value.sources) + "}",
     ]
-    if value.operation_kind in {"head", "tail"}:
+    if value.operation_kind in {"element", "head", "tail"}:
         if len(value.parameters) != 1:
             raise UnsupportedRouteDescriptor(
                 f"route {route.id!r} value {value.name!r} must have exactly one parameter"
@@ -136,33 +155,27 @@ def _constraint_has_only(
 def _render_constraint(route: V2Route, check: ConstraintCheck) -> str:
     context = f"route {route.id!r} constraint"
 
-    # Supported natively: equals, exact length, rank range, and scalar bounds.
-    # Keep Python-only forms grouped here so the native coverage gap is obvious.
-    unsupported_forms = [
-        name
-        for name, present in (
-            ("divides", bool(check.divides)),
-            ("indexed", check.index is not None),
-            ("multiple_of", check.multiple_of is not None),
-            ("iota", check.iota),
-        )
-        if present
-    ]
-    if unsupported_forms:
-        raise UnsupportedRouteDescriptor(
-            f"{context} uses unsupported matching: {', '.join(unsupported_forms)}"
-        )
-
     if check.equals:
         if len(check.equals) < 2 or not _constraint_has_only(check, allowed={"equals"}):
             raise UnsupportedRouteDescriptor(f"{context} has an unsupported equals form")
         names = ", ".join(json.dumps(name) for name in check.equals)
         return f"equals({{{names}}})"
 
+    if check.divides:
+        if len(check.divides) < 2 or not _constraint_has_only(check, allowed={"divides"}):
+            raise UnsupportedRouteDescriptor(f"{context} has an unsupported divides form")
+        names = ", ".join(json.dumps(name) for name in check.divides)
+        return f"divides({{{names}}})"
+
     if check.name is None:
         raise UnsupportedRouteDescriptor(f"{context} is missing a capture name")
 
     name = json.dumps(check.name)
+    if check.iota:
+        if not _constraint_has_only(check, allowed={"name", "iota"}):
+            raise UnsupportedRouteDescriptor(f"{context} has an unsupported iota form")
+        return f"iota({name})"
+
     if check.length is not None:
         if not _constraint_has_only(check, allowed={"name", "length"}):
             raise UnsupportedRouteDescriptor(f"{context} has an unsupported length form")
@@ -176,14 +189,33 @@ def _render_constraint(route: V2Route, check: ConstraintCheck) -> str:
         maximum = _cpp_optional_size(check.rank_max, context=f"{context} rank_max")
         return f"rank_range({name}, {minimum}, {maximum})"
 
-    if check.min is None and check.max is None:
+    if check.min is None and check.max is None and check.multiple_of is None:
         raise UnsupportedRouteDescriptor(f"{context} has no supported predicate")
-    if not _constraint_has_only(check, allowed={"name", "min", "max"}):
-        raise UnsupportedRouteDescriptor(f"{context} has an unsupported scalar-bounds form")
 
     minimum = _cpp_optional_int64(check.min, context=f"{context} min")
     maximum = _cpp_optional_int64(check.max, context=f"{context} max")
-    return f"scalar_bounds({name}, {minimum}, {maximum})"
+    multiple_of = _cpp_optional_int64(
+        check.multiple_of,
+        context=f"{context} multiple_of",
+    )
+    if check.index is not None:
+        if not _constraint_has_only(
+            check,
+            allowed={"name", "index", "min", "max", "multiple_of"},
+        ):
+            raise UnsupportedRouteDescriptor(f"{context} has an unsupported indexed-bounds form")
+        index = _require_size(check.index, context=f"{context} index")
+        return (
+            f"indexed_bounds({name}, {index}, {minimum}, {maximum}, "
+            f"{multiple_of})"
+        )
+
+    if not _constraint_has_only(
+        check,
+        allowed={"name", "min", "max", "multiple_of"},
+    ):
+        raise UnsupportedRouteDescriptor(f"{context} has an unsupported scalar-bounds form")
+    return f"scalar_bounds({name}, {minimum}, {maximum}, {multiple_of})"
 
 
 def _render_entries(entries: Iterable[str]) -> str:
@@ -193,22 +225,15 @@ def _render_entries(entries: Iterable[str]) -> str:
 def _render_route(route: V2Route) -> list[str]:
     tensors: list[str] = []
     for role, descriptor in route.tensors.items():
-        if descriptor.dtype is None:
-            raise UnsupportedRouteDescriptor(
-                f"route {route.id!r} tensor {role!r} has no fixed dtype"
-            )
-        if descriptor.permutation_capture is not None:
-            raise UnsupportedRouteDescriptor(
-                f"route {route.id!r} tensor {role!r} uses unsupported permutation capture"
-            )
         tensors.append(
             "{"
             + ", ".join(
                 (
                     json.dumps(role),
-                    json.dumps(descriptor.dtype),
+                    _cpp_optional_string(descriptor.dtype),
                     json.dumps(descriptor.dimensions_capture),
                     json.dumps(descriptor.strides_capture),
+                    _cpp_optional_string(descriptor.permutation_capture),
                 )
             )
             + "}"
@@ -241,10 +266,21 @@ def _normalize_operations(raw_operations: Iterable[str]) -> tuple[str, ...]:
     return tuple(sorted(normalized))
 
 
-def render_route_table(routing_dir: Path, operations: Sequence[str]) -> str:
-    normalized_operations = _normalize_operations(operations)
+def render_route_table(
+    routing_dir: Path,
+    operations: Sequence[str] | None = None,
+    *,
+    all_operations: bool = False,
+) -> str:
     route_index = load_route_index(routing_dir)
-    operation_routes: list[tuple[str, list[V2Route]]] = []
+    if all_operations:
+        if operations:
+            raise ValueError("--all cannot be combined with --op")
+        normalized_operations = tuple(sorted(route_index))
+    else:
+        normalized_operations = _normalize_operations(operations or ())
+
+    operation_routes: list[tuple[str, list[list[str]]]] = []
     seen_route_ids: dict[str, str] = {}
 
     for operation in normalized_operations:
@@ -253,7 +289,7 @@ def render_route_table(routing_dir: Path, operations: Sequence[str]) -> str:
             raise RuntimeError(
                 f"requested operation {operation!r} is missing from {routing_dir / 'router.json'}"
             )
-        routes: list[V2Route] = []
+        rendered_routes: list[list[str]] = []
         for route_file in route_files:
             route = load_route_file(
                 routing_dir,
@@ -267,19 +303,16 @@ def render_route_table(routing_dir: Path, operations: Sequence[str]) -> str:
                     f"{previous_operation!r} and {operation!r}"
                 )
             seen_route_ids[route.id] = operation
-            routes.append(route)
-
-        # Render every descriptor now so one unsupported route rejects the
-        # entire requested operation before the output path is touched.
-        for route in routes:
-            _render_route(route)
-        operation_routes.append((operation, routes))
+            # Render every descriptor now so one malformed route rejects the
+            # entire requested table before the output path is touched.
+            rendered_routes.append(_render_route(route))
+        operation_routes.append((operation, rendered_routes))
 
     lines = [
         "// Generated by scripts/generate_v2_route_selector.py. Do not edit.",
         "",
     ]
-    for operation_index, (operation, routes) in enumerate(operation_routes):
+    for operation_index, (operation, rendered_routes) in enumerate(operation_routes):
         if operation_index:
             lines.append("")
         lines.extend(
@@ -289,8 +322,8 @@ def render_route_table(routing_dir: Path, operations: Sequence[str]) -> str:
                 "     {",
             ]
         )
-        for route in routes:
-            lines.extend(_render_route(route))
+        for rendered_route in rendered_routes:
+            lines.extend(rendered_route)
         lines.extend(["     }},"])
     return "\n".join(lines) + "\n"
 
@@ -300,16 +333,36 @@ def _write_if_changed(path: Path, contents: str) -> None:
         return
 
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(contents, encoding="utf-8")
+    descriptor, temporary_name = tempfile.mkstemp(
+        dir=path.parent,
+        prefix=f".{path.name}.",
+        suffix=".tmp",
+        text=True,
+    )
+    temporary_path = Path(temporary_name)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
+            stream.write(contents)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary_path, path)
+    except BaseException:
+        temporary_path.unlink(missing_ok=True)
+        raise
 
 
 def generate_route_table(
     *,
     routing_dir: Path,
     output: Path,
-    operations: Sequence[str],
+    operations: Sequence[str] | None = None,
+    all_operations: bool = False,
 ) -> None:
-    contents = render_route_table(routing_dir, operations)
+    contents = render_route_table(
+        routing_dir,
+        operations,
+        all_operations=all_operations,
+    )
     _write_if_changed(output, contents)
 
 
@@ -319,7 +372,9 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     )
     parser.add_argument("--routing-dir", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument("--op", action="append", required=True, dest="operations")
+    mode = parser.add_mutually_exclusive_group(required=True)
+    mode.add_argument("--all", action="store_true", dest="all_operations")
+    mode.add_argument("--op", action="append", dest="operations")
     return parser.parse_args(argv)
 
 
@@ -330,6 +385,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             routing_dir=args.routing_dir,
             output=args.output,
             operations=args.operations,
+            all_operations=args.all_operations,
         )
     except (OSError, RuntimeError, ValueError) as exc:
         print(f"generate_v2_route_selector.py: error: {exc}", file=sys.stderr)

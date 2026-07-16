@@ -21,22 +21,16 @@ from .manifest import build_manifest
 from .query import RouteCatalog, load_route_catalog
 from .runtime import case_result as runtime_case_result
 from .runtime import execute_case as runtime_execute_case
-from .selection import RouteSelector, create_route_selector
 
 
 @dataclass(frozen=True)
 class V2RoutingBackend:
     context: RoutingContext
     version: str = "v2"
-    v2_selector_mode: str | None = None
 
     @cached_property
     def catalog(self) -> RouteCatalog:
         return load_route_catalog(self.context.routing_dir)
-
-    @cached_property
-    def selector(self) -> RouteSelector:
-        return create_route_selector(self.catalog, mode=self.v2_selector_mode)
 
     def manifest(self, *, original_root: Path | None = None) -> dict[str, object]:
         return build_manifest(
@@ -93,15 +87,12 @@ class V2RoutingBackend:
         routing_dir = request.routing_dir or self.context.routing_dir
         if routing_dir == self.context.routing_dir:
             catalog = self.catalog
-            selector = self.selector
         else:
             catalog = load_route_catalog(routing_dir)
-            selector = create_route_selector(catalog, mode=self.v2_selector_mode)
         return runtime_execute_case(
             request,
             catalog=catalog,
             kernel_dir=kernel_dir,
-            selector=selector,
         )
 
     def case_result(self, execution: ExecutedCase) -> dict[str, object]:

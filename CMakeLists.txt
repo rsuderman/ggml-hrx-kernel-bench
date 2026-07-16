@@ -6,31 +6,6 @@ list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
 
-execute_process(
-  COMMAND "${Python3_EXECUTABLE}" -m nanobind --cmake_dir
-  RESULT_VARIABLE GGML_HRX_NANOBIND_CMAKE_DIR_RESULT
-  OUTPUT_VARIABLE GGML_HRX_NANOBIND_CMAKE_DIR
-  ERROR_VARIABLE GGML_HRX_NANOBIND_CMAKE_DIR_ERROR
-  OUTPUT_STRIP_TRAILING_WHITESPACE
-)
-if(NOT GGML_HRX_NANOBIND_CMAKE_DIR_RESULT EQUAL 0)
-  message(
-    FATAL_ERROR
-    "ggml-hrx-kernel-bench requires nanobind in "
-    "${Python3_EXECUTABLE}: ${GGML_HRX_NANOBIND_CMAKE_DIR_ERROR}"
-  )
-endif()
-
-# Nanobind uses FindPython. Pin it to the interpreter already selected by the
-# project so discovery cannot silently switch Python installations.
-set(Python_EXECUTABLE "${Python3_EXECUTABLE}")
-find_package(Python 3.11 REQUIRED COMPONENTS Interpreter Development.Module)
-find_package(
-  nanobind CONFIG REQUIRED
-  PATHS "${GGML_HRX_NANOBIND_CMAKE_DIR}"
-  NO_DEFAULT_PATH
-)
-
 include(GgmlHrxLoomTools)
 ggml_hrx_configure_loom_tools()
 
@@ -64,6 +39,7 @@ add_subdirectory(native/v2_route_selector)
 
 include(CTest)
 
+add_subdirectory(tools/v2-route-selector)
 add_subdirectory(tools/run-loom-simple)
 
 if(BUILD_TESTING)

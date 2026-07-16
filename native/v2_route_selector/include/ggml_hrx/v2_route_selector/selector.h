@@ -20,6 +20,7 @@ struct Tensor {
   std::string dtype;
   std::vector<std::int64_t> dimensions;
   std::vector<std::int64_t> strides;
+  std::optional<std::vector<std::int64_t>> permutation;
 };
 
 struct Query {

@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import json
+import os
+import subprocess
+from pathlib import Path
 from typing import Any, Mapping
 
 from .layout import (
@@ -20,6 +24,16 @@ from .models import (
 
 
 CapturedValue = tuple[int, ...] | int
+
+_ROUTE_SELECTOR_ENV_VAR = "GGML_HRX_V2_ROUTE_SELECTOR"
+_ROUTE_SELECTOR_TIMEOUT_SECONDS = 10.0
+_DEFAULT_ROUTE_SELECTOR = (
+    Path(__file__).resolve().parents[4]
+    / "build"
+    / "tools"
+    / "v2-route-selector"
+    / "ggml-hrx-v2-route-selector"
+)
 
 
 def _normalize_dtype(value: Any) -> str | None:
@@ -311,13 +325,67 @@ def route_captures(
 
 
 def route_accepts_tensors(route: V2Route, tensors: Mapping[str, ConcreteTensor]) -> bool:
-    captures = route_captures(route, tensors)
-    if captures is None:
+    selector_override = os.environ.get(_ROUTE_SELECTOR_ENV_VAR)
+    selector_path = Path(selector_override) if selector_override else _DEFAULT_ROUTE_SELECTOR
+
+    tensor_payload: dict[str, dict[str, object]] = {}
+    for role in route.tensors:
+        tensor = tensors.get(role)
+        if tensor is None:
+            continue
+        serialized: dict[str, object] = {
+            "dtype": str(tensor.dtype),
+            "dimensions": [int(dimension.size) for dimension in tensor.dimensions],
+            "strides": [int(dimension.stride) for dimension in tensor.dimensions],
+        }
+        if tensor.permutation is not None:
+            serialized["permutation"] = [int(axis) for axis in tensor.permutation]
+        tensor_payload[role] = serialized
+
+    payload = {
+        "op": route.op,
+        "tensors": tensor_payload,
+        "allowed_route_ids": [route.id],
+    }
+    command = [
+        str(selector_path),
+        "--input",
+        "-",
+        "--expect-route",
+        route.id,
+    ]
+    try:
+        result = subprocess.run(
+            command,
+            input=json.dumps(payload, separators=(",", ":")),
+            text=True,
+            capture_output=True,
+            check=False,
+            timeout=_ROUTE_SELECTOR_TIMEOUT_SECONDS,
+        )
+    except FileNotFoundError as exc:
+        raise RuntimeError(f"v2 route selector executable not found: {selector_path}") from exc
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError(
+            f"v2 route selector timed out while evaluating route {route.id!r}: {selector_path}"
+        ) from exc
+    except (OSError, UnicodeError) as exc:
+        raise RuntimeError(
+            f"failed to launch v2 route selector for route {route.id!r} at {selector_path}: {exc}"
+        ) from exc
+
+    expected_no_match = f"error: NO_MATCH: no route matched operation {route.op!r}\n"
+    if result.returncode == 1 and not result.stdout and result.stderr == expected_no_match:
         return False
-    resolved = _resolve_values(route.values, captures)
-    if resolved is None:
-        return False
-    return constraints_accept(route.constraints, {**captures, **resolved})
+
+    expected_output = f"{route.id}\n"
+    if result.returncode == 0 and result.stdout == expected_output and not result.stderr:
+        return True
+
+    raise RuntimeError(
+        f"v2 route selector returned an unexpected result for route {route.id!r}: "
+        f"exit_code={result.returncode}, stdout={result.stdout!r}, stderr={result.stderr!r}"
+    )
 
 
 def route_values(route: V2Route, tensors: Mapping[str, ConcreteTensor]) -> dict[str, CapturedValue] | None:
