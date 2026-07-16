@@ -369,8 +369,11 @@ ARGSORT_WILDCARD_DST = {
 POSITIVE_CASES = (
     pytest.param(
         "clamp_f32_contiguous_4d",
-        "inclusive rank-4 upper boundary",
-        CLAMP_4D,
+        "inclusive rank-4 upper boundary with an unrelated tensor role",
+        {
+            **CLAMP_4D,
+            "unrelated": _tensor(dtype="I32", sizes=(1,), strides=(1,)),
+        },
         id="clamp-rank-max-contiguous",
     ),
     pytest.param(

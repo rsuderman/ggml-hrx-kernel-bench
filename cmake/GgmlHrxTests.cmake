@@ -39,6 +39,7 @@ function(add_yaml_route_import_target)
   if(GGML_HRX_TOOL_BUILD_TARGET)
     list(APPEND GGML_HRX_YRI_DEPENDS ${GGML_HRX_TOOL_BUILD_TARGET})
   endif()
+  list(APPEND GGML_HRX_YRI_DEPENDS ggml-hrx-v2-route-selector)
 
   set(stamp_path ${GGML_HRX_YRI_OUTPUT_DIR}/route-import.stamp)
   set(check_command
@@ -51,16 +52,20 @@ function(add_yaml_route_import_target)
   foreach(yaml_path IN LISTS GGML_HRX_YRI_YAML_PATHS)
     list(APPEND check_command --yaml ${yaml_path})
   endforeach()
+  set(yaml_route_import_environment
+    "GGML_HRX_V2_ROUTE_SELECTOR=$<TARGET_FILE:ggml-hrx-v2-route-selector>"
+  )
   if(GGML_HRX_TOOL_DIR)
     list(APPEND check_command --tool-dir ${GGML_HRX_TOOL_DIR})
-    set(yaml_route_import_env_command
-      ${CMAKE_COMMAND} -E env
-      PATH=${GGML_HRX_TOOL_DIR}:$ENV{PATH}
-      ${check_command}
+    list(APPEND yaml_route_import_environment
+      "PATH=${GGML_HRX_TOOL_DIR}:$ENV{PATH}"
     )
-  else()
-    set(yaml_route_import_env_command ${check_command})
   endif()
+  set(yaml_route_import_env_command
+    ${CMAKE_COMMAND} -E env
+    ${yaml_route_import_environment}
+    ${check_command}
+  )
   add_custom_command(
     OUTPUT ${stamp_path}
     COMMAND ${yaml_route_import_env_command}
