@@ -830,27 +830,13 @@ def _runtime_dtype(dtype: str | None) -> str:
     return str(dtype or "").strip().lower()
 
 
-def _attribute_scalar_value(attributes: Mapping[str, Any], name: str) -> Any | None:
-    if name in attributes:
-        return attributes[name]
-    ggml_parameters = attributes.get("ggml_op_parameters")
-    if isinstance(ggml_parameters, list):
-        for parameter in ggml_parameters:
-            if not isinstance(parameter, Mapping):
-                continue
-            if parameter.get("name") == name and "value" in parameter:
-                return parameter["value"]
-    return None
-
-
 def _attribute_scalar_values_for_route(route: V2Route, attributes: Mapping[str, Any]) -> dict[str, Any]:
     values: dict[str, Any] = {}
     for scalar in ATTRIBUTE_SCALAR_ABI_BY_FAMILY.get(route.family, ()):
         attribute_name = str(scalar["attribute"])
-        value = _attribute_scalar_value(attributes, attribute_name)
-        if value is None:
+        if attribute_name not in attributes:
             continue
-        values[attribute_name] = value
+        values[attribute_name] = attributes[attribute_name]
     return values
 
 

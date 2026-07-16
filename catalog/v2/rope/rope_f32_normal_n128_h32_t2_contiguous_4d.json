@@ -8,10 +8,10 @@
     "export_name": "hrx2_rope_normal_f32"
   },
   "attributes": {
-    "af": 1.0,
-    "ef": 0.0,
-    "ff": 0,
-    "fs": 1.0,
+    "attn_factor": 1.0,
+    "ext_factor": 0.0,
+    "has_freq_factors": 0,
+    "freq_scale": 1.0,
     "mode": 0,
     "n_ctx": 512,
     "n_dims": 128

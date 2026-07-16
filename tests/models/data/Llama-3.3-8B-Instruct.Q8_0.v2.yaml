@@ -46,13 +46,11 @@ ops:
         - dtype: f32
           shape: [128, 32, 1, 1]
       attributes:
-        ggml_op_parameters:
-          - index: 0
-            name: scale
-            value: 0.0883883461356163
-          - index: 3
-            name: precision
-            value: 10
+        precision: 10
+        sinks: 0
+        scale: 0.0883883461
+        logit_softcap_enabled: false
+        max_bias_enabled: false
     - inputs:
         - dtype: f32
           shape: [128, 512, 32, 1]
@@ -69,13 +67,11 @@ ops:
         - dtype: f32
           shape: [128, 32, 512, 1]
       attributes:
-        ggml_op_parameters:
-          - index: 0
-            name: scale
-            value: 0.0883883461356163
-          - index: 3
-            name: precision
-            value: 10
+        precision: 10
+        sinks: 0
+        scale: 0.0883883461
+        logit_softcap_enabled: false
+        max_bias_enabled: false
   GET_ROWS:
     - inputs:
         - dtype: f32
@@ -215,10 +211,7 @@ ops:
         - dtype: f32
           shape: [4096, 1, 1, 1]
       attributes:
-        ggml_op_parameters:
-          - index: 0
-            name: eps
-            value: 9.999999747378752e-06
+        eps: 9.999999747378752e-06
     - inputs:
         - dtype: f32
           shape: [4096, 512, 1, 1]
@@ -226,10 +219,7 @@ ops:
         - dtype: f32
           shape: [4096, 512, 1, 1]
       attributes:
-        ggml_op_parameters:
-          - index: 0
-            name: eps
-            value: 9.999999747378752e-06
+        eps: 9.999999747378752e-06
   ROPE:
     - inputs:
         - dtype: f32
@@ -240,28 +230,16 @@ ops:
         - dtype: f32
           shape: [128, 32, 1, 1]
       attributes:
-        ggml_op_parameters:
-          - index: 1
-            name: n_dims
-            value: 128
-          - index: 4
-            name: n_ctx_orig
-            value: 8192
-          - index: 5
-            name: freq_base
-            value: 500000.0
-          - index: 6
-            name: freq_scale
-            value: 1.0
-          - index: 8
-            name: attn_factor
-            value: 1.0
-          - index: 9
-            name: beta_fast
-            value: 32.0
-          - index: 10
-            name: beta_slow
-            value: 1.0
+        attn_factor: 1.0
+        ext_factor: 0.0
+        has_freq_factors: 0
+        freq_scale: 1.0
+        mode: 0
+        n_dims: 128
+        n_ctx_orig: 8192
+        freq_base: 500000.0
+        beta_fast: 32.0
+        beta_slow: 1.0
     - inputs:
         - dtype: f32
           shape: [128, 32, 512, 1]
@@ -271,28 +249,16 @@ ops:
         - dtype: f32
           shape: [128, 32, 512, 1]
       attributes:
-        ggml_op_parameters:
-          - index: 1
-            name: n_dims
-            value: 128
-          - index: 4
-            name: n_ctx_orig
-            value: 8192
-          - index: 5
-            name: freq_base
-            value: 500000.0
-          - index: 6
-            name: freq_scale
-            value: 1.0
-          - index: 8
-            name: attn_factor
-            value: 1.0
-          - index: 9
-            name: beta_fast
-            value: 32.0
-          - index: 10
-            name: beta_slow
-            value: 1.0
+        attn_factor: 1.0
+        ext_factor: 0.0
+        has_freq_factors: 0
+        freq_scale: 1.0
+        mode: 0
+        n_dims: 128
+        n_ctx_orig: 8192
+        freq_base: 500000.0
+        beta_fast: 32.0
+        beta_slow: 1.0
     - inputs:
         - dtype: f32
           shape: [128, 8, 1, 1]
@@ -302,28 +268,16 @@ ops:
         - dtype: f32
           shape: [128, 8, 1, 1]
       attributes:
-        ggml_op_parameters:
-          - index: 1
-            name: n_dims
-            value: 128
-          - index: 4
-            name: n_ctx_orig
-            value: 8192
-          - index: 5
-            name: freq_base
-            value: 500000.0
-          - index: 6
-            name: freq_scale
-            value: 1.0
-          - index: 8
-            name: attn_factor
-            value: 1.0
-          - index: 9
-            name: beta_fast
-            value: 32.0
-          - index: 10
-            name: beta_slow
-            value: 1.0
+        attn_factor: 1.0
+        ext_factor: 0.0
+        has_freq_factors: 0
+        freq_scale: 1.0
+        mode: 0
+        n_dims: 128
+        n_ctx_orig: 8192
+        freq_base: 500000.0
+        beta_fast: 32.0
+        beta_slow: 1.0
     - inputs:
         - dtype: f32
           shape: [128, 8, 512, 1]
@@ -333,28 +287,16 @@ ops:
         - dtype: f32
           shape: [128, 8, 512, 1]
       attributes:
-        ggml_op_parameters:
-          - index: 1
-            name: n_dims
-            value: 128
-          - index: 4
-            name: n_ctx_orig
-            value: 8192
-          - index: 5
-            name: freq_base
-            value: 500000.0
-          - index: 6
-            name: freq_scale
-            value: 1.0
-          - index: 8
-            name: attn_factor
-            value: 1.0
-          - index: 9
-            name: beta_fast
-            value: 32.0
-          - index: 10
-            name: beta_slow
-            value: 1.0
+        attn_factor: 1.0
+        ext_factor: 0.0
+        has_freq_factors: 0
+        freq_scale: 1.0
+        mode: 0
+        n_dims: 128
+        n_ctx_orig: 8192
+        freq_base: 500000.0
+        beta_fast: 32.0
+        beta_slow: 1.0
   SET_ROWS:
     - inputs:
         - dtype: f32
@@ -382,10 +324,7 @@ ops:
         - dtype: f32
           shape: [14336, 1, 1, 1]
       attributes:
-        ggml_op_parameters:
-          - index: 0
-            name: glu_op
-            value: 2
+        swapped: 0
     - inputs:
         - dtype: f32
           shape: [14336, 512, 1, 1]
@@ -395,7 +334,4 @@ ops:
         - dtype: f32
           shape: [14336, 512, 1, 1]
       attributes:
-        ggml_op_parameters:
-          - index: 0
-            name: glu_op
-            value: 2
+        swapped: 0

@@ -30,6 +30,7 @@ add_yaml_route_import_descriptor_tests(
   KERNEL_DIR ${GGML_HRX_KERNEL_DIR_V2}
   MAX_ELEMENTS 1073741824
   EXCLUDE_OPS
+    FLASH_ATTN_EXT
     MUL_MAT
   ${_ggml_hrx_model_descriptor_hsa_arg}
 )

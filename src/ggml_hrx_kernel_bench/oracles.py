@@ -2395,6 +2395,78 @@ def _softmax_kqv_arrays(np: Any, candidate: Candidate, seed: int) -> dict[str, A
     }
 
 
+def _flash_attn_ext_arrays(np: Any, candidate: Candidate, seed: int) -> dict[str, Any]:
+    src0_dims = _captured_tensor_dims(candidate, "src0")
+    src1_dims = _captured_tensor_dims(candidate, "src1")
+    src2_dims = _captured_tensor_dims(candidate, "src2")
+    src3_dims = _captured_tensor_dims(candidate, "src3")
+    dst_dims = _captured_tensor_dims(candidate, "dst")
+    if src0_dims is None or src1_dims is None or src2_dims is None or src3_dims is None or dst_dims is None:
+        raise ValueError("flash_attn_ext requires captured rank-4 src0/src1/src2/src3/dst dimensions")
+    head_dim, heads, tokens, _ = dst_dims
+    kv_len = src1_dims[1]
+    kv_heads = src1_dims[2]
+    if head_dim <= 0 or heads <= 0 or tokens <= 0 or kv_len <= 0 or kv_heads <= 0:
+        raise ValueError(f"flash_attn_ext requires positive dimensions, got dst={dst_dims} src1={src1_dims}")
+    if heads % kv_heads != 0:
+        raise ValueError(f"flash_attn_ext requires heads divisible by kv_heads, got heads={heads} kv_heads={kv_heads}")
+    if src0_dims != (head_dim, tokens, heads, 1):
+        raise ValueError(f"flash_attn_ext src0 dimensions {src0_dims} do not match dst {dst_dims}")
+    if src2_dims != src1_dims:
+        raise ValueError(f"flash_attn_ext requires matching key/value dimensions, got src1={src1_dims} src2={src2_dims}")
+    if src3_dims != (kv_len, tokens, 1, 1):
+        raise ValueError(f"flash_attn_ext mask dimensions {src3_dims} do not match kv_len/tokens")
+
+    src0_strides = _copy_tensor_strides(candidate, "src0", src0_dims)
+    src1_strides = _copy_tensor_strides(candidate, "src1", src1_dims)
+    src2_strides = _copy_tensor_strides(candidate, "src2", src2_dims)
+    src3_strides = _copy_tensor_strides(candidate, "src3", src3_dims)
+    dst_strides = _copy_tensor_strides(candidate, "dst", dst_dims)
+    src0_buffer = f32_pattern(np, (_buffer_length(src0_dims, src0_strides),), seed=seed, scale=0.125)
+    src1_buffer = f16_pattern(np, (_buffer_length(src1_dims, src1_strides),), seed=seed + 1, scale=0.125)
+    src2_buffer = f16_pattern(np, (_buffer_length(src2_dims, src2_strides),), seed=seed + 2, scale=0.5)
+    src3_buffer = f16_pattern(np, (_buffer_length(src3_dims, src3_strides),), seed=seed + 3, scale=0.05)
+    dst_init = f32_pattern(np, (_buffer_length(dst_dims, dst_strides),), seed=seed + 4, scale=0.25)
+    expected = dst_init.copy()
+
+    q = src0_buffer.reshape(src0_dims, order="F")
+    k = src1_buffer.reshape(src1_dims, order="F").astype(np.float32)
+    v = src2_buffer.reshape(src2_dims, order="F").astype(np.float32)
+    mask = src3_buffer.reshape(src3_dims, order="F").astype(np.float32)
+    out = expected.reshape(dst_dims, order="F")
+    scale = np.float32(1.0 / math.sqrt(float(head_dim)))
+    heads_per_kv = heads // kv_heads
+    for token in range(tokens):
+        mask_for_token = mask[:, token, 0, 0]
+        for head in range(heads):
+            kv_head = head // heads_per_kv
+            scores = np.matmul(q[:, token, head, 0].astype(np.float32), k[:, :, kv_head, 0])
+            scores = (scores * scale + mask_for_token).astype(np.float32)
+            shifted = scores - np.max(scores)
+            weights = np.exp(shifted, dtype=np.float32)
+            weights = (weights / np.sum(weights, dtype=np.float32)).astype(np.float32)
+            out[:, head, token, 0] = np.matmul(v[:, :, kv_head, 0], weights).astype(np.float32)
+
+    return {
+        "arrays": {
+            "src0": src0_buffer.reshape(-1).astype(np.float32),
+            "src1": _f16_bits(np, src1_buffer),
+            "src2": _f16_bits(np, src2_buffer),
+            "src3": _f16_bits(np, src3_buffer),
+            "dst_init": dst_init.reshape(-1).astype(np.float32),
+            "expected": expected.reshape(-1).astype(np.float32),
+        },
+        "metadata": {
+            "head_dim": head_dim,
+            "heads": heads,
+            "kv_len": kv_len,
+            "kv_heads": kv_heads,
+            "heads_per_kv": heads_per_kv,
+            "scale": float(scale),
+        },
+    }
+
+
 def _split_k_reduce2_arrays(np: Any, candidate: Candidate, seed: int) -> dict[str, Any]:
     rows = int(candidate.shape.get("rows", candidate.shape.get("nrows", 1)))
     plane0 = f32_pattern(np, (rows,), seed=seed)
@@ -2431,6 +2503,7 @@ LOGICAL_ORACLE_SPECS: tuple[LogicalOracleSpec, ...] = (
     LogicalOracleSpec(("set_rows_f32", "cont_set_rows_f32"), "set_rows_f32_numpy", {"atol": 1e-6, "rtol": 1e-6}, _set_rows_arrays),
     LogicalOracleSpec(("soft_max_f32",), "soft_max_f32_numpy", {"atol": 1e-5, "rtol": 1e-5}, _softmax_arrays),
     LogicalOracleSpec(("softmax_kqv_f32_f16",), "softmax_kqv_f32_f16_numpy_logical", {"atol": 0.08, "rtol": 0.02}, _softmax_kqv_arrays),
+    LogicalOracleSpec(("flash_attn_ext_f32_f16",), "flash_attn_ext_f32_f16_numpy_logical", {"atol": 0.08, "rtol": 0.02}, _flash_attn_ext_arrays),
     LogicalOracleSpec(("sum_rows_f32",), "sum_rows_f32_numpy", {"atol": 1e-5, "rtol": 1e-5}, _sum_rows_arrays),
     LogicalOracleSpec(("swiglu_f32",), "swiglu_f32_numpy", {"atol": 1e-5, "rtol": 1e-5}, _swiglu_arrays),
 )
@@ -3444,6 +3517,19 @@ ORACLE_SPECS: tuple[OracleSpec, ...] = (
             )
         ),
         write_workbench=_write_softmax_kqv_workbench,
+    ),
+    OracleSpec(
+        family_ids=("flash_attn_ext_f32_f16",),
+        generate=_logical_generate(
+            LogicalOracleSpec(
+                ("flash_attn_ext_f32_f16",),
+                "flash_attn_ext_f32_f16_numpy_logical",
+                {"atol": 0.08, "rtol": 0.02},
+                _flash_attn_ext_arrays,
+                exact_kernel_abi=True,
+            )
+        ),
+        write_workbench=_logical_workbench,
     ),
     OracleSpec(
         family_ids=("rope_f32", "rope_neox_f32", "rope_scale_f32"),

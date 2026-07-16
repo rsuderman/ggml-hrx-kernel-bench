@@ -384,13 +384,13 @@ def test_yaml_route_import_accepts_numeric_cont_offsets(tmp_path: Path) -> None:
 
     op_summary = next(row for row in summary["operations"] if row["op"] == "CONT")
     assert op_summary["invalid_case_count"] == 0
-    assert op_summary["matched_case_count"] == 1
-    assert op_summary["unmatched_case_count"] == 1
+    assert op_summary["matched_case_count"] == 2
+    assert op_summary["unmatched_case_count"] == 0
     route_matches = json.loads((output_dir / "ops" / "CONT" / "route-matches.json").read_text())
     assert route_matches["rows"][0]["case_index"] == 0
-    assert route_matches["rows"][0]["matched_route_ids"] == ["cont_f32_contiguous_4d"]
-    route_unmatched = json.loads((output_dir / "ops" / "CONT" / "route-unmatched.json").read_text())
-    assert route_unmatched["rows"][0]["case_index"] == 1
+    assert route_matches["rows"][0]["matched_route_ids"] == ["cont_copy_f32_f32_non_contiguous_4d"]
+    assert route_matches["rows"][1]["case_index"] == 1
+    assert route_matches["rows"][1]["matched_route_ids"] == ["cont_copy_f32_f32_storage_4d"]
 
 
 def test_yaml_route_import_emits_execution_abi_for_add_f32_case(tmp_path: Path) -> None:
@@ -428,10 +428,10 @@ def test_yaml_route_import_emits_execution_abi_for_add_f32_case(tmp_path: Path) 
     assert op_summary["unmatched_case_count"] == 0
     config = json.loads(Path(summary["generated_config_paths"][0]).read_text())
     assert config["kernel"] == "add_f32"
-    assert config["route_id"] == "add_f32_generic_4d"
+    assert config["route_id"] == "add_f32_contiguous"
     assert config["execution_abi"] == {
         "schema": "ggml_hrx_kernel_bench.route_execution_abi.v1",
-        "route_id": "add_f32_generic_4d",
+        "route_id": "add_f32_contiguous",
         "entries": [
             {
                 "position": 0,
@@ -1389,7 +1389,7 @@ def test_yaml_route_import_matches_unmasked_rank4_soft_max_descriptor(tmp_path: 
                             "inputs": [{"dtype": "F32", "shape": [16, 2, 32, 1]}],
                             "destinations": [{"dtype": "F32", "shape": [16, 2, 32, 1]}],
                             "attributes": {
-                                "m_prec": "f16",
+                                "mask_precision": "f16",
                                 "mask": 0,
                                 "max_bias": 0.0,
                                 "nr23": [1, 1],
@@ -1401,7 +1401,7 @@ def test_yaml_route_import_matches_unmasked_rank4_soft_max_descriptor(tmp_path: 
                             "inputs": [{"dtype": "F32", "shape": [16, 2, 32, 1]}],
                             "destinations": [{"dtype": "F32", "shape": [16, 2, 32, 1]}],
                             "attributes": {
-                                "m_prec": "f16",
+                                "mask_precision": "f16",
                                 "mask": 0,
                                 "max_bias": 0.0,
                                 "nr23": [1, 1],
@@ -1413,7 +1413,7 @@ def test_yaml_route_import_matches_unmasked_rank4_soft_max_descriptor(tmp_path: 
                             "inputs": [{"dtype": "F32", "shape": [16, 2, 32, 1]}],
                             "destinations": [{"dtype": "F32", "shape": [16, 2, 32, 1]}],
                             "attributes": {
-                                "m_prec": "f16",
+                                "mask_precision": "f16",
                                 "mask": 1,
                                 "max_bias": 0.0,
                                 "nr23": [1, 1],
@@ -1539,10 +1539,10 @@ def test_yaml_route_import_matches_default_rank4_rope_descriptor(tmp_path: Path)
                             "inputs": [{"dtype": "F32", "shape": [128, 32, 2, 1]}],
                             "destinations": [{"dtype": "F32", "shape": [128, 32, 2, 1]}],
                             "attributes": {
-                                "af": 1.0,
-                                "ef": 0.0,
-                                "ff": 0,
-                                "fs": 1.0,
+                                "attn_factor": 1.0,
+                                "ext_factor": 0.0,
+                                "has_freq_factors": 0,
+                                "freq_scale": 1.0,
                                 "mode": 0,
                                 "n_ctx": 512,
                                 "n_dims": 128,
@@ -1558,10 +1558,10 @@ def test_yaml_route_import_matches_default_rank4_rope_descriptor(tmp_path: Path)
                             ],
                             "destinations": [{"dtype": "F32", "shape": [128, 32, 2, 1]}],
                             "attributes": {
-                                "af": 1.0,
-                                "ef": 0.0,
-                                "ff": 0,
-                                "fs": 1.0,
+                                "attn_factor": 1.0,
+                                "ext_factor": 0.0,
+                                "has_freq_factors": 0,
+                                "freq_scale": 1.0,
                                 "mode": 0,
                                 "n_ctx": 512,
                                 "n_dims": 128,
@@ -1571,10 +1571,10 @@ def test_yaml_route_import_matches_default_rank4_rope_descriptor(tmp_path: Path)
                             "inputs": [{"dtype": "F32", "shape": [128, 64, 2, 1]}],
                             "destinations": [{"dtype": "F32", "shape": [128, 64, 2, 1]}],
                             "attributes": {
-                                "af": 1.0,
-                                "ef": 0.0,
-                                "ff": 0,
-                                "fs": 1.0,
+                                "attn_factor": 1.0,
+                                "ext_factor": 0.0,
+                                "has_freq_factors": 0,
+                                "freq_scale": 1.0,
                                 "mode": 0,
                                 "n_ctx": 512,
                                 "n_dims": 128,
@@ -1584,10 +1584,10 @@ def test_yaml_route_import_matches_default_rank4_rope_descriptor(tmp_path: Path)
                             "inputs": [{"dtype": "F32", "shape": [64, 128, 2, 1]}],
                             "destinations": [{"dtype": "F32", "shape": [64, 128, 2, 1]}],
                             "attributes": {
-                                "af": 1.0,
-                                "ef": 0.0,
-                                "ff": 0,
-                                "fs": 1.0,
+                                "attn_factor": 1.0,
+                                "ext_factor": 0.0,
+                                "has_freq_factors": 0,
+                                "freq_scale": 1.0,
                                 "mode": 2,
                                 "n_ctx": 512,
                                 "n_dims": 64,
@@ -1597,10 +1597,10 @@ def test_yaml_route_import_matches_default_rank4_rope_descriptor(tmp_path: Path)
                             "inputs": [{"dtype": "F32", "shape": [64, 8, 2, 1]}],
                             "destinations": [{"dtype": "F32", "shape": [64, 8, 2, 1]}],
                             "attributes": {
-                                "af": 1.0,
-                                "ef": 0.0,
-                                "ff": 0,
-                                "fs": 1.0,
+                                "attn_factor": 1.0,
+                                "ext_factor": 0.0,
+                                "has_freq_factors": 0,
+                                "freq_scale": 1.0,
                                 "mode": 2,
                                 "n_ctx": 512,
                                 "n_dims": 64,
@@ -1616,10 +1616,10 @@ def test_yaml_route_import_matches_default_rank4_rope_descriptor(tmp_path: Path)
                             ],
                             "destinations": [{"dtype": "F32", "shape": [64, 128, 2, 1]}],
                             "attributes": {
-                                "af": 1.0,
-                                "ef": 0.0,
-                                "ff": 0,
-                                "fs": 1.0,
+                                "attn_factor": 1.0,
+                                "ext_factor": 0.0,
+                                "has_freq_factors": 0,
+                                "freq_scale": 1.0,
                                 "mode": 2,
                                 "n_ctx": 512,
                                 "n_dims": 64,

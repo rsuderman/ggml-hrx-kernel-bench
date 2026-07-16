@@ -17,6 +17,7 @@
     ],
     "DIV": [],
     "FLASH_ATTN_EXT": [
+      "flash_attn_ext/flash_attn_ext_f32_f16_tiled_decode_d128_h32_hkv8_kv512_8192_t1.json",
       "softmax_kqv/softmax_kqv_f32_f16_masked_identity_kv512_4096_d128_h8_wg256_row1.json",
       "softmax_kqv/softmax_kqv_f32_f16_decode_kv256_d128_h24_hkv8_wg64_rows2.json",
       "softmax_kqv/softmax_kqv_f32_f16_decode_kv512_d128_h24_hkv8_wg256_rows128.json",
