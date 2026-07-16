@@ -714,6 +714,39 @@ def _flash_attn_ext_decode_case(kv_len: int, *, precision: int = 10) -> dict[str
     }
 
 
+def _flash_attn_ext_decode_case_generic(
+    *,
+    qk_dim: int,
+    value_dim: int,
+    heads: int,
+    kv_heads: int,
+    kv_len: int,
+    scale: float,
+) -> dict[str, object]:
+    return {
+        "inputs": [
+            {"dtype": "F32", "shape": [qk_dim, 1, heads, 1]},
+            {"dtype": "F16", "shape": [qk_dim, kv_len, kv_heads, 1], "storage_shape": [qk_dim, kv_len * 2, kv_heads, 1]},
+            {"dtype": "F16", "shape": [value_dim, kv_len, kv_heads, 1], "storage_shape": [value_dim, kv_len * 2, kv_heads, 1]},
+            {"dtype": "F16", "shape": [kv_len, 1, 1, 1]},
+        ],
+        "destinations": [{"dtype": "F32", "shape": [value_dim, 1, heads, 1]}],
+        "attributes": {
+            "logit_softcap_enabled": False,
+            "max_bias_enabled": False,
+            "precision": 10,
+            "scale": scale,
+            "sinks": 0,
+        },
+    }
+
+
+def _flash_attn_ext_decode_nomask_case(kv_len: int) -> dict[str, object]:
+    case = _flash_attn_ext_decode_case(kv_len)
+    case["inputs"] = case["inputs"][:3]
+    return case
+
+
 def test_v2_flash_attn_ext_fallback_decode_binds_llama_layout_and_padded_strides(tmp_path: Path) -> None:
     catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
     route = next(
@@ -770,6 +803,15 @@ def test_v2_flash_attn_ext_fallback_decode_binds_llama_layout_and_padded_strides
                         _flash_attn_ext_decode_case(4096),
                         _flash_attn_ext_decode_case(512),
                         _flash_attn_ext_decode_case(512, precision=0),
+                        _flash_attn_ext_decode_case_generic(
+                            qk_dim=192,
+                            value_dim=128,
+                            heads=4,
+                            kv_heads=4,
+                            kv_len=113,
+                            scale=0.07216878364870323,
+                        ),
+                        _flash_attn_ext_decode_nomask_case(4096),
                     ]
                 }
             },
@@ -786,12 +828,23 @@ def test_v2_flash_attn_ext_fallback_decode_binds_llama_layout_and_padded_strides
 
     op_summary = summary["operations"][0]
     assert op_summary["op"] == "FLASH_ATTN_EXT"
-    assert op_summary["matched_case_count"] == 4
-    assert op_summary["unmatched_case_count"] == 1
-    assert op_summary["generated_config_count"] == 1
-    config = json.loads(Path(op_summary["generated_config_paths"][0]).read_text())
-    assert config["route_id"] == "flash_attn_ext_f32_f16_fallback_decode_plain_mask_t1"
-    assert config["execution_abi"]["entries"] == [
+    assert op_summary["matched_case_count"] == 7
+    assert op_summary["unmatched_case_count"] == 0
+    assert op_summary["generated_config_count"] == 3
+    configs = [json.loads(Path(path).read_text()) for path in op_summary["generated_config_paths"]]
+    configs_by_route: dict[str, list[dict[str, object]]] = {}
+    for config in configs:
+        configs_by_route.setdefault(str(config["route_id"]), []).append(config)
+    assert set(configs_by_route) == {
+        "flash_attn_ext_f32_f16_fallback_decode_plain_mask_t1",
+        "flash_attn_ext_f32_f16_fallback_decode_nomask_t1",
+    }
+    plain_config = next(
+        config
+        for config in configs_by_route["flash_attn_ext_f32_f16_fallback_decode_plain_mask_t1"]
+        if len(config["cases"]) > 1
+    )
+    assert plain_config["execution_abi"]["entries"] == [
         {"position": 0, "role": "scale", "kind": "scalar", "dtype": "f32", "value": 0.08838834764831843},
         {"position": 1, "role": "src0", "kind": "input", "dtype": "f32", "fixture": "src0"},
         {"position": 2, "role": "src1", "kind": "input", "dtype": "f16", "fixture": "src1"},
@@ -806,14 +859,22 @@ def test_v2_flash_attn_ext_fallback_decode_binds_llama_layout_and_padded_strides
             "expect": {"fixture": "expected", "mode": "close"},
         },
     ]
-    shapes = [dict(zip(config["params"], values, strict=True)) for values in config["cases"]]
-    assert {shape["src1_d1"] for shape in shapes} == {512, 1024, 2048, 4096}
-    for shape in shapes:
+    all_plain_shapes = [
+        dict(zip(config["params"], values, strict=True))
+        for config in configs_by_route["flash_attn_ext_f32_f16_fallback_decode_plain_mask_t1"]
+        for values in config["cases"]
+    ]
+    assert {shape["src1_d1"] for shape in all_plain_shapes} == {512, 1024, 2048, 4096, 113}
+    assert any(shape["d0"] == 128 and shape["src0_d0"] == 192 for shape in all_plain_shapes)
+    for shape in all_plain_shapes:
         kv_len = shape["src1_d1"]
         assert shape["src2_d1"] == kv_len
         assert shape["src3_d0"] == kv_len
-        assert shape["src1_d2_stride"] == 128 * kv_len * 2
-        assert shape["src2_d2_stride"] == 128 * kv_len * 2
+    nomask_config = configs_by_route["flash_attn_ext_f32_f16_fallback_decode_nomask_t1"][0]
+    assert nomask_config["execution_abi"]["entries"][4]["role"] == "src3"
+    nomask_shape = dict(zip(nomask_config["params"], nomask_config["cases"][0], strict=True))
+    assert nomask_shape["src3_d0"] == 4096
+    assert nomask_shape.get("src3_d1", nomask_shape["d1"]) == 1
 
 
 @pytest.mark.parametrize(

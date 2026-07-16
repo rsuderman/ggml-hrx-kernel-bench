@@ -19,6 +19,7 @@
     "FLASH_ATTN_EXT": [
       "flash_attn_ext/flash_attn_ext_f32_f16_tiled_decode_d128_h32_hkv8_kv512_8192_t1.json",
       "flash_attn_ext/flash_attn_ext_f32_f16_tiled_prefill_d128_h32_hkv8_cap_kv8192_t512.json",
+      "flash_attn_ext/flash_attn_ext_f32_f16_fallback_decode_nomask_t1.json",
       "flash_attn_ext/flash_attn_ext_f32_f16_fallback_decode_plain_mask_t1.json"
     ],
     "GET_ROWS": [
@@ -65,8 +66,7 @@
       "rope/rope_f32_normal_explicit_pos_n128_h32_t512_contiguous_4d.json",
       "rope/rope_f32_normal_n128_h32_t2_contiguous_4d.json",
       "rope/rope_neox_f32_n64_h128_t2_contiguous_4d.json",
-      "rope/rope_f16_normal_n128_h32_t2_contiguous_4d.json",
-      "rope/rope_neox_f16_n64_h128_t2_contiguous_4d.json"
+      "rope/rope_f16_normal_n128_h32_t2_contiguous_4d.json"
     ],
     "ROPE_SCALE": [
       "rope/rope_scale_f32_neox_freq_n128_d96_h24_t1_contiguous_4d.json"

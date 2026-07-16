@@ -123,6 +123,7 @@ SOFTMAX_F32_FAMILIES = {"soft_max_f32"}
 FLASH_ATTN_FAMILIES = {"flash_attn_ext_f32_f16"}
 ROPE_F32_FAMILIES = {"rope_f32", "rope_neox_f32"}
 ROPE_F16_FAMILIES = {"rope_f16", "rope_neox_f16"}
+ROPE_FAMILIES = ROPE_F32_FAMILIES | ROPE_F16_FAMILIES
 INDEX_F32_FAMILIES = {"get_rows_f32", "set_rows_f32", "cont_set_rows_f32"}
 INDEX_QUANTIZED_FAMILIES = {
     "get_rows_q4_k_f32",
@@ -451,6 +452,18 @@ def _materialize_approximate_unary_f16_expected_arrays(
     return result
 
 
+def _descriptor_workgroup_count(candidate: Any) -> list[int]:
+    if str(candidate.family) not in ROPE_FAMILIES:
+        return list(candidate.dispatch["workgroup_count"])
+
+    ncols = int(candidate.config["@shape.rope.ncols"])
+    nheads = int(candidate.config["@shape.rope.nheads"])
+    ntokens = int(candidate.config["@shape.rope.ntokens"])
+    workgroup_size = int(candidate.config["@tuning.rope.workgroup_size"])
+    pair_count = max((ncols // 2) * nheads * ntokens, 1)
+    return [(pair_count + workgroup_size - 1) // workgroup_size, 1, 1]
+
+
 def _descriptor_scalars_from_execution_abi(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
     scalars: list[dict[str, Any]] = []
     for entry in entries:
@@ -643,12 +656,14 @@ def descriptor_from_generated_case(
                 reason=f"largest oracle fixture has {largest_array} elements, above max {max_elements}",
             )
     tolerance = oracle.tolerance or {"atol": 1e-5, "rtol": 1e-5}
+    dispatch = dict(candidate.dispatch)
+    dispatch["workgroup_count"] = _descriptor_workgroup_count(candidate)
     descriptor = {
         "schema": SCHEMA,
         "kernel": str(candidate.source_path),
         "root": candidate.root_symbol,
         "target": target,
-        "workgroup_count": list(candidate.dispatch["workgroup_count"]),
+        "workgroup_count": dispatch["workgroup_count"],
         "configs": dict(sorted(candidate.config.items())),
         "scalars": _descriptor_scalars_from_execution_abi(abi_entries),
         "bindings": _descriptor_bindings_from_execution_abi(
@@ -665,7 +680,7 @@ def descriptor_from_generated_case(
             "shape": candidate.shape,
             "route_id": candidate.route_id,
             "candidate_id": candidate.id,
-            "dispatch": candidate.dispatch,
+            "dispatch": dispatch,
             "element_counts": element_counts,
             "oracle": oracle.to_ledger(),
             "oracle_array_element_counts": array_element_counts,

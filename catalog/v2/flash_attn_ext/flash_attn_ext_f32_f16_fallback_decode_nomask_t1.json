@@ -1,5 +1,5 @@
 {
-  "id": "flash_attn_ext_f32_f16_fallback_decode_plain_mask_t1",
+  "id": "flash_attn_ext_f32_f16_fallback_decode_nomask_t1",
   "family": "flash_attn_ext_f32_f16",
   "kernel": {
     "source_id": "flash_attn_ext_f32_f16",
@@ -52,6 +52,26 @@
       "dtype": "F32",
       "dimensions": "dst_dimensions",
       "strides": "dst_strides"
+    }
+  },
+  "synthetic_tensors": {
+    "src3": {
+      "dtype": "F16",
+      "dimensions": [
+        {
+          "source": "src1_dimensions",
+          "index": 1
+        },
+        {
+          "source": "src0_dimensions",
+          "index": 1
+        },
+        1,
+        {
+          "source": "src0_dimensions",
+          "index": 3
+        }
+      ]
     }
   },
   "values": [

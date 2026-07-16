@@ -1513,11 +1513,18 @@ def test_descriptor_from_generated_soft_max_f32_case_materializes_row_fixtures(
         assert f"2:output:f32:8:{tmp_path / descriptor['bindings'][1]['path']}" in command
 
 
-@pytest.mark.parametrize(("neox", "expected_root"), [(False, "@hrx2_rope_normal_f32"), (True, "@hrx2_rope_neox_f32")])
+@pytest.mark.parametrize(
+    ("neox", "expected_root", "expected_workgroup_count"),
+    [
+        (False, "@hrx2_rope_normal_f32", [16, 1, 1]),
+        (True, "@hrx2_rope_neox_f32", [1, 1, 1]),
+    ],
+)
 def test_descriptor_from_generated_rope_f32_case_uses_scalar_and_position_abi(
     tmp_path: Path,
     neox: bool,
     expected_root: str,
+    expected_workgroup_count: list[int],
 ) -> None:
     assets = materialize_asset_root(tmp_path / "assets", force=True)
     case_values = _generated_rope_config(neox=neox)["cases"][0]
@@ -1537,6 +1544,8 @@ def test_descriptor_from_generated_rope_f32_case_uses_scalar_and_position_abi(
     assert result.descriptor is not None
     descriptor = result.descriptor
     assert descriptor["root"] == expected_root
+    assert descriptor["workgroup_count"] == expected_workgroup_count
+    assert descriptor["metadata"]["dispatch"]["workgroup_count"] == expected_workgroup_count
     assert descriptor["scalars"] == [
         {"name": "theta_scale", "position": 0, "dtype": "f32", "value": 0.75},
         {"name": "freq_scale", "position": 1, "dtype": "f32", "value": 1.1},

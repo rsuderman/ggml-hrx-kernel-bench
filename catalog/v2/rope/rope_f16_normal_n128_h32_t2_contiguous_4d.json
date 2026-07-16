@@ -218,8 +218,20 @@
       "value": 0.0
     },
     {
+      "name": "attribute.freq_scale",
+      "value": 1.0
+    },
+    {
+      "name": "attribute.attn_factor",
+      "value": 1.0
+    },
+    {
       "name": "attribute.has_freq_factors",
       "value": 0
+    },
+    {
+      "name": "rope.src0_head_stride",
+      "min": 129
     },
     {
       "name": "attribute.n_dims",

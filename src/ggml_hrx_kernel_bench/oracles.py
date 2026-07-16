@@ -2478,7 +2478,11 @@ def _flash_attn_ext_arrays(np: Any, candidate: Candidate, seed: int) -> dict[str
     src0_buffer = f32_pattern(np, (_buffer_length(src0_dims, src0_strides),), seed=seed, scale=0.125)
     src1_buffer = f16_pattern(np, (_buffer_length(src1_dims, src1_strides),), seed=seed + 1, scale=0.125)
     src2_buffer = f16_pattern(np, (_buffer_length(src2_dims, src2_strides),), seed=seed + 2, scale=0.5)
-    src3_buffer = f16_pattern(np, (_buffer_length(src3_dims, src3_strides),), seed=seed + 3, scale=0.05)
+    has_synthetic_mask = "src3" in dict(candidate.route.get("synthetic_tensors", {}))
+    if has_synthetic_mask:
+        src3_buffer = np.zeros((_buffer_length(src3_dims, src3_strides),), dtype=np.float16)
+    else:
+        src3_buffer = f16_pattern(np, (_buffer_length(src3_dims, src3_strides),), seed=seed + 3, scale=0.05)
     dst_init = f32_pattern(np, (_buffer_length(dst_dims, dst_strides),), seed=seed + 4, scale=0.25)
     expected = dst_init.copy()
 
@@ -2525,6 +2529,7 @@ def _flash_attn_ext_arrays(np: Any, candidate: Candidate, seed: int) -> dict[str
             "heads_per_kv": heads_per_kv,
             "dst_layout": dst_layout,
             "scale": float(scale),
+            "has_mask": not has_synthetic_mask,
         },
     }
 
