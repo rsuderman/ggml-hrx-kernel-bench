@@ -43,7 +43,6 @@ def create_router(
     kernel_dir: Path | None = None,
     routing_dir: Path | None = None,
     observed_shapes=None,
-    v2_selector_mode: str | None = None,
 ) -> RoutingBackend:
     if version == "v2":
         from .v2.backend import V2RoutingBackend
@@ -54,8 +53,7 @@ def create_router(
                 kernel_dir=kernel_dir,
                 routing_dir=routing_dir,
                 observed_shapes=observed_shapes,
-            ),
-            v2_selector_mode=v2_selector_mode,
+            )
         )
     raise ValueError(f"unsupported routing version: {version}")
 

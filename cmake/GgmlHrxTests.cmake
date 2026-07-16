@@ -179,9 +179,6 @@ function(add_yaml_route_import_descriptor_tests)
     --build-prepare-target ${prepare_target}
     --import-target ${import_target}
     --all-ops
-    --cmake-command ${CMAKE_COMMAND}
-    --python-module-dir ${CMAKE_BINARY_DIR}/python
-    --python-module-target _ggml_hrx_v2_selector_native
   )
   if(GGML_HRX_YRIDT_ROUTING_DIR)
     list(APPEND generate_tests_command --routing-dir ${GGML_HRX_YRIDT_ROUTING_DIR})

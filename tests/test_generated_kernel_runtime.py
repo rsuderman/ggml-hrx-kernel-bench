@@ -47,8 +47,6 @@ def test_generate_kernel_runtime_tests_cmake_omits_case_selector(
             str(tmp_path / "generated-import-dir"),
             "--python-executable",
             sys.executable,
-            "--python-module-dir",
-            str(tmp_path / "python"),
             "--runner-script",
             str(ROOT / "tests" / "infra" / "run_generated_kernel_tests.py"),
             "--runtime-output-dir",
@@ -60,12 +58,9 @@ def test_generate_kernel_runtime_tests_cmake_omits_case_selector(
     generated = output_path.read_text(encoding="utf-8")
     assert "--case-selector" not in generated
     assert "kernel-run-llama-cpp-tests-v2-ADD-generated" in generated
-    assert (
-        f'ENVIRONMENT_MODIFICATION "PYTHONPATH=path_list_prepend:{tmp_path / "python"}"'
-        in generated
-    )
+    assert "SKIP_RETURN_CODE 125" in generated
+    assert "ENVIRONMENT_MODIFICATION" not in generated
     assert "if(CMAKE_VERSION" not in generated
-    assert f'"PYTHONPATH={tmp_path / "python"}"' not in generated
 
 
 def test_run_generated_kernel_tests_executes_all_cases(

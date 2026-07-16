@@ -1,7 +1,6 @@
-# Required Python dependencies for the CMake native selector build, fixture
-# generation, correctness verification, and grouped YAML import.
+# Required Python dependencies for fixture generation, correctness verification,
+# and grouped YAML import.
 numpy>=1.26
-nanobind>=2.13
 PyYAML>=6.0
 
 # External non-Python tools used by compile/run flows are installed separately:
