@@ -18,7 +18,8 @@
     "DIV": [],
     "FLASH_ATTN_EXT": [
       "flash_attn_ext/flash_attn_ext_f32_f16_tiled_decode_d128_h32_hkv8_kv512_8192_t1.json",
-      "flash_attn_ext/flash_attn_ext_f32_f16_tiled_prefill_d128_h32_hkv8_cap_kv8192_t512.json"
+      "flash_attn_ext/flash_attn_ext_f32_f16_tiled_prefill_d128_h32_hkv8_cap_kv8192_t512.json",
+      "flash_attn_ext/flash_attn_ext_f32_f16_fallback_decode_plain_mask_t1.json"
     ],
     "GET_ROWS": [
       "get_rows/get_rows_f32_embedding_rows_descriptor_4d.json",

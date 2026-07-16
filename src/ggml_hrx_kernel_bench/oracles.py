@@ -917,6 +917,14 @@ def _buffer_length(dims: tuple[int, ...], strides: tuple[int, ...]) -> int:
     return 1 + sum((int(dim) - 1) * int(stride) for dim, stride in zip(dims, strides, strict=True))
 
 
+def _strided_logical_view(np: Any, buffer: Any, dims: tuple[int, ...], strides: tuple[int, ...]) -> Any:
+    return np.lib.stride_tricks.as_strided(
+        buffer,
+        shape=dims,
+        strides=tuple(int(stride) * buffer.dtype.itemsize for stride in strides),
+    )
+
+
 def _pointwise_logical_indices(
     np: Any,
     logical_dims: tuple[int, ...],
@@ -2414,19 +2422,40 @@ def _flash_attn_ext_arrays(np: Any, candidate: Candidate, seed: int) -> dict[str
     dst_dims = _captured_tensor_dims(candidate, "dst")
     if src0_dims is None or src1_dims is None or src2_dims is None or src3_dims is None or dst_dims is None:
         raise ValueError("flash_attn_ext requires captured rank-4 src0/src1/src2/src3/dst dimensions")
-    head_dim, heads, tokens, _ = dst_dims
+    qk_dim = int(candidate.config.get("@shape.flash_attn_ext.qk_dim", src0_dims[0]))
+    value_dim = int(candidate.config.get("@shape.flash_attn_ext.value_dim", dst_dims[0]))
+    tokens = int(candidate.config.get("@shape.flash_attn_ext.tokens", dst_dims[2]))
+    heads = int(candidate.config.get("@shape.flash_attn_ext.heads", dst_dims[1]))
+    batch = int(candidate.config.get("@shape.flash_attn_ext.batch", dst_dims[3]))
     kv_len = src1_dims[1]
     kv_heads = src1_dims[2]
-    if head_dim <= 0 or heads <= 0 or tokens <= 0 or kv_len <= 0 or kv_heads <= 0:
+    if qk_dim <= 0 or value_dim <= 0 or heads <= 0 or tokens <= 0 or batch <= 0 or kv_len <= 0 or kv_heads <= 0:
         raise ValueError(f"flash_attn_ext requires positive dimensions, got dst={dst_dims} src1={src1_dims}")
     if heads % kv_heads != 0:
         raise ValueError(f"flash_attn_ext requires heads divisible by kv_heads, got heads={heads} kv_heads={kv_heads}")
-    if src0_dims != (head_dim, tokens, heads, 1):
-        raise ValueError(f"flash_attn_ext src0 dimensions {src0_dims} do not match dst {dst_dims}")
-    if src2_dims != src1_dims:
+    if src0_dims != (qk_dim, tokens, heads, batch):
+        raise ValueError(
+            f"flash_attn_ext src0 dimensions {src0_dims} do not match qk/tokens/heads/batch "
+            f"{(qk_dim, tokens, heads, batch)}"
+        )
+    if src1_dims != (qk_dim, kv_len, kv_heads, batch):
+        raise ValueError(
+            f"flash_attn_ext key dimensions {src1_dims} do not match qk/kv_len/kv_heads/batch "
+            f"{(qk_dim, kv_len, kv_heads, batch)}"
+        )
+    if src2_dims != (value_dim, kv_len, kv_heads, batch):
         raise ValueError(f"flash_attn_ext requires matching key/value dimensions, got src1={src1_dims} src2={src2_dims}")
-    if src3_dims != (kv_len, tokens, 1, 1):
+    if src3_dims != (kv_len, tokens, 1, batch):
         raise ValueError(f"flash_attn_ext mask dimensions {src3_dims} do not match kv_len/tokens")
+    if dst_dims == (value_dim, tokens, heads, batch):
+        dst_layout = "dim_token_head_batch"
+    elif dst_dims == (value_dim, heads, tokens, batch):
+        dst_layout = "dim_head_token_batch"
+    else:
+        raise ValueError(
+            f"flash_attn_ext dst dimensions {dst_dims} do not match supported layouts "
+            f"{(value_dim, tokens, heads, batch)} or {(value_dim, heads, tokens, batch)}"
+        )
 
     src0_strides = _copy_tensor_strides(candidate, "src0", src0_dims)
     src1_strides = _copy_tensor_strides(candidate, "src1", src1_dims)
@@ -2440,23 +2469,28 @@ def _flash_attn_ext_arrays(np: Any, candidate: Candidate, seed: int) -> dict[str
     dst_init = f32_pattern(np, (_buffer_length(dst_dims, dst_strides),), seed=seed + 4, scale=0.25)
     expected = dst_init.copy()
 
-    q = src0_buffer.reshape(src0_dims, order="F")
-    k = src1_buffer.reshape(src1_dims, order="F").astype(np.float32)
-    v = src2_buffer.reshape(src2_dims, order="F").astype(np.float32)
-    mask = src3_buffer.reshape(src3_dims, order="F").astype(np.float32)
-    out = expected.reshape(dst_dims, order="F")
-    scale = np.float32(_candidate_f32_value(candidate, "scale", 1.0 / math.sqrt(float(head_dim))))
+    q = _strided_logical_view(np, src0_buffer, src0_dims, src0_strides)
+    k = _strided_logical_view(np, src1_buffer, src1_dims, src1_strides).astype(np.float32)
+    v = _strided_logical_view(np, src2_buffer, src2_dims, src2_strides).astype(np.float32)
+    mask = _strided_logical_view(np, src3_buffer, src3_dims, src3_strides).astype(np.float32)
+    out = _strided_logical_view(np, expected, dst_dims, dst_strides)
+    scale = np.float32(_candidate_f32_value(candidate, "scale", 1.0 / math.sqrt(float(qk_dim))))
     heads_per_kv = heads // kv_heads
-    for token in range(tokens):
-        mask_for_token = mask[:, token, 0, 0]
-        for head in range(heads):
-            kv_head = head // heads_per_kv
-            scores = np.matmul(q[:, token, head, 0].astype(np.float32), k[:, :, kv_head, 0])
-            scores = (scores * scale + mask_for_token).astype(np.float32)
-            shifted = scores - np.max(scores)
-            weights = np.exp(shifted, dtype=np.float32)
-            weights = (weights / np.sum(weights, dtype=np.float32)).astype(np.float32)
-            out[:, head, token, 0] = np.matmul(v[:, :, kv_head, 0], weights).astype(np.float32)
+    for batch_id in range(batch):
+        for token in range(tokens):
+            mask_for_token = mask[:, token, 0, batch_id]
+            for head in range(heads):
+                kv_head = head // heads_per_kv
+                scores = np.matmul(q[:, token, head, batch_id].astype(np.float32), k[:, :, kv_head, batch_id])
+                scores = (scores * scale + mask_for_token).astype(np.float32)
+                shifted = scores - np.max(scores)
+                weights = np.exp(shifted, dtype=np.float32)
+                weights = (weights / np.sum(weights, dtype=np.float32)).astype(np.float32)
+                result = np.matmul(v[:, :, kv_head, batch_id], weights).astype(np.float32)
+                if dst_layout == "dim_token_head_batch":
+                    out[:, token, head, batch_id] = result
+                else:
+                    out[:, head, token, batch_id] = result
 
     return {
         "arrays": {
@@ -2468,11 +2502,15 @@ def _flash_attn_ext_arrays(np: Any, candidate: Candidate, seed: int) -> dict[str
             "expected": expected.reshape(-1).astype(np.float32),
         },
         "metadata": {
-            "head_dim": head_dim,
+            "qk_dim": qk_dim,
+            "value_dim": value_dim,
             "heads": heads,
+            "tokens": tokens,
+            "batch": batch,
             "kv_len": kv_len,
             "kv_heads": kv_heads,
             "heads_per_kv": heads_per_kv,
+            "dst_layout": dst_layout,
             "scale": float(scale),
         },
     }

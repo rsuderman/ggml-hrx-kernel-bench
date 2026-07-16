@@ -695,6 +695,127 @@ def test_v2_flash_attn_ext_prefill_dispatch_uses_token_workgroups() -> None:
     assert smaller_candidate.dispatch["workgroup_count"] == [32, 128, 128]
 
 
+def _flash_attn_ext_decode_case(kv_len: int, *, precision: int = 10) -> dict[str, object]:
+    return {
+        "inputs": [
+            {"dtype": "F32", "shape": [128, 1, 32, 1]},
+            {"dtype": "F16", "shape": [128, kv_len, 8, 1], "storage_shape": [128, kv_len * 2, 8, 1]},
+            {"dtype": "F16", "shape": [128, kv_len, 8, 1], "storage_shape": [128, kv_len * 2, 8, 1]},
+            {"dtype": "F16", "shape": [kv_len, 1, 1, 1]},
+        ],
+        "destinations": [{"dtype": "F32", "shape": [128, 1, 32, 1]}],
+        "attributes": {
+            "logit_softcap_enabled": False,
+            "max_bias_enabled": False,
+            "precision": precision,
+            "scale": 0.08838834764831843,
+            "sinks": 0,
+        },
+    }
+
+
+def test_v2_flash_attn_ext_fallback_decode_binds_llama_layout_and_padded_strides(tmp_path: Path) -> None:
+    catalog = load_route_catalog(ACTUAL_V2_ROUTING_DIR)
+    route = next(
+        current
+        for current in routes_for_op(catalog, "FLASH_ATTN_EXT")
+        if current.id == "flash_attn_ext_f32_f16_fallback_decode_plain_mask_t1"
+    )
+
+    candidate = candidate_from_shape(
+        kernel_dir=ACTUAL_V2_KERNEL_DIR,
+        route=route,
+        shape={
+            "d0": 128,
+            "d1": 1,
+            "d2": 32,
+            "d3": 1,
+            "src1_d1": 1024,
+            "src1_d2": 8,
+            "src1_d2_stride": 262144,
+            "src1_d3_stride": 2097152,
+            "src2_d1": 1024,
+            "src2_d2": 8,
+            "src2_d2_stride": 262144,
+            "src2_d3_stride": 2097152,
+            "src3_d0": 1024,
+            "src3_d2": 1,
+        },
+    )
+
+    assert candidate.config["@shape.flash_attn_ext.qk_dim"] == "128"
+    assert candidate.config["@shape.flash_attn_ext.value_dim"] == "128"
+    assert candidate.config["@shape.flash_attn_ext.tokens"] == "1"
+    assert candidate.config["@shape.flash_attn_ext.heads"] == "32"
+    assert candidate.config["@shape.flash_attn_ext.kv_heads"] == "8"
+    assert candidate.config["@shape.flash_attn_ext.kv_len"] == "1024"
+    assert candidate.config["@layout.flash_attn_ext.q_stride_token"] == "128"
+    assert candidate.config["@layout.flash_attn_ext.q_stride_head"] == "128"
+    assert candidate.config["@layout.flash_attn_ext.k_stride_head"] == "262144"
+    assert candidate.config["@layout.flash_attn_ext.v_stride_head"] == "262144"
+    assert candidate.config["@layout.flash_attn_ext.mask_stride_token"] == "1024"
+    assert candidate.config["@layout.flash_attn_ext.dst_stride_token"] == "128"
+    assert candidate.config["@mode.flash_attn_ext.has_mask"] == "1"
+    assert candidate.config["@mode.flash_attn_ext.precision"] == "10"
+    assert candidate.dispatch["workgroup_count"] == [32, 128, 1]
+
+    yaml_path = tmp_path / "flash_attn_ext_decode.yaml"
+    yaml_path.write_text(
+        json.dumps(
+            {
+                "ops": {
+                    "FLASH_ATTN_EXT": [
+                        _flash_attn_ext_decode_case(1024),
+                        _flash_attn_ext_decode_case(2048),
+                        _flash_attn_ext_decode_case(4096),
+                        _flash_attn_ext_decode_case(512),
+                        _flash_attn_ext_decode_case(512, precision=0),
+                    ]
+                }
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    summary = materialize_yaml_route_import(
+        [yaml_path],
+        output_dir=tmp_path / "route-import",
+        routing_dir=ACTUAL_V2_ROUTING_DIR,
+    )
+
+    op_summary = summary["operations"][0]
+    assert op_summary["op"] == "FLASH_ATTN_EXT"
+    assert op_summary["matched_case_count"] == 4
+    assert op_summary["unmatched_case_count"] == 1
+    assert op_summary["generated_config_count"] == 1
+    config = json.loads(Path(op_summary["generated_config_paths"][0]).read_text())
+    assert config["route_id"] == "flash_attn_ext_f32_f16_fallback_decode_plain_mask_t1"
+    assert config["execution_abi"]["entries"] == [
+        {"position": 0, "role": "scale", "kind": "scalar", "dtype": "f32", "value": 0.08838834764831843},
+        {"position": 1, "role": "src0", "kind": "input", "dtype": "f32", "fixture": "src0"},
+        {"position": 2, "role": "src1", "kind": "input", "dtype": "f16", "fixture": "src1"},
+        {"position": 3, "role": "src2", "kind": "input", "dtype": "f16", "fixture": "src2"},
+        {"position": 4, "role": "src3", "kind": "input", "dtype": "f16", "fixture": "src3"},
+        {
+            "position": 5,
+            "role": "dst",
+            "kind": "output",
+            "dtype": "f32",
+            "fixture": "dst_init",
+            "expect": {"fixture": "expected", "mode": "close"},
+        },
+    ]
+    shapes = [dict(zip(config["params"], values, strict=True)) for values in config["cases"]]
+    assert {shape["src1_d1"] for shape in shapes} == {512, 1024, 2048, 4096}
+    for shape in shapes:
+        kv_len = shape["src1_d1"]
+        assert shape["src2_d1"] == kv_len
+        assert shape["src3_d0"] == kv_len
+        assert shape["src1_d2_stride"] == 128 * kv_len * 2
+        assert shape["src2_d2_stride"] == 128 * kv_len * 2
+
+
 @pytest.mark.parametrize(
     ("route_id", "shape", "expected_workgroup_count"),
     [

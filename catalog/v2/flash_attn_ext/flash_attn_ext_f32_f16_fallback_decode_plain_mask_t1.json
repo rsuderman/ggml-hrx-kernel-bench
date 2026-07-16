@@ -1,0 +1,481 @@
+{
+  "id": "flash_attn_ext_f32_f16_fallback_decode_plain_mask_t1",
+  "family": "flash_attn_ext_f32_f16",
+  "kernel": {
+    "source_id": "flash_attn_ext_f32_f16",
+    "path": "flash_attn_ext/fallback_decode_f32_f16.loom",
+    "root_symbol": "@hrx2_flash_attn_ext_f32_f16_fallback_decode_plain_mask_t1",
+    "export_name": "hrx2_flash_attn_ext_f32_f16_fallback_decode_plain_mask_t1"
+  },
+  "attributes": {
+    "logit_softcap_enabled": {
+      "type": "bool"
+    },
+    "max_bias_enabled": {
+      "type": "bool"
+    },
+    "precision": {
+      "type": "i32"
+    },
+    "scale": {
+      "type": "f32"
+    },
+    "sinks": {
+      "type": "i32"
+    }
+  },
+  "tensors": {
+    "src0": {
+      "dtype": "F32",
+      "dimensions": "src0_dimensions",
+      "strides": "src0_strides",
+      "permutation": "src0_permutation"
+    },
+    "src1": {
+      "dtype": "F16",
+      "dimensions": "src1_dimensions",
+      "strides": "src1_strides",
+      "permutation": "src1_permutation"
+    },
+    "src2": {
+      "dtype": "F16",
+      "dimensions": "src2_dimensions",
+      "strides": "src2_strides",
+      "permutation": "src2_permutation"
+    },
+    "src3": {
+      "dtype": "F16",
+      "dimensions": "src3_dimensions",
+      "strides": "src3_strides"
+    },
+    "dst": {
+      "dtype": "F32",
+      "dimensions": "dst_dimensions",
+      "strides": "dst_strides"
+    }
+  },
+  "values": [
+    {
+      "name": "qk_dim",
+      "element": {
+        "source": "src0_dimensions",
+        "index": 0
+      }
+    },
+    {
+      "name": "k_qk_dim",
+      "element": {
+        "source": "src1_dimensions",
+        "index": 0
+      }
+    },
+    {
+      "name": "value_dim",
+      "element": {
+        "source": "dst_dimensions",
+        "index": 0
+      }
+    },
+    {
+      "name": "v_value_dim",
+      "element": {
+        "source": "src2_dimensions",
+        "index": 0
+      }
+    },
+    {
+      "name": "tokens",
+      "element": {
+        "source": "dst_dimensions",
+        "index": 1
+      }
+    },
+    {
+      "name": "src0_tokens",
+      "element": {
+        "source": "src0_dimensions",
+        "index": 1
+      }
+    },
+    {
+      "name": "heads",
+      "element": {
+        "source": "dst_dimensions",
+        "index": 2
+      }
+    },
+    {
+      "name": "src0_heads",
+      "element": {
+        "source": "src0_dimensions",
+        "index": 2
+      }
+    },
+    {
+      "name": "batch",
+      "element": {
+        "source": "dst_dimensions",
+        "index": 3
+      }
+    },
+    {
+      "name": "src0_batch",
+      "element": {
+        "source": "src0_dimensions",
+        "index": 3
+      }
+    },
+    {
+      "name": "kv_len",
+      "element": {
+        "source": "src1_dimensions",
+        "index": 1
+      }
+    },
+    {
+      "name": "src2_kv_len",
+      "element": {
+        "source": "src2_dimensions",
+        "index": 1
+      }
+    },
+    {
+      "name": "mask_kv_len",
+      "element": {
+        "source": "src3_dimensions",
+        "index": 0
+      }
+    },
+    {
+      "name": "kv_heads",
+      "element": {
+        "source": "src1_dimensions",
+        "index": 2
+      }
+    },
+    {
+      "name": "src2_kv_heads",
+      "element": {
+        "source": "src2_dimensions",
+        "index": 2
+      }
+    },
+    {
+      "name": "src1_batch",
+      "element": {
+        "source": "src1_dimensions",
+        "index": 3
+      }
+    },
+    {
+      "name": "src2_batch",
+      "element": {
+        "source": "src2_dimensions",
+        "index": 3
+      }
+    },
+    {
+      "name": "mask_tokens",
+      "element": {
+        "source": "src3_dimensions",
+        "index": 1
+      }
+    },
+    {
+      "name": "mask_batch",
+      "element": {
+        "source": "src3_dimensions",
+        "index": 3
+      }
+    }
+  ],
+  "constraints": [
+    {
+      "name": "src0_dimensions",
+      "length": 4
+    },
+    {
+      "name": "src1_dimensions",
+      "length": 4
+    },
+    {
+      "name": "src2_dimensions",
+      "length": 4
+    },
+    {
+      "name": "src3_dimensions",
+      "length": 4
+    },
+    {
+      "name": "dst_dimensions",
+      "length": 4
+    },
+    {
+      "name": "src0_permutation",
+      "iota": true
+    },
+    {
+      "name": "src1_permutation",
+      "iota": true
+    },
+    {
+      "name": "src2_permutation",
+      "iota": true
+    },
+    {
+      "name": "attribute.precision",
+      "value": 10
+    },
+    {
+      "name": "attribute.sinks",
+      "value": 0
+    },
+    {
+      "name": "attribute.logit_softcap_enabled",
+      "value": false
+    },
+    {
+      "name": "attribute.max_bias_enabled",
+      "value": false
+    },
+    {
+      "name": "qk_dim",
+      "min": 128,
+      "max": 128
+    },
+    {
+      "name": "value_dim",
+      "min": 128,
+      "max": 128
+    },
+    {
+      "name": "tokens",
+      "min": 1,
+      "max": 1
+    },
+    {
+      "name": "heads",
+      "min": 32,
+      "max": 32
+    },
+    {
+      "name": "kv_len",
+      "min": 512,
+      "max": 4096,
+      "multiple_of": 512
+    },
+    {
+      "name": "kv_heads",
+      "min": 8,
+      "max": 8
+    },
+    {
+      "name": "batch",
+      "min": 1,
+      "max": 1
+    },
+    {
+      "name": "src3_dimensions",
+      "index": 2,
+      "min": 1,
+      "max": 1
+    },
+    {
+      "equals": [
+        "qk_dim",
+        "k_qk_dim",
+        "value_dim",
+        "v_value_dim"
+      ]
+    },
+    {
+      "equals": [
+        "tokens",
+        "src0_tokens",
+        "mask_tokens"
+      ]
+    },
+    {
+      "equals": [
+        "heads",
+        "src0_heads"
+      ]
+    },
+    {
+      "equals": [
+        "batch",
+        "src0_batch",
+        "src1_batch",
+        "src2_batch",
+        "mask_batch"
+      ]
+    },
+    {
+      "equals": [
+        "kv_len",
+        "src2_kv_len",
+        "mask_kv_len"
+      ]
+    },
+    {
+      "equals": [
+        "kv_heads",
+        "src2_kv_heads"
+      ]
+    }
+  ],
+  "launch": {
+    "workgroup_size": [
+      256,
+      1,
+      1
+    ],
+    "workgroup_count_sources": [
+      "value.heads",
+      "value.value_dim",
+      "value.batch"
+    ],
+    "rows_per_workgroup": 1,
+    "cols_per_workgroup": 1
+  },
+  "config": {
+    "bindings": [
+      {
+        "key": "@shape.flash_attn_ext.qk_dim",
+        "source": "value.qk_dim"
+      },
+      {
+        "key": "@shape.flash_attn_ext.value_dim",
+        "source": "value.value_dim"
+      },
+      {
+        "key": "@shape.flash_attn_ext.tokens",
+        "source": "value.tokens"
+      },
+      {
+        "key": "@shape.flash_attn_ext.heads",
+        "source": "value.heads"
+      },
+      {
+        "key": "@shape.flash_attn_ext.kv_heads",
+        "source": "value.kv_heads"
+      },
+      {
+        "key": "@shape.flash_attn_ext.kv_len",
+        "source": "value.kv_len"
+      },
+      {
+        "key": "@shape.flash_attn_ext.batch",
+        "source": "value.batch"
+      },
+      {
+        "key": "@layout.flash_attn_ext.q_stride_dim",
+        "source": "tensor.src0.dimensions.d0.stride"
+      },
+      {
+        "key": "@layout.flash_attn_ext.q_stride_token",
+        "source": "tensor.src0.dimensions.d1.stride"
+      },
+      {
+        "key": "@layout.flash_attn_ext.q_stride_head",
+        "source": "tensor.src0.dimensions.d2.stride"
+      },
+      {
+        "key": "@layout.flash_attn_ext.q_stride_batch",
+        "source": "tensor.src0.dimensions.d3.stride"
+      },
+      {
+        "key": "@layout.flash_attn_ext.k_stride_dim",
+        "source": "tensor.src1.dimensions.d0.stride"
+      },
+      {
+        "key": "@layout.flash_attn_ext.k_stride_kv",
+        "source": "tensor.src1.dimensions.d1.stride"
+      },
+      {
+        "key": "@layout.flash_attn_ext.k_stride_head",
+        "source": "tensor.src1.dimensions.d2.stride"
+      },
+      {
+        "key": "@layout.flash_attn_ext.k_stride_batch",
+        "source": "tensor.src1.dimensions.d3.stride"
+      },
+      {
+        "key": "@layout.flash_attn_ext.v_stride_dim",
+        "source": "tensor.src2.dimensions.d0.stride"
+      },
+      {
+        "key": "@layout.flash_attn_ext.v_stride_kv",
+        "source": "tensor.src2.dimensions.d1.stride"
+      },
+      {
+        "key": "@layout.flash_attn_ext.v_stride_head",
+        "source": "tensor.src2.dimensions.d2.stride"
+      },
+      {
+        "key": "@layout.flash_attn_ext.v_stride_batch",
+        "source": "tensor.src2.dimensions.d3.stride"
+      },
+      {
+        "key": "@layout.flash_attn_ext.mask_stride_kv",
+        "source": "tensor.src3.dimensions.d0.stride"
+      },
+      {
+        "key": "@layout.flash_attn_ext.mask_stride_token",
+        "source": "tensor.src3.dimensions.d1.stride"
+      },
+      {
+        "key": "@layout.flash_attn_ext.mask_stride_batch",
+        "source": "tensor.src3.dimensions.d3.stride"
+      },
+      {
+        "key": "@layout.flash_attn_ext.dst_stride_dim",
+        "source": "tensor.dst.dimensions.d0.stride"
+      },
+      {
+        "key": "@layout.flash_attn_ext.dst_stride_token",
+        "source": "tensor.dst.dimensions.d1.stride"
+      },
+      {
+        "key": "@layout.flash_attn_ext.dst_stride_head",
+        "source": "tensor.dst.dimensions.d2.stride"
+      },
+      {
+        "key": "@layout.flash_attn_ext.dst_stride_batch",
+        "source": "tensor.dst.dimensions.d3.stride"
+      },
+      {
+        "key": "@mode.flash_attn_ext.has_mask",
+        "value": "1"
+      },
+      {
+        "key": "@mode.flash_attn_ext.sinks",
+        "value": "0"
+      },
+      {
+        "key": "@mode.flash_attn_ext.precision",
+        "value": "10"
+      },
+      {
+        "key": "@mode.flash_attn_ext.max_bias_enabled",
+        "value": "0"
+      },
+      {
+        "key": "@mode.flash_attn_ext.logit_softcap_enabled",
+        "value": "0"
+      },
+      {
+        "key": "@tuning.flash_attn_ext.workgroup_size",
+        "value": "256"
+      },
+      {
+        "key": "@tuning.flash_attn_ext.block_kv",
+        "source": "value.kv_len"
+      },
+      {
+        "key": "@tuning.flash_attn_ext.block_tokens",
+        "value": "1"
+      }
+    ]
+  }
+}
