@@ -186,24 +186,47 @@ JSON and route match/unmatch artifacts.
 
 ## Iteration Process
 
-1. Pick one op family and one narrow dtype/layout slice.
+1. Pick one op family and one narrow dtype/layout slice as the first validation
+   checkpoint, not as the entire implementation goal.
 2. Inspect the YAML cases and generated per-op route-import artifacts.
-3. Report the operation surface area before changing code:
+3. Record the operation surface area before changing code:
    - dtype combinations
    - ranks and layouts
    - scalar/config fields used by the YAML
    - which cases already match routes
    - representative missing or unsupported cases
-4. Implement the smallest descriptor, route predicate, or kernel-surface change
-   needed for that slice.
-5. Validate generated configs structurally before updating expected coverage.
-6. Run the targeted build-time route-import target.
-7. If the change widens executing kernel coverage, run the generated runtime
+4. Build an implementation plan that covers as much of the op surface as is
+   reasonable in the current branch. Include every route, config, importer,
+   oracle, and kernel change that can be implemented with known semantics and
+   available validation. Explicitly mark the cases deferred because semantics,
+   runtime support, or test cost are unclear.
+5. Implement the smallest descriptor, route predicate, or kernel-surface change
+   needed for the first checkpoint.
+6. Validate generated configs structurally before updating expected coverage.
+7. Run the targeted build-time route-import target.
+8. If the change widens executing kernel coverage, run the generated runtime
    tests for that op unless the environment blocks runtime execution.
-8. Report what changed, what issues were found, and the next step.
+9. Continue with the next planned reasonable slice. Do not report back after
+   only the first checkpoint unless validation exposes a real blocker.
+10. Report what changed, what coverage moved, what validation ran, and what
+    remains intentionally unsupported only after the reasonable plan has been
+    completed or blocked.
 
 Do not update expected coverage until the intended slice is validated and the
 build-time coverage target passes.
+
+When expected coverage fixtures are updated, preserve their canonical JSON key
+order: top-level `schema`, `operation_count`, `total_pass_case_count`,
+`total_fail_case_count`, `operations`; operation rows `op`, `pass_case_count`,
+`fail_case_count`. Do not paste or copy `sort_keys=True` JSON into expected
+coverage files.
+
+For implementation agents, the delegated task must include the full reasonable
+plan for the selected operation. Agents should independently work through all
+non-blocked slices in that plan before returning results, instead of stopping
+after a single proof route or fallback kernel. When complete, the agent must
+notify the spawning agent with the worktree path, final coverage delta,
+validation results, and any blocked or intentionally deferred cases.
 
 ## Kernel Source Layout
 

@@ -731,7 +731,7 @@ def _generated_rope_config(*, neox: bool = False) -> dict[str, object]:
             "src1_d0",
             "src1_d1",
             "rope.ncols",
-            *([] if neox else ["rope.n_dims"]),
+            "rope.n_dims",
             "rope.nheads",
             "rope.ntokens",
             "rope.src0_head_stride",
@@ -741,7 +741,7 @@ def _generated_rope_config(*, neox: bool = False) -> dict[str, object]:
             "rope.pos_token_stride",
         ],
         "cases": [
-            [64, 1, 2, 1, 1, 1, 64, 1, 2, 64, 64, 64, 64, 1]
+            [64, 1, 2, 1, 1, 1, 64, 64, 1, 2, 64, 64, 64, 64, 1]
             if neox
             else [128, 32, 2, 1, 1, 1, 128, 128, 32, 2, 128, 4096, 128, 4096, 1]
         ],

@@ -1,11 +1,11 @@
 {
-  "id": "rope_neox_f32_n64_h128_t2_contiguous_4d",
-  "family": "rope_neox_f32",
+  "id": "rope_neox_f16_n64_h128_t2_contiguous_4d",
+  "family": "rope_neox_f16",
   "kernel": {
-    "source_id": "rope_neox_f32",
-    "path": "rope/neox_f32.loom",
-    "root_symbol": "@hrx2_rope_neox_f32",
-    "export_name": "hrx2_rope_neox_f32"
+    "source_id": "rope_neox_f16",
+    "path": "rope/neox_f16.loom",
+    "root_symbol": "@hrx2_rope_neox_f16",
+    "export_name": "hrx2_rope_neox_f16"
   },
   "attributes": {
     "attn_factor": {
@@ -32,7 +32,7 @@
   },
   "tensors": {
     "src0": {
-      "dtype": "F32",
+      "dtype": "F16",
       "dimensions": "src0_dimensions",
       "strides": "src0_strides"
     },
@@ -42,7 +42,7 @@
       "strides": "src1_strides"
     },
     "dst": {
-      "dtype": "F32",
+      "dtype": "F16",
       "dimensions": "dst_dimensions",
       "strides": "dst_strides"
     }

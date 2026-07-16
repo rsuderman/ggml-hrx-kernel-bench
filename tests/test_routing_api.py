@@ -1870,7 +1870,7 @@ def test_yaml_route_import_matches_default_rank4_rope_descriptor(tmp_path: Path)
     assert normal_h64_shape["rope.dst_head_stride"] == 128
     assert normal_h64_shape["rope.dst_token_stride"] == 8192
     assert neox_shape["rope.ncols"] == 64
-    assert "rope.n_dims" not in neox_shape
+    assert neox_shape["rope.n_dims"] == 64
     assert neox_shape["rope.nheads"] == 128
     assert neox_shape["rope.ntokens"] == 2
     assert neox_shape["rope.src0_head_stride"] == 64
@@ -1880,7 +1880,7 @@ def test_yaml_route_import_matches_default_rank4_rope_descriptor(tmp_path: Path)
     assert neox_shape["rope.pos_token_stride"] == 1
     neox_h8_shape = next(shape for shape in neox_shapes if shape["rope.nheads"] == 8)
     assert neox_h8_shape["rope.ncols"] == 64
-    assert "rope.n_dims" not in neox_h8_shape
+    assert neox_h8_shape["rope.n_dims"] == 64
     assert neox_h8_shape["rope.ntokens"] == 2
     assert neox_h8_shape["rope.src0_head_stride"] == 64
     assert neox_h8_shape["rope.src0_token_stride"] == 512

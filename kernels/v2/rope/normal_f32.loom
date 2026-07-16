@@ -1,7 +1,7 @@
 config.decl @shape.rope.ncols : %value: index where [range(%value, 2, 4096), mul(%value, 2)]
 config.decl @shape.rope.n_dims : %value: index where [range(%value, 2, 4096), mul(%value, 2)]
 config.decl @shape.rope.nheads : %value: index where [range(%value, 1, 256)]
-config.decl @shape.rope.ntokens : %value: index where [range(%value, 1, 4096)]
+config.decl @shape.rope.ntokens : %value: index where [range(%value, 1, 8192)]
 config.decl @shape.rope.src0_head_stride : %value: index where [range(%value, 1, 1048576)]
 config.decl @shape.rope.src0_token_stride : %value: index where [range(%value, 1, 1048576)]
 config.decl @shape.rope.dst_head_stride : %value: index where [range(%value, 1, 1048576)]
@@ -42,7 +42,7 @@ kernel.def export("hrx2_rope_normal_f32") @hrx2_rope_normal_f32() {
   %ncols_bounded = index.assume %ncols [range(%ncols, 2, 4096)] : index
   %n_dims_bounded = index.assume %n_dims [range(%n_dims, 2, 4096)] : index
   %nheads_bounded = index.assume %nheads [range(%nheads, 1, 256)] : index
-  %ntokens_bounded = index.assume %ntokens [range(%ntokens, 1, 4096)] : index
+  %ntokens_bounded = index.assume %ntokens [range(%ntokens, 1, 8192)] : index
   %src0_head_stride_bounded = index.assume %src0_head_stride [range(%src0_head_stride, 1, 1048576)] : index
   %src0_token_stride_bounded = index.assume %src0_token_stride [range(%src0_token_stride, 1, 1048576)] : index
   %dst_head_stride_bounded = index.assume %dst_head_stride [range(%dst_head_stride, 1, 1048576)] : index

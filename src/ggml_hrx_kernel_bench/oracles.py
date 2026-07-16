@@ -2279,8 +2279,17 @@ def _rope_arrays(np: Any, candidate: Candidate, seed: int) -> dict[str, Any]:
     src_elems = src_token_stride * ntokens
     dst_elems = dst_token_stride * ntokens
     pos_elems = pos_token_stride * ntokens
-    src = f32_pattern(np, (src_elems,), seed=seed)
-    expected = f32_pattern(np, (dst_elems,), seed=seed + 1, scale=0.25)
+    f16_output = candidate.family in {"rope_f16", "rope_neox_f16"}
+    src = (
+        f16_pattern(np, (src_elems,), seed=seed)
+        if f16_output
+        else f32_pattern(np, (src_elems,), seed=seed)
+    )
+    expected = (
+        f16_pattern(np, (dst_elems,), seed=seed + 1, scale=0.25)
+        if f16_output
+        else f32_pattern(np, (dst_elems,), seed=seed + 1, scale=0.25)
+    )
     positions = np.zeros((pos_elems,), dtype=np.int32)
     for token in range(ntokens):
         positions[token * pos_token_stride] = token + 1
@@ -2295,7 +2304,7 @@ def _rope_arrays(np: Any, candidate: Candidate, seed: int) -> dict[str, Any]:
     neox = "neox" in candidate.root_symbol
     scale_output = "scale" in candidate.root_symbol
     if half_cols:
-        itemsize = np.dtype(np.float32).itemsize
+        itemsize = np.dtype(src.dtype).itemsize
         src_view = np.lib.stride_tricks.as_strided(
             src,
             shape=(ntokens, nheads, ncols),
@@ -2352,10 +2361,14 @@ def _rope_arrays(np: Any, candidate: Candidate, seed: int) -> dict[str, Any]:
         dst_view[:, :, idx0] = out0.astype(np.float32)
         dst_view[:, :, idx1] = out1.astype(np.float32)
     arrays: dict[str, Any] = {
-        "src0": src.astype(np.float32),
+        "src0": _f16_bits(np, src) if f16_output else src.astype(np.float32),
         "positions": positions,
-        "dst_init": f32_pattern(np, (dst_elems,), seed=seed + 2, scale=0.25),
-        "expected": expected.astype(np.float32),
+        "dst_init": (
+            _f16_bits(np, f16_pattern(np, (dst_elems,), seed=seed + 2, scale=0.25))
+            if f16_output
+            else f32_pattern(np, (dst_elems,), seed=seed + 2, scale=0.25)
+        ),
+        "expected": _f16_bits(np, expected) if f16_output else expected.astype(np.float32),
     }
     if has_freq:
         arrays["freq"] = freq.astype(np.float32)
@@ -2548,7 +2561,7 @@ LOGICAL_ORACLE_SPECS: tuple[LogicalOracleSpec, ...] = (
     LogicalOracleSpec(("mul_mat_f16_f32_batched", "mul_mat_f16_f32_batched_cont"), "mul_mat_numpy_logical", {"atol": 0.08, "rtol": 0.02}, _matmul_f32_arrays),
     LogicalOracleSpec(("mul_mat_q5_k_f32", "mul_mat_q6_k_f32", "mul_mat_q8_0_f32", "mul_mat_q4_k_swiglu_f32"), "quantized_mul_mat_numpy_logical", {"atol": 0.12, "rtol": 0.04}, _quantized_matmul_arrays),
     LogicalOracleSpec(("quantize_q8_1_f32",), "quantize_q8_1_numpy", {"atol": 0.0, "rtol": 0.0}, _quantize_q8_1_arrays),
-    LogicalOracleSpec(("rope_f32", "rope_neox_f32", "rope_scale_f32", "rope_set_rows_f32"), "rope_numpy_structural_placeholder", {"atol": 1e-5, "rtol": 1e-5}, _rope_arrays),
+    LogicalOracleSpec(("rope_f32", "rope_neox_f32", "rope_f16", "rope_neox_f16", "rope_scale_f32", "rope_set_rows_f32"), "rope_numpy_structural_placeholder", {"atol": 1e-5, "rtol": 1e-5}, _rope_arrays),
     LogicalOracleSpec(("set_rows_f32", "cont_set_rows_f32"), "set_rows_f32_numpy", {"atol": 1e-6, "rtol": 1e-6}, _set_rows_arrays),
     LogicalOracleSpec(("soft_max_f32",), "soft_max_f32_numpy", {"atol": 1e-5, "rtol": 1e-5}, _softmax_arrays),
     LogicalOracleSpec(("softmax_kqv_f32_f16",), "softmax_kqv_f32_f16_numpy_logical", {"atol": 0.08, "rtol": 0.02}, _softmax_kqv_arrays),
@@ -3586,6 +3599,11 @@ ORACLE_SPECS: tuple[OracleSpec, ...] = (
     OracleSpec(
         family_ids=("rope_f32", "rope_neox_f32", "rope_scale_f32"),
         generate=_logical_generate(LogicalOracleSpec(("rope_f32", "rope_neox_f32", "rope_scale_f32"), "rope_f32_numpy", {"atol": 5e-4, "rtol": 5e-4}, _rope_arrays, exact_kernel_abi=True)),
+        write_workbench=_write_rope_workbench,
+    ),
+    OracleSpec(
+        family_ids=("rope_f16", "rope_neox_f16"),
+        generate=_logical_generate(LogicalOracleSpec(("rope_f16", "rope_neox_f16"), "rope_f16_numpy", {"atol": 2e-3, "rtol": 2e-3}, _rope_arrays, exact_kernel_abi=True)),
         write_workbench=_write_rope_workbench,
     ),
     OracleSpec(

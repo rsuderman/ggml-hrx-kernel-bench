@@ -1,11 +1,11 @@
 {
-  "id": "rope_neox_f32_n64_h128_t2_contiguous_4d",
-  "family": "rope_neox_f32",
+  "id": "rope_f32_normal_explicit_pos_n128_h32_t512_contiguous_4d",
+  "family": "rope_f32",
   "kernel": {
-    "source_id": "rope_neox_f32",
-    "path": "rope/neox_f32.loom",
-    "root_symbol": "@hrx2_rope_neox_f32",
-    "export_name": "hrx2_rope_neox_f32"
+    "source_id": "rope_f32",
+    "path": "rope/normal_f32.loom",
+    "root_symbol": "@hrx2_rope_normal_f32",
+    "export_name": "hrx2_rope_normal_f32"
   },
   "attributes": {
     "attn_factor": {
@@ -23,11 +23,20 @@
     "mode": {
       "type": "i32"
     },
-    "n_ctx": {
-      "type": "i32"
-    },
     "n_dims": {
       "type": "i32"
+    },
+    "freq_base": {
+      "type": "f32"
+    },
+    "n_ctx_orig": {
+      "type": "i32"
+    },
+    "beta_fast": {
+      "type": "f32"
+    },
+    "beta_slow": {
+      "type": "f32"
     }
   },
   "tensors": {
@@ -45,20 +54,6 @@
       "dtype": "F32",
       "dimensions": "dst_dimensions",
       "strides": "dst_strides"
-    }
-  },
-  "synthetic_tensors": {
-    "src1": {
-      "dtype": "I32",
-      "dimensions": [
-        1,
-        1,
-        {
-          "source": "dst_dimensions",
-          "index": 2
-        },
-        1
-      ]
     }
   },
   "values": [
@@ -80,6 +75,13 @@
     },
     {
       "name": "rope.ncols",
+      "element": {
+        "source": "dst_dimensions",
+        "index": 0
+      }
+    },
+    {
+      "name": "rope.n_dims",
       "element": {
         "source": "dst_dimensions",
         "index": 0
@@ -131,7 +133,7 @@
       "name": "rope.pos_token_stride",
       "element": {
         "source": "src1_strides",
-        "index": 2
+        "index": 0
       }
     }
   ],
@@ -170,7 +172,7 @@
       "name": "dst_dimensions",
       "index": 2,
       "min": 1,
-      "max": 8192
+      "max": 512
     },
     {
       "name": "dst_dimensions",
@@ -182,7 +184,7 @@
       "name": "src1_dimensions",
       "index": 0,
       "min": 1,
-      "max": 1
+      "max": 512
     },
     {
       "name": "src1_dimensions",
@@ -194,7 +196,7 @@
       "name": "src1_dimensions",
       "index": 2,
       "min": 1,
-      "max": 8192
+      "max": 1
     },
     {
       "name": "src1_dimensions",
@@ -204,7 +206,7 @@
     },
     {
       "name": "attribute.mode",
-      "value": 2
+      "value": 0
     },
     {
       "name": "attribute.ext_factor",
@@ -219,6 +221,22 @@
       "min": 2,
       "max": 4096,
       "multiple_of": 2
+    },
+    {
+      "name": "attribute.freq_base",
+      "value": 500000.0
+    },
+    {
+      "name": "attribute.n_ctx_orig",
+      "value": 8192
+    },
+    {
+      "name": "attribute.beta_fast",
+      "value": 32.0
+    },
+    {
+      "name": "attribute.beta_slow",
+      "value": 1.0
     },
     {
       "equals": [

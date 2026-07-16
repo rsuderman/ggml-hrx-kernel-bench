@@ -45,6 +45,12 @@ STATIC_SCALAR_ABI_BY_FAMILY: dict[str, tuple[dict[str, Any], ...]] = {
     "rope_neox_f32": (
         {"role": "theta_scale", "dtype": "f32", "value": 0.75},
     ),
+    "rope_f16": (
+        {"role": "theta_scale", "dtype": "f32", "value": 0.75},
+    ),
+    "rope_neox_f16": (
+        {"role": "theta_scale", "dtype": "f32", "value": 0.75},
+    ),
 }
 ATTRIBUTE_SCALAR_ABI_BY_FAMILY: dict[str, tuple[dict[str, Any], ...]] = {
     "rms_norm_f32": (
@@ -61,6 +67,14 @@ ATTRIBUTE_SCALAR_ABI_BY_FAMILY: dict[str, tuple[dict[str, Any], ...]] = {
         {"role": "freq_scale", "dtype": "f32", "attribute": "freq_scale", "default": 1.1},
         {"role": "attn_factor", "dtype": "f32", "attribute": "attn_factor", "default": 0.9},
     ),
+    "rope_f16": (
+        {"role": "freq_scale", "dtype": "f32", "attribute": "freq_scale", "default": 1.1},
+        {"role": "attn_factor", "dtype": "f32", "attribute": "attn_factor", "default": 0.9},
+    ),
+    "rope_neox_f16": (
+        {"role": "freq_scale", "dtype": "f32", "attribute": "freq_scale", "default": 1.1},
+        {"role": "attn_factor", "dtype": "f32", "attribute": "attn_factor", "default": 0.9},
+    ),
     "flash_attn_ext_f32_f16": (
         {"role": "scale", "dtype": "f32", "attribute": "scale", "default": 0.08838834764831843},
     ),
@@ -74,6 +88,8 @@ FIXTURE_BY_FAMILY_ROLE: dict[tuple[str, str], str] = {
     ("soft_max_f32", "mask"): "mask",
     ("rope_f32", "src1"): "positions",
     ("rope_neox_f32", "src1"): "positions",
+    ("rope_f16", "src1"): "positions",
+    ("rope_neox_f16", "src1"): "positions",
 }
 INPUT_ROLES_BY_FAMILY: dict[str, frozenset[str]] = {
     "soft_max_f32": frozenset({"mask"}),

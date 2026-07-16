@@ -122,6 +122,7 @@ GATED_ACTIVATION_F32_FAMILIES = {"swiglu_f32"}
 SOFTMAX_F32_FAMILIES = {"soft_max_f32"}
 FLASH_ATTN_FAMILIES = {"flash_attn_ext_f32_f16"}
 ROPE_F32_FAMILIES = {"rope_f32", "rope_neox_f32"}
+ROPE_F16_FAMILIES = {"rope_f16", "rope_neox_f16"}
 INDEX_F32_FAMILIES = {"get_rows_f32", "set_rows_f32", "cont_set_rows_f32"}
 INDEX_QUANTIZED_FAMILIES = {
     "get_rows_q4_k_f32",
@@ -167,6 +168,7 @@ SUPPORTED_BUFFER_FAMILIES = (
     | BINARY_F16_FAMILIES
     | UNARY_F16_FAMILIES
     | SCALAR_F16_FAMILIES
+    | ROPE_F16_FAMILIES
     | INDEX_F32_FAMILIES
     | INDEX_QUANTIZED_FAMILIES
     | COPY_CAST_FAMILIES

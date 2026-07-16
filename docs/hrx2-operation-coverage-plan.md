@@ -25,6 +25,11 @@ Start each investigation from the generated `import-coverage.json`, then inspect
 the per-op `route-matches.json`, `route-unmatched.json`, and generated runtime
 test manifests under the target's artifact directory.
 
+Expected coverage fixtures must keep their canonical JSON key order. Do not
+copy sorted generated JSON into `tests/kernels/data/llamacpp.import-coverage.json`
+or `tests/models/data/llama-8b-q8.import-coverage.json`; update only the
+validated counts while preserving the existing object order.
+
 The active generated artifact roots are currently:
 
 - `build/tests/kernels/artifacts/llama-cpp-yaml-route-import-v2/`
@@ -104,10 +109,40 @@ For each op slice, record:
 - issues encountered
 - next step
 
+Triage is not complete until it identifies the full set of reasonable
+implementation slices for the selected operation. The plan should cover all
+visible unsupported cases that can be handled with known semantics and current
+tool support, even if the first validation checkpoint is deliberately narrow.
+
 Do not hide unsupported cases by filtering them out of importer outputs.
 Any test that requires HSA resources must be run outside of the normal sandboxed
 harness path. If runtime validation cannot run, record the exact blocker instead
 of treating a sandboxed or prepare-only result as sufficient.
+
+## Implementation Execution Policy
+
+When the task is to implement coverage, execute the reasonable plan rather than
+stopping at the first successfully validated slice.
+
+1. Start with the smallest high-value checkpoint that proves the route,
+   descriptor, oracle, or kernel path.
+2. Validate that checkpoint with targeted route import and runtime execution
+   when required.
+3. Continue to adjacent planned slices that reuse the same semantics, route
+   shape, or kernel family.
+4. Stop only when the reasonable plan is complete or when the remaining cases
+   have a concrete blocker, such as unknown op semantics, unsupported Loom
+   primitives, unavailable device validation, or excessive test/runtime cost.
+5. Report the final coverage delta, validation results, and all intentionally
+   deferred cases with reasons.
+
+Subagents launched for implementation should receive the full reasonable plan
+for the operation and should complete all non-blocked slices before reporting
+back. Do not scope implementation agents to only a fallback route, proof case,
+or first kernel unless the user explicitly asks for that limited task. When the
+agent completes, it must notify the spawning agent with the worktree path, final
+coverage delta, validation results, and any blocked or intentionally deferred
+cases.
 
 ## Preferred Fix Order
 

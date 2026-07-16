@@ -9,7 +9,7 @@ config.decl @shape.rope.dst_token_stride : %value: index where [range(%value, 1,
 config.decl @shape.rope.pos_token_stride : %value: index where [range(%value, 1, 1024)]
 config.decl @tuning.rope.workgroup_size : %value: index where [range(%value, 32, 1024), mul(%value, 32)]
 
-kernel.def export("hrx2_rope_neox_f32") @hrx2_rope_neox_f32() {
+kernel.def export("hrx2_rope_neox_f16") @hrx2_rope_neox_f16() {
   %unit = index.constant 1 : index
   %minus_one = index.constant -1 : index
   %ncols = config.get @shape.rope.ncols : index
@@ -72,9 +72,9 @@ kernel.def export("hrx2_rope_neox_f32") @hrx2_rope_neox_f32() {
   %pos_global = buffer.assume.memory_space<global> %pos : buffer
   %dst_global = buffer.assume.memory_space<global> %dst : buffer
   %src0_noalias, %pos_noalias, %dst_noalias = buffer.assume.noalias %src0_global, %pos_global, %dst_global : buffer, buffer, buffer
-  %src0_view = buffer.view %src0_noalias[%base] : buffer -> view<[%src0_count]xf32, #dense>
+  %src0_view = buffer.view %src0_noalias[%base] : buffer -> view<[%src0_count]xf16, #dense>
   %pos_view = buffer.view %pos_noalias[%base] : buffer -> view<[%pos_count]xi32, #dense>
-  %dst_view = buffer.view %dst_noalias[%base] : buffer -> view<[%dst_count]xf32, #dense>
+  %dst_view = buffer.view %dst_noalias[%base] : buffer -> view<[%dst_count]xf16, #dense>
 
   scf.if %in_bounds {
     %pair = index.rem %linear, %half_cols : index
@@ -109,16 +109,20 @@ kernel.def export("hrx2_rope_neox_f32") @hrx2_rope_neox_f32() {
       %sin0 = scalar.sinf<afn> %theta : f32
       %cos_theta = scalar.mulf<nnan|ninf|nsz> %cos0, %attn_factor : f32
       %sin_theta = scalar.mulf<nnan|ninf|nsz> %sin0, %attn_factor : f32
-      %x0 = view.load %src0_view[%src0_idx0] : view<[%src0_count]xf32, #dense> -> f32
-      %x1 = view.load %src0_view[%src0_idx1] : view<[%src0_count]xf32, #dense> -> f32
+      %x0_half = view.load %src0_view[%src0_idx0] : view<[%src0_count]xf16, #dense> -> f16
+      %x1_half = view.load %src0_view[%src0_idx1] : view<[%src0_count]xf16, #dense> -> f16
+      %x0 = scalar.extf %x0_half : f16 to f32
+      %x1 = scalar.extf %x1_half : f16 to f32
       %x0_cos = scalar.mulf<nnan|ninf|nsz> %x0, %cos_theta : f32
       %x1_sin = scalar.mulf<nnan|ninf|nsz> %x1, %sin_theta : f32
       %out0 = scalar.subf<nnan|ninf|nsz> %x0_cos, %x1_sin : f32
       %x0_sin = scalar.mulf<nnan|ninf|nsz> %x0, %sin_theta : f32
       %x1_cos = scalar.mulf<nnan|ninf|nsz> %x1, %cos_theta : f32
       %out1 = scalar.addf<nnan|ninf|nsz> %x0_sin, %x1_cos : f32
-      view.store %out0, %dst_view[%dst_idx0] : f32, view<[%dst_count]xf32, #dense>
-      view.store %out1, %dst_view[%dst_idx1] : f32, view<[%dst_count]xf32, #dense>
+      %out0_half = scalar.fptrunc %out0 : f32 to f16
+      %out1_half = scalar.fptrunc %out1 : f32 to f16
+      view.store %out0_half, %dst_view[%dst_idx0] : f16, view<[%dst_count]xf16, #dense>
+      view.store %out1_half, %dst_view[%dst_idx1] : f16, view<[%dst_count]xf16, #dense>
     } else {
       %tail_pair = index.sub %pair, %half_dims : index
       %tail2 = index.mul %tail_pair, %two : index
@@ -128,10 +132,10 @@ kernel.def export("hrx2_rope_neox_f32") @hrx2_rope_neox_f32() {
       %src0_idx1 = index.add %src0_base, %idx1 : index
       %dst_idx0 = index.add %dst_base, %idx0 : index
       %dst_idx1 = index.add %dst_base, %idx1 : index
-      %x0 = view.load %src0_view[%src0_idx0] : view<[%src0_count]xf32, #dense> -> f32
-      %x1 = view.load %src0_view[%src0_idx1] : view<[%src0_count]xf32, #dense> -> f32
-      view.store %x0, %dst_view[%dst_idx0] : f32, view<[%dst_count]xf32, #dense>
-      view.store %x1, %dst_view[%dst_idx1] : f32, view<[%dst_count]xf32, #dense>
+      %x0 = view.load %src0_view[%src0_idx0] : view<[%src0_count]xf16, #dense> -> f16
+      %x1 = view.load %src0_view[%src0_idx1] : view<[%src0_count]xf16, #dense> -> f16
+      view.store %x0, %dst_view[%dst_idx0] : f16, view<[%dst_count]xf16, #dense>
+      view.store %x1, %dst_view[%dst_idx1] : f16, view<[%dst_count]xf16, #dense>
     }
   }
   kernel.return
