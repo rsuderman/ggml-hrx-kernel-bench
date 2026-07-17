@@ -105,6 +105,7 @@ def _render_route_json(artifact: GeneratedContCopyRoute) -> str:
     return _route_template(artifact.flavor).substitute(
         route_id=artifact.route_id,
         family=variant.family,
+        op="CONT",
         kernel_path=artifact.kernel_relative_path.as_posix(),
         root_symbol=artifact.root_symbol,
         export_name=artifact.export_name,

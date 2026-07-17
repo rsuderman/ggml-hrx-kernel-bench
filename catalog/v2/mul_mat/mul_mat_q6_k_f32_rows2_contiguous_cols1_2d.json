@@ -1,6 +1,7 @@
 {
   "id": "mul_mat_q6_k_f32_rows2_contiguous_cols1_2d",
   "family": "mul_mat_q6_k_f32",
+  "op": "MUL_MAT",
   "kernel": {
     "source_id": "mul_mat_q6_k_f32",
     "path": "mul_mat/q6_k_f32_rows2.loom",

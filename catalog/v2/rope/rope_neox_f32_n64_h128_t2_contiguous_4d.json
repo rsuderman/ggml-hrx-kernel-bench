@@ -1,6 +1,7 @@
 {
   "id": "rope_neox_f32_n64_h128_t2_contiguous_4d",
   "family": "rope_neox_f32",
+  "op": "ROPE",
   "kernel": {
     "source_id": "rope_neox_f32",
     "path": "rope/neox_f32.loom",

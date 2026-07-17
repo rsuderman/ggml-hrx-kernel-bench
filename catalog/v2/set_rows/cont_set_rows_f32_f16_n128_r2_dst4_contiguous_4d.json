@@ -1,6 +1,7 @@
 {
   "id": "cont_set_rows_f32_f16_n128_r2_dst4_contiguous_4d",
   "family": "cont_set_rows_f32",
+  "op": "SET_ROWS",
   "kernel": {
     "source_id": "cont_set_rows_f32",
     "path": "set_rows/cont_set_rows_f32_f16.loom",

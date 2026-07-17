@@ -325,6 +325,7 @@ def render_catalog_artifacts() -> dict[Path, str]:
                             f"{op}_{dt}_contiguous_4d" if variant == CONTIGUOUS else sym
                         ),
                         family=f"{op}_{dt}",
+                        op=op.upper(),
                         source_id=f"pointwise_{dt}",
                         kernel_path=f"{op}/{variant}.loom",
                         root_symbol=f"@{sym}",

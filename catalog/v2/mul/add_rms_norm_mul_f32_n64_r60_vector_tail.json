@@ -1,6 +1,7 @@
 {
   "id": "add_rms_norm_mul_f32_n64_r60_vector_tail",
   "family": "add_rms_norm_mul_f32",
+  "op": "ADD_RMS_NORM",
   "kernel": {
     "source_id": "add_rms_norm_mul_f32",
     "path": "mul/add_rms_norm_mul_f32_vector_tail.loom",

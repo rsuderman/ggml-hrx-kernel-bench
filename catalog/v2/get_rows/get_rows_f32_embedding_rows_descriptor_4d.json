@@ -1,6 +1,7 @@
 {
   "id": "get_rows_f32_embedding_rows_descriptor_4d",
   "family": "get_rows_f32",
+  "op": "GET_ROWS",
   "kernel": {
     "source_id": "get_rows_f32",
     "path": "get_rows/embedding_rows_2d.loom",

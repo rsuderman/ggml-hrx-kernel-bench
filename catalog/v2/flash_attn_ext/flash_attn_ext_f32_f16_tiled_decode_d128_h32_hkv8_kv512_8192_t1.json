@@ -1,6 +1,7 @@
 {
   "id": "flash_attn_ext_f32_f16_tiled_decode_d128_h32_hkv8_kv512_8192_t1",
   "family": "flash_attn_ext_f32_f16",
+  "op": "FLASH_ATTN_EXT",
   "architectures": [
     "gfx1100"
   ],

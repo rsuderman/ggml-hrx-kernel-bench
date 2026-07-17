@@ -82,6 +82,7 @@ def _render_route_json(artifact: GeneratedCopyArtifact) -> str:
     return load_route_template(artifact.flavor.route_template_name).substitute(
         route_id=artifact.route_id,
         family=artifact.variant.family,
+        op="CPY",
         kernel_path=artifact.kernel_relative_path.as_posix(),
         root_symbol=artifact.root_symbol,
         export_name=artifact.export_name,

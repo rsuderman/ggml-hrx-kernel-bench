@@ -1,6 +1,7 @@
 {
   "id": "rms_norm_f32_contiguous_4d",
   "family": "rms_norm_f32",
+  "op": "RMS_NORM",
   "kernel": {
     "source_id": "rms_norm_f32",
     "path": "rms_norm/contiguous_4d.loom",

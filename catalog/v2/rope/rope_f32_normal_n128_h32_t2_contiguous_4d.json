@@ -1,6 +1,7 @@
 {
   "id": "rope_f32_normal_n128_h32_t2_contiguous_4d",
   "family": "rope_f32",
+  "op": "ROPE",
   "kernel": {
     "source_id": "rope_f32",
     "path": "rope/normal_f32.loom",

@@ -1,6 +1,7 @@
 {
   "id": "swiglu_f16_split_strided_4d",
   "family": "swiglu_f16",
+  "op": "SWIGLU",
   "kernel": {
     "source_id": "swiglu_f16",
     "path": "swiglu/split_strided_f16_4d.loom",

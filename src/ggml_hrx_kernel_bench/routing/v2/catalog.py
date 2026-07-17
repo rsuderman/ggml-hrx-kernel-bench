@@ -616,6 +616,13 @@ def _parse_route_entry(path: Path, route_index: Any, op: str, raw: Any) -> V2Rou
     config = raw.get("config") or {}
     route_id = _parse_non_empty_string(path, f"v2 route {route_index} id", raw.get("id"))
     family = _parse_non_empty_string(path, f"v2 route {route_index} family", raw.get("family"))
+    raw_op = raw.get("op")
+    if raw_op is not None:
+        route_op = _normalize_op(_parse_non_empty_string(path, f"v2 route {route_index} op", raw_op))
+        if route_op != op:
+            raise RuntimeError(
+                f"v2 route {route_index} op {route_op!r} does not match router operation {op!r}: {path}"
+            )
     if not isinstance(launch, dict):
         raise RuntimeError(f"v2 route {route_index} launch must be a JSON object: {path}")
     if not isinstance(config, dict):
@@ -630,6 +637,7 @@ def _parse_route_entry(path: Path, route_index: Any, op: str, raw: Any) -> V2Rou
         "id",
         "kernel",
         "launch",
+        "op",
         "synthetic_tensors",
         "tensors",
         "values",

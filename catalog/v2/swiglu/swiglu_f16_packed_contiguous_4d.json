@@ -1,6 +1,7 @@
 {
   "id": "swiglu_f16_packed_contiguous_4d",
   "family": "swiglu_f16",
+  "op": "SWIGLU",
   "kernel": {
     "source_id": "swiglu_f16",
     "path": "swiglu/contiguous_f16_4d.loom",

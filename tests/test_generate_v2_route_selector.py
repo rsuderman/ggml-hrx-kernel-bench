@@ -361,7 +361,11 @@ def test_generator_rejects_duplicate_route_ids_across_full_table(
     )
     router_path = routing_dir / "router.json"
     router = json.loads(router_path.read_text(encoding="utf-8"))
-    router["routes"]["ARGSORT"] = [router["routes"]["ABS"][0]]
+    duplicate_route = json.loads((routing_dir / router["routes"]["ABS"][0]).read_text(encoding="utf-8"))
+    duplicate_route["op"] = "ARGSORT"
+    duplicate_route_path = routing_dir / "argsort" / "duplicate_abs_f16.json"
+    duplicate_route_path.write_text(json.dumps(duplicate_route, indent=2) + "\n", encoding="utf-8")
+    router["routes"]["ARGSORT"] = ["argsort/duplicate_abs_f16.json"]
     router_path.write_text(json.dumps(router, indent=2) + "\n", encoding="utf-8")
     output = tmp_path / "routes.inc.cpp"
     output.write_text("keep-existing-output\n", encoding="utf-8")

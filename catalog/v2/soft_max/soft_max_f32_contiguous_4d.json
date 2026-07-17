@@ -1,6 +1,7 @@
 {
   "id": "soft_max_f32_contiguous_4d",
   "family": "soft_max_f32",
+  "op": "SOFT_MAX",
   "kernel": {
     "source_id": "soft_max_f32",
     "path": "soft_max/contiguous_f32.loom",

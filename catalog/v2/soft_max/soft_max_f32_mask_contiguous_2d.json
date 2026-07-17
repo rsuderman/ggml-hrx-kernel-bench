@@ -1,6 +1,7 @@
 {
   "id": "soft_max_f32_mask_contiguous_2d",
   "family": "soft_max_f32",
+  "op": "SOFT_MAX",
   "kernel": {
     "source_id": "soft_max_f32",
     "path": "soft_max/masked_contiguous_f32.loom",

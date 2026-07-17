@@ -1,6 +1,7 @@
 {
   "id": "set_rows_f32_f32_descriptor_4d",
   "family": "set_rows_f32",
+  "op": "SET_ROWS",
   "kernel": {
     "source_id": "set_rows_f32",
     "path": "set_rows/contiguous_4d.loom",

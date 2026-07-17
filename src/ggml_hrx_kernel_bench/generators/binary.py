@@ -91,6 +91,7 @@ def render_kernel_artifacts() -> dict[Path, str]:
 
 def render_catalog_artifacts() -> dict[Path, str]:
     out: dict[Path, str] = {}
+    op_keys = {op: op_key for op_key, op in OPS_BY_KEY}
     for op in BINARY_OPS:
         for variant in ROUTE_VARIANTS:
             template = load_template("catalog", "v2", "binary", f"{variant}.json.tmpl")
@@ -99,6 +100,7 @@ def render_catalog_artifacts() -> dict[Path, str]:
                 kernel_variant = _kernel_variant_for_route(variant)
                 rendered = template.substitute(
                     op=op,
+                    op_key=op_keys[op],
                     route_id=_route_id(op, dt, variant),
                     family=f"{op}_{dt}",
                     source_id=_source_id(op, dt, variant),

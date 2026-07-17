@@ -1,6 +1,7 @@
 {
   "id": "argsort_f32_i32_n128_r1_desc_wg128",
   "family": "argsort_f32_i32",
+  "op": "ARGSORT",
   "kernel": {
     "source_id": "argsort_f32_i32",
     "path": "argsort/argsort_f32_i32.loom",

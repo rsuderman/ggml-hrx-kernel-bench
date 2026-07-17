@@ -1,6 +1,7 @@
 {
   "id": "rope_set_rows_f16_normal_n128_h32_t1_contiguous_4d",
   "family": "rope_set_rows_f32",
+  "op": "ROPE_SET_ROWS",
   "kernel": {
     "source_id": "rope_set_rows_f32",
     "path": "rope_set_rows/f32.loom",

@@ -1,6 +1,7 @@
 {
   "id": "mul_mat_id_q4_k_f32_expert_planes_3d",
   "family": "mul_mat_id_q4_k_f32",
+  "op": "MUL_MAT_ID",
   "kernel": {
     "source_id": "mul_mat_id_q4_k_f32",
     "path": "mul_mat_id/q4_k_f32_expert_planes.loom",

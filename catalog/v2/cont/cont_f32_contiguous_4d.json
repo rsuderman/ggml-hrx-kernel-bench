@@ -1,6 +1,7 @@
 {
   "id": "cont_f32_contiguous_4d",
   "family": "cont_f32",
+  "op": "CONT",
   "kernel": {
     "source_id": "cont_f32",
     "path": "cont/contiguous_4d.loom",

@@ -1,6 +1,7 @@
 {
   "id": "sum_rows_f32_contiguous_4d",
   "family": "sum_rows_f32",
+  "op": "SUM_ROWS",
   "kernel": {
     "source_id": "sum_rows_f32",
     "path": "sum_rows/contiguous_4d.loom",

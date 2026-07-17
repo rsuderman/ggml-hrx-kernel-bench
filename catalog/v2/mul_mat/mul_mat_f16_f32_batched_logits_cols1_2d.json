@@ -1,6 +1,7 @@
 {
   "id": "mul_mat_f16_f32_batched_logits_cols1_2d",
   "family": "mul_mat_f16_f32_batched",
+  "op": "MUL_MAT",
   "kernel": {
     "source_id": "mul_mat_f16_f32_batched",
     "path": "mul_mat/f16_f32_batched.loom",

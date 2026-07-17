@@ -1,6 +1,7 @@
 {
   "id": "get_rows_moe_weights_f32_topk_view_2d",
   "family": "get_rows_moe_weights_f32",
+  "op": "GET_ROWS",
   "kernel": {
     "source_id": "get_rows_moe_weights_f32",
     "path": "get_rows/moe_weights_f32_topk_view_2d.loom",

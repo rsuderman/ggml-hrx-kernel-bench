@@ -1,6 +1,7 @@
 {
   "id": "quantize_q8_1_f32_contiguous_n256_r1",
   "family": "quantize_q8_1_f32",
+  "op": "QUANTIZE",
   "kernel": {
     "source_id": "quantize_q8_1_f32",
     "path": "quantize/quantize_q8_1_f32.loom",

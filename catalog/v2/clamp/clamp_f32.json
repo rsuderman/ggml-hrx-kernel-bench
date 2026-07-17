@@ -1,6 +1,7 @@
 {
   "id": "clamp_f32_contiguous_4d",
   "family": "clamp_f32",
+  "op": "CLAMP",
   "kernel": {
     "source_id": "pointwise_f32",
     "path": "clamp/contiguous_4d.loom",

@@ -1,6 +1,7 @@
 {
   "id": "swiglu_f32_packed_strided_src0_4d",
   "family": "swiglu_f32",
+  "op": "SWIGLU",
   "kernel": {
     "source_id": "swiglu_f32",
     "path": "swiglu/packed_strided_src0_4d.loom",
