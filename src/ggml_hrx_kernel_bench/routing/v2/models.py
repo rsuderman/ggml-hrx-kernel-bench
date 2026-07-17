@@ -130,6 +130,7 @@ class V2Route:
     bindings: tuple[BindingDefinition, ...]
     attributes: Mapping[str, Any] = field(default_factory=dict)
     synthetic_tensors: Mapping[str, SyntheticTensorDescriptor] = field(default_factory=dict)
+    architectures: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "tensors", _freeze_mapping(self.tensors))

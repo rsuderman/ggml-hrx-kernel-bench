@@ -559,6 +559,7 @@ def descriptor_from_generated_case(
         catalog,
         family=str(config_data["kernel"]),
         route_id=config_data.get("route_id"),
+        architecture=target,
     )
     abi_roles = {str(entry["role"]) for entry in abi_entries if entry["kind"] != "scalar"}
     if not abi_roles.issubset(set(route.tensors)):

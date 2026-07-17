@@ -391,6 +391,7 @@ def selected_candidates(args: argparse.Namespace) -> list[Candidate]:
             limit=args.limit,
             sweep=args.sweep,
             include_source_only=args.include_source_only,
+            target=args.target,
         )
     )
 

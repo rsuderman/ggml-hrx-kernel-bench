@@ -1,6 +1,9 @@
 {
   "id": "flash_attn_ext_f32_f16_fallback_decode_plain_mask_t1",
   "family": "flash_attn_ext_f32_f16",
+  "architectures": [
+    "gfx1100"
+  ],
   "kernel": {
     "source_id": "flash_attn_ext_f32_f16",
     "path": "flash_attn_ext/fallback_decode_f32_f16.loom",

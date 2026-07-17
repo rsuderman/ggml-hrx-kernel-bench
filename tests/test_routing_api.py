@@ -204,6 +204,13 @@ def _write_kernel(kernel_dir: Path) -> None:
     )
 
 
+def _set_route_architectures(routing_dir: Path, route_path: str, architectures: list[str]) -> None:
+    descriptor_path = routing_dir / route_path
+    descriptor = json.loads(descriptor_path.read_text(encoding="utf-8"))
+    descriptor["architectures"] = architectures
+    descriptor_path.write_text(json.dumps(descriptor, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
 def _write_v2_copy_descriptor(routing_dir: Path) -> None:
     routing_dir.mkdir(parents=True, exist_ok=True)
     route_paths = (
@@ -1342,6 +1349,84 @@ def test_v2_catalog_objects_are_immutable(tmp_path: Path) -> None:
         route.tensors["extra"] = route.tensors["src0"]  # type: ignore[index]
     with pytest.raises(TypeError):
         route.launch["rows_per_workgroup"] = 2  # type: ignore[index]
+
+
+def test_v2_route_architectures_are_normalized_and_filter_candidates(tmp_path: Path) -> None:
+    kernel_dir = tmp_path / "kernels"
+    routing_dir = tmp_path / "routing"
+    _write_kernel(kernel_dir)
+    _write_v2_descriptor(routing_dir)
+    _set_route_architectures(routing_dir, "add/add_f32_contiguous_1d.json", [" GFX1100 ", "gfx1100"])
+    router = create_router(version="v2", kernel_dir=kernel_dir, routing_dir=routing_dir)
+
+    catalog = load_route_catalog(routing_dir)
+    assert catalog.routes_by_id["add_f32_contiguous_1d"].architectures == ("gfx1100",)
+
+    assert [candidate.route_id for candidate in router.candidates(CandidateQuery())] == ["add_f32_generic_4d"]
+    assert [candidate.route_id for candidate in router.candidates(CandidateQuery(target="gfx1100"))] == [
+        "add_f32_contiguous_1d",
+        "add_f32_generic_4d",
+    ]
+    assert [candidate.route_id for candidate in router.candidates(CandidateQuery(target="gfx942"))] == [
+        "add_f32_generic_4d"
+    ]
+
+
+def test_v2_router_rejects_architecture_limited_route_for_mismatched_target(
+    tmp_path: Path, monkeypatch
+) -> None:
+    kernel_dir = tmp_path / "kernels"
+    routing_dir = tmp_path / "routing"
+    _write_kernel(kernel_dir)
+    _write_v2_descriptor(routing_dir)
+    _set_route_architectures(routing_dir, "add/add_f32_contiguous_1d.json", ["gfx1100"])
+    router = create_router(version="v2", kernel_dir=kernel_dir, routing_dir=routing_dir)
+
+    def fake_run_candidate_test_row(*args, **kwargs):
+        pytest.fail("candidate runner must not be called for a route rejected by architecture")
+
+    monkeypatch.setattr(
+        "ggml_hrx_kernel_bench.routing.v2.runtime.run_candidate_test_row",
+        fake_run_candidate_test_row,
+    )
+
+    with pytest.raises(RuntimeError, match="route_id=add_f32_contiguous_1d architecture=gfx942"):
+        router.execute_case(
+            RuntimeCaseRequest(
+                kernel_dir=kernel_dir,
+                routing_dir=routing_dir,
+                config_data={
+                    "kernel": "add_f32",
+                    "route_id": "add_f32_contiguous_1d",
+                    "params": ["d0", "d1", "d2", "d3"],
+                    "cases": [[16, 64, 1, 1]],
+                },
+                current_case_id="d016_d164_d21_d31",
+                current_case_values=[16, 64, 1, 1],
+                tool_dir=None,
+                target="gfx942",
+                rocm_path=None,
+                iterations=1,
+                warmup_iterations=0,
+                max_batches=1,
+                output_dir=tmp_path / "out",
+                require_tool=lambda name, tool_dir=None: "/bin/true",
+            )
+        )
+
+
+def test_v2_catalog_rejects_malformed_architecture_list(tmp_path: Path) -> None:
+    kernel_dir = tmp_path / "kernels"
+    routing_dir = tmp_path / "routing"
+    _write_kernel(kernel_dir)
+    _write_v2_descriptor(routing_dir)
+    descriptor_path = routing_dir / "add/add_f32_contiguous_1d.json"
+    descriptor = json.loads(descriptor_path.read_text(encoding="utf-8"))
+    descriptor["architectures"] = ["gfx1100", ""]
+    descriptor_path.write_text(json.dumps(descriptor, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+    with pytest.raises(RuntimeError, match=r"architectures\[1\] must be a non-empty string"):
+        load_route_catalog(routing_dir)
 
 
 def test_v2_candidate_route_payload_uses_capture_lists(tmp_path: Path) -> None:

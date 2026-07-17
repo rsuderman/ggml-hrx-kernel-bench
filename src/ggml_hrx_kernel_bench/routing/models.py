@@ -65,6 +65,7 @@ class CandidateQuery:
     limit: int | None = None
     sweep: str = "minimal"
     include_source_only: bool = False
+    target: str | None = None
 
 
 @dataclass(frozen=True)

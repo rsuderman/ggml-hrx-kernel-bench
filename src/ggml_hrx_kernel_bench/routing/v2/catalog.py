@@ -43,6 +43,32 @@ def _normalize_dtype(value: Any) -> str | None:
     return text.upper()
 
 
+def _normalize_architecture(value: Any) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    return text.lower()
+
+
+def _parse_architectures(path: Path, route_index: Any, raw: Any) -> tuple[str, ...]:
+    if raw is None:
+        return ()
+    if not isinstance(raw, list):
+        raise RuntimeError(f"v2 route {route_index} architectures must be a JSON array: {path}")
+    architectures: list[str] = []
+    for index, entry in enumerate(raw):
+        architecture = _normalize_architecture(entry)
+        if architecture is None:
+            raise RuntimeError(
+                f"v2 route {route_index} architectures[{index}] must be a non-empty string: {path}"
+            )
+        if architecture not in architectures:
+            architectures.append(architecture)
+    return tuple(architectures)
+
+
 def _parse_capture_name(
     path: Path,
     route_index: Any,
@@ -596,6 +622,7 @@ def _parse_route_entry(path: Path, route_index: Any, op: str, raw: Any) -> V2Rou
         raise RuntimeError(f"v2 route {route_index} config must be a JSON object: {path}")
     extra_keys = set(raw) - {
         "attributes",
+        "architectures",
         "bindings",
         "config",
         "constraints",
@@ -623,6 +650,7 @@ def _parse_route_entry(path: Path, route_index: Any, op: str, raw: Any) -> V2Rou
         values=_parse_values(path, route_index, raw.get("values")),
         constraints=_parse_constraints(path, route_index, raw.get("constraints")),
         attributes=_parse_attributes(path, route_index, raw.get("attributes")),
+        architectures=_parse_architectures(path, route_index, raw.get("architectures")),
         launch=dict(launch),
         bindings=_parse_bindings(path, route_index, config.get("bindings")),
     )

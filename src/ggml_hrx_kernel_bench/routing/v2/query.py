@@ -66,14 +66,40 @@ def routes_for_family(catalog: RouteCatalog, family: str) -> tuple[V2Route, ...]
     return catalog.routes_by_family.get(str(family), ())
 
 
-def select_route(catalog: RouteCatalog, *, family: str, route_id: str | None = None) -> V2Route:
-    matches = list(routes_for_family(catalog, family))
+def normalize_architecture(architecture: str | None) -> str | None:
+    if architecture is None:
+        return None
+    normalized = str(architecture).strip().lower()
+    return normalized or None
+
+
+def route_supports_architecture(route: V2Route, architecture: str | None) -> bool:
+    if not route.architectures:
+        return True
+    normalized = normalize_architecture(architecture)
+    return normalized is not None and normalized in route.architectures
+
+
+def routes_for_architecture(routes: tuple[V2Route, ...], architecture: str | None) -> tuple[V2Route, ...]:
+    return tuple(route for route in routes if route_supports_architecture(route, architecture))
+
+
+def select_route(
+    catalog: RouteCatalog,
+    *,
+    family: str,
+    route_id: str | None = None,
+    architecture: str | None = None,
+) -> V2Route:
+    matches = list(routes_for_architecture(routes_for_family(catalog, family), architecture))
     if not matches:
-        raise RuntimeError(f"no v2 route found for family={family}")
+        suffix = "" if normalize_architecture(architecture) is None else f" architecture={architecture}"
+        raise RuntimeError(f"no v2 route found for family={family}{suffix}")
     if route_id is not None:
         route = catalog.routes_by_id.get(str(route_id))
-        if route is None or route.family != family:
-            raise RuntimeError(f"no v2 route found for family={family} route_id={route_id}")
+        if route is None or route.family != family or not route_supports_architecture(route, architecture):
+            suffix = "" if normalize_architecture(architecture) is None else f" architecture={architecture}"
+            raise RuntimeError(f"no v2 route found for family={family} route_id={route_id}{suffix}")
         return route
     if len(matches) != 1:
         raise RuntimeError(f"minimal v2 config requires exactly one route for {family}, found {len(matches)}")
@@ -81,11 +107,12 @@ def select_route(catalog: RouteCatalog, *, family: str, route_id: str | None = N
 
 
 def candidate_routes(catalog: RouteCatalog, query: CandidateQuery) -> tuple[V2Route, ...]:
+    routes = routes_for_architecture(catalog.routes, query.target)
     if not query.families:
-        return catalog.routes
+        return routes
     filtered = [
         route
-        for route in catalog.routes
+        for route in routes
         if route.family in query.families
         or route.source_id in query.families
         or route.id in query.families

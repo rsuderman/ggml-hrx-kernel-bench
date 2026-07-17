@@ -124,7 +124,7 @@ def tensor_constraints_json(route: V2Route) -> list[dict[str, Any]]:
 
 
 def route_supports(route: V2Route) -> dict[str, Any]:
-    return {
+    payload: dict[str, Any] = {
         "src0_type": route.tensors.get("src0").dtype if route.tensors.get("src0") else None,
         "src1_type": route.tensors.get("src1").dtype if route.tensors.get("src1") else None,
         "dst_type": route.tensors.get("dst").dtype if route.tensors.get("dst") else None,
@@ -141,10 +141,13 @@ def route_supports(route: V2Route) -> dict[str, Any]:
             for tensor_name, descriptor in route.tensors.items()
         },
     }
+    if route.architectures:
+        payload["architectures"] = list(route.architectures)
+    return payload
 
 
 def route_summary_json(route: V2Route) -> dict[str, Any]:
-    return {
+    payload: dict[str, Any] = {
         "schema": "ggml_hrx_kernel_bench.routing_route.v2",
         "id": route.id,
         "family": route.family,
@@ -159,3 +162,6 @@ def route_summary_json(route: V2Route) -> dict[str, Any]:
         "constraints": tensor_constraints_json(route),
         "launch": dict(route.launch),
     }
+    if route.architectures:
+        payload["architectures"] = list(route.architectures)
+    return payload

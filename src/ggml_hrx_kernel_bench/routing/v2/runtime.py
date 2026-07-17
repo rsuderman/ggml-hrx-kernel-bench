@@ -67,6 +67,7 @@ def execute_case(
         catalog,
         family=str(request.config_data["kernel"]),
         route_id=request.config_data.get("route_id"),
+        architecture=request.target,
     )
     shape = shape_for_case(request.config_data, request.current_case_values)
     tensors = materialize_route_tensors(route, shape)

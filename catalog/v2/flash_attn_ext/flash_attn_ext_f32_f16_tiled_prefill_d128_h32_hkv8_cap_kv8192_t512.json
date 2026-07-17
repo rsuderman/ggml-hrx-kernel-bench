@@ -1,6 +1,9 @@
 {
   "id": "flash_attn_ext_f32_f16_tiled_prefill_d128_h32_hkv8_cap_kv8192_t512",
   "family": "flash_attn_ext_f32_f16",
+  "architectures": [
+    "gfx1100"
+  ],
   "kernel": {
     "source_id": "flash_attn_ext_f32_f16",
     "path": "flash_attn_ext/tiled_prefill_d128_h32_hkv8_cap_kv8192_t512.loom",
