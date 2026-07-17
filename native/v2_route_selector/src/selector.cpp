@@ -574,6 +574,13 @@ Evaluation evaluate(const RouteDescriptor& route, const Query& query) {
 }  // namespace
 
 Selection select(std::string_view op, const Query& query) {
+  // Attribute predicates are intentionally not interpreted yet. Returning
+  // unsupported keeps attribute-bearing requests visible without silently
+  // selecting a tensor-only route.
+  if (!query.attributes.empty()) {
+    return {SelectionStatus::unsupported, {}};
+  }
+
   const auto normalized_op = normalize_token(op);
   const auto& table = route_table();
   const auto operation = table.find(normalized_op);
