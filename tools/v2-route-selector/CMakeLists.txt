@@ -1,4 +1,14 @@
-find_package(nlohmann_json CONFIG REQUIRED)
+find_package(nlohmann_json CONFIG QUIET)
+if(NOT nlohmann_json_FOUND)
+  include(FetchContent)
+  FetchContent_Declare(
+    nlohmann_json
+    URL https://github.com/nlohmann/json/releases/download/v3.11.3/json.tar.xz
+    URL_HASH SHA256=d6c65aca6b1ed68e7a182f4757257b107ae403032760ed6ef121c9d55e81757d
+    DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+  )
+  FetchContent_MakeAvailable(nlohmann_json)
+endif()
 
 add_library(ggml_hrx_v2_route_selector_cli_lib STATIC
   v2_route_selector_cli.cpp
