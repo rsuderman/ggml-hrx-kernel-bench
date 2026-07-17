@@ -1,26 +1,22 @@
 #include "tools/v2-route-selector/v2_route_selector_cli.h"
 
+#include "ggml_hrx/v2_route_selector/query_parser.h"
 #include "ggml_hrx/v2_route_selector/selector.h"
 
 #include <algorithm>
-#include <cstdint>
 #include <fstream>
-#include <initializer_list>
-#include <limits>
 #include <optional>
-#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <utility>
+#include <variant>
 #include <vector>
-
-#include <nlohmann/json.hpp>
 
 namespace ggml_hrx::v2_route_selector_cli {
 namespace {
 
-using Json = nlohmann::json;
 namespace selector = ggml_hrx::routing::v2;
+namespace query_parser = ggml_hrx::routing::v2::query_parser;
 
 constexpr std::string_view kUsage =
     "Usage: ggml-hrx-v2-route-selector --input <file|-> "
@@ -35,12 +31,6 @@ struct ArgumentParseResult {
   std::optional<Arguments> arguments;
   bool show_help = false;
   std::string error;
-};
-
-class InputError : public std::runtime_error {
-public:
-  explicit InputError(std::string message)
-      : std::runtime_error(std::move(message)) {}
 };
 
 int ReportError(std::ostream &error_stream, int exit_code,
@@ -110,140 +100,6 @@ ArgumentParseResult ParseArguments(const std::vector<std::string> &args) {
   return result;
 }
 
-bool HasField(std::initializer_list<std::string_view> fields,
-              std::string_view candidate) {
-  return std::find(fields.begin(), fields.end(), candidate) != fields.end();
-}
-
-void ValidateObjectFields(const Json &object, std::string_view path,
-                          std::initializer_list<std::string_view> required,
-                          std::initializer_list<std::string_view> optional = {}) {
-  if (!object.is_object()) {
-    throw InputError(std::string(path) + " must be an object");
-  }
-
-  for (auto field = object.begin(); field != object.end(); ++field) {
-    if (!HasField(required, field.key()) &&
-        !HasField(optional, field.key())) {
-      throw InputError(std::string(path) + " contains unknown field '" +
-                       field.key() + "'");
-    }
-  }
-  for (const std::string_view field : required) {
-    if (object.find(std::string(field)) == object.end()) {
-      throw InputError(std::string(path) + " is missing required field '" +
-                       std::string(field) + "'");
-    }
-  }
-}
-
-const Json &RequireFieldType(const Json &object, std::string_view path,
-                             std::string_view field, Json::value_t type,
-                             std::string_view type_name) {
-  const Json &value = object.at(std::string(field));
-  if (value.type() != type) {
-    throw InputError(std::string(path) + " field '" + std::string(field) +
-                     "' must be " + std::string(type_name));
-  }
-  return value;
-}
-
-std::vector<std::int64_t>
-ParseIntegerArray(const Json &value, std::string_view path,
-                  std::string_view field) {
-  if (!value.is_array()) {
-    throw InputError(std::string(path) + " field '" + std::string(field) +
-                     "' must be an array");
-  }
-
-  std::vector<std::int64_t> result;
-  result.reserve(value.size());
-  for (std::size_t index = 0; index < value.size(); ++index) {
-    const Json &element = value[index];
-    if (element.is_number_unsigned()) {
-      const auto unsigned_value = element.get<std::uint64_t>();
-      if (unsigned_value >
-          static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max())) {
-        throw InputError(std::string(path) + " field '" +
-                         std::string(field) + "' element " +
-                         std::to_string(index) +
-                         " is outside the signed 64-bit integer range");
-      }
-      result.push_back(static_cast<std::int64_t>(unsigned_value));
-      continue;
-    }
-    if (element.is_number_integer()) {
-      result.push_back(element.get<std::int64_t>());
-      continue;
-    }
-    throw InputError(std::string(path) + " field '" + std::string(field) +
-                     "' element " + std::to_string(index) +
-                     " must be a signed 64-bit integer");
-  }
-  return result;
-}
-
-selector::Tensor ParseTensor(const Json &value, const std::string &role) {
-  const std::string path = "input tensor '" + role + "'";
-  ValidateObjectFields(value, path, {"dtype", "dimensions", "strides"},
-                       {"permutation"});
-
-  const Json &dtype = RequireFieldType(value, path, "dtype",
-                                       Json::value_t::string, "a string");
-  selector::Tensor tensor;
-  tensor.dtype = dtype.get<std::string>();
-  tensor.dimensions = ParseIntegerArray(value.at("dimensions"), path,
-                                        "dimensions");
-  tensor.strides = ParseIntegerArray(value.at("strides"), path, "strides");
-  if (tensor.dimensions.size() != tensor.strides.size()) {
-    throw InputError(path +
-                     " dimensions and strides must have equal length");
-  }
-  const auto permutation = value.find("permutation");
-  if (permutation != value.end() && !permutation->is_null()) {
-    tensor.permutation = ParseIntegerArray(*permutation, path, "permutation");
-  }
-  return tensor;
-}
-
-std::vector<std::string> ParseAllowedRouteIds(const Json &value) {
-  if (!value.is_array()) {
-    throw InputError(
-        "input field 'allowed_route_ids' must be null or an array of strings");
-  }
-
-  std::vector<std::string> result;
-  result.reserve(value.size());
-  for (std::size_t index = 0; index < value.size(); ++index) {
-    if (!value[index].is_string()) {
-      throw InputError("input field 'allowed_route_ids' element " +
-                       std::to_string(index) + " must be a string");
-    }
-    result.push_back(value[index].get<std::string>());
-  }
-  return result;
-}
-
-std::pair<std::string, selector::Query> ParseQuery(const Json &input) {
-  ValidateObjectFields(input, "input", {"op", "tensors"},
-                       {"allowed_route_ids"});
-  const Json &op = RequireFieldType(input, "input", "op",
-                                    Json::value_t::string, "a string");
-  const Json &tensors = RequireFieldType(input, "input", "tensors",
-                                         Json::value_t::object, "an object");
-
-  selector::Query query;
-  for (auto tensor = tensors.begin(); tensor != tensors.end(); ++tensor) {
-    query.tensors.emplace(tensor.key(), ParseTensor(tensor.value(), tensor.key()));
-  }
-
-  const auto allowed = input.find("allowed_route_ids");
-  if (allowed != input.end() && !allowed->is_null()) {
-    query.allowed_route_ids = ParseAllowedRouteIds(*allowed);
-  }
-  return {op.get<std::string>(), std::move(query)};
-}
-
 int SelectRoute(const std::string &operation, const selector::Query &query,
                 const std::optional<std::string> &expected_route,
                 std::ostream &output_stream, std::ostream &error_stream) {
@@ -276,23 +132,14 @@ int SelectRoute(const std::string &operation, const selector::Query &query,
 
 int RunWithInput(const Arguments &arguments, std::istream &input_stream,
                  std::ostream &output_stream, std::ostream &error_stream) {
-  Json input;
-  try {
-    input = Json::parse(input_stream);
-  } catch (const Json::out_of_range &) {
-    return ReportError(error_stream, 2,
-                       "input contains a number outside the supported range");
-  } catch (const Json::exception &) {
-    return ReportError(error_stream, 2, "malformed JSON");
+  query_parser::ParseResult parsed = query_parser::parse(input_stream);
+  if (const auto *error = std::get_if<query_parser::ParseError>(&parsed)) {
+    return ReportError(error_stream, 2, error->diagnostic);
   }
 
-  try {
-    auto [operation, query] = ParseQuery(input);
-    return SelectRoute(operation, query, arguments.expected_route,
-                       output_stream, error_stream);
-  } catch (const InputError &error) {
-    return ReportError(error_stream, 2, error.what());
-  }
+  auto &query = std::get<query_parser::ParsedQuery>(parsed);
+  return SelectRoute(query.op, query.query, arguments.expected_route,
+                     output_stream, error_stream);
 }
 
 } // namespace

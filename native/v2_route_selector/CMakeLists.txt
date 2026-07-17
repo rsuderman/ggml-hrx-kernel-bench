@@ -45,6 +45,24 @@ set_source_files_properties(
     HEADER_FILE_ONLY TRUE
 )
 
+find_package(nlohmann_json CONFIG REQUIRED)
+
+add_library(
+  ggml_hrx_v2_route_query_parser STATIC
+  src/query_parser.cpp
+)
+target_include_directories(
+  ggml_hrx_v2_route_query_parser
+  PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+)
+target_compile_features(ggml_hrx_v2_route_query_parser PUBLIC cxx_std_17)
+target_link_libraries(
+  ggml_hrx_v2_route_query_parser
+  PRIVATE
+    nlohmann_json::nlohmann_json
+)
+
 add_library(
   ggml_hrx_v2_route_selector_core STATIC
   src/selector.cpp
@@ -62,3 +80,41 @@ target_include_directories(
     ${_ggml_hrx_v2_route_selector_generated_dir}
 )
 target_compile_features(ggml_hrx_v2_route_selector_core PUBLIC cxx_std_17)
+
+add_executable(
+  ggml_hrx_v2_route_query_parser_unit_tests
+  tests/query_parser_test.cpp
+)
+target_compile_features(
+  ggml_hrx_v2_route_query_parser_unit_tests
+  PRIVATE
+    cxx_std_17
+)
+target_link_libraries(
+  ggml_hrx_v2_route_query_parser_unit_tests
+  PRIVATE
+    ggml_hrx_v2_route_query_parser
+)
+add_test(
+  NAME v2-route-query-parser-unit
+  COMMAND ggml_hrx_v2_route_query_parser_unit_tests
+)
+
+add_executable(
+  ggml_hrx_v2_route_selector_core_unit_tests
+  tests/selector_test.cpp
+)
+target_compile_features(
+  ggml_hrx_v2_route_selector_core_unit_tests
+  PRIVATE
+    cxx_std_17
+)
+target_link_libraries(
+  ggml_hrx_v2_route_selector_core_unit_tests
+  PRIVATE
+    ggml_hrx_v2_route_selector_core
+)
+add_test(
+  NAME v2-route-selector-core-unit
+  COMMAND ggml_hrx_v2_route_selector_core_unit_tests
+)
