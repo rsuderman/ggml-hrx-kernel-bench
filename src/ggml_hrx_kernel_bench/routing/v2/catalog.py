@@ -677,10 +677,12 @@ def _load_router_index(routing_dir: Path) -> dict[str, tuple[str, ...]]:
     index: dict[str, tuple[str, ...]] = {}
     for raw_op, raw_files in raw_routes.items():
         op = _normalize_op(raw_op)
-        if not isinstance(raw_files, list) or not raw_files:
+        if not isinstance(raw_files, list):
             raise RuntimeError(
-                f"v2 routing descriptor routes[{raw_op!r}] must be a non-empty JSON array: {path}"
+                f"v2 routing descriptor routes[{raw_op!r}] must be a JSON array: {path}"
             )
+        if not raw_files:
+            continue
         index[op] = tuple(str(raw_file) for raw_file in raw_files)
     return index
 

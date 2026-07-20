@@ -1070,6 +1070,8 @@ def _captured_tensor_dims(candidate: Candidate, tensor_name: str) -> tuple[int, 
             return anchor_dims
         dims: list[int] = []
         for index, anchor_dim in enumerate(anchor_dims):
+            if tensor_name == "src0" and candidate.family in {"mul_mat_f16_f32_batched", "mul_mat_f16_f32_tiled_batched"}:
+                anchor_dim = 1 if index >= 2 else anchor_dim
             dims.append(int(candidate.shape.get(f"{tensor_name}_d{index}", anchor_dim)))
         return tuple(dims)
     return None

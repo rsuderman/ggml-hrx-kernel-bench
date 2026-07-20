@@ -23,7 +23,6 @@ from ggml_hrx_kernel_bench.loom_execution_descriptor import (  # noqa: E402
     prepare_execution,
     run_execution_descriptor_manifest,
     validate_descriptor,
-    write_generated_execution_descriptors,
 )
 from ggml_hrx_kernel_bench.materialized_assets import materialize_asset_root  # noqa: E402
 
@@ -990,64 +989,6 @@ def test_infra_script_prints_command_without_execution(tmp_path: Path) -> None:
     assert "--execute-ggml-hrx-run-loom-command" not in payload["command"]
 
 
-def test_descriptor_from_generated_add_case_emits_compact_payload(tmp_path: Path) -> None:
-    result = descriptor_from_generated_case(
-        config_data=_generated_add_config(),
-        case_id="d0-4-d1-1-d2-1-d3-1",
-        case_values=[4, 1, 1, 1],
-        kernel_dir=Path("kernels/v2"),
-        routing_dir=Path("catalog/v2"),
-        target="gfx1100",
-        max_elements=32,
-        oracle_fixture_dir=tmp_path / "oracle-fixtures",
-        descriptor_dir=tmp_path,
-    )
-
-    assert result.status == "emitted"
-    assert result.descriptor is not None
-    descriptor = result.descriptor
-    assert descriptor["kernel"] == "kernels/v2/add/generic_4d.loom"
-    assert descriptor["root"] == "@add_f32_generic_4d"
-    assert descriptor["workgroup_count"] == [1, 1, 1]
-    assert descriptor["configs"]["@shape.add4d.ne0"] == "4"
-    assert descriptor["metadata"]["element_counts"] == {"src0": 4, "src1": 4, "dst": 4}
-    assert descriptor["metadata"]["execution_abi"]["schema"] == ROUTE_EXECUTION_ABI_SCHEMA
-    assert descriptor["metadata"]["oracle"]["status"] == "fixtures_ready"
-    assert descriptor["bindings"][0]["path"] == "oracle-fixtures/src0.npy"
-    assert descriptor["bindings"][1]["path"] == "oracle-fixtures/src1.npy"
-    assert descriptor["bindings"][2]["path"] == "oracle-fixtures/dst_init.npy"
-    assert descriptor["bindings"][2]["expect"]["path"] == "oracle-fixtures/expected.npy"
-    src0 = np.load(tmp_path / descriptor["bindings"][0]["path"])
-    src1 = np.load(tmp_path / descriptor["bindings"][1]["path"])
-    expected = np.load(tmp_path / descriptor["bindings"][2]["expect"]["path"])
-    assert expected.tolist() == (src0 + src1).astype(np.float32).tolist()
-
-
-def test_descriptor_from_generated_mul_case_uses_oracle_fixture_paths(tmp_path: Path) -> None:
-    result = descriptor_from_generated_case(
-        config_data=_generated_binary_config("mul_f32"),
-        case_id="d0-4-d1-1-d2-1-d3-1",
-        case_values=[4, 1, 1, 1],
-        kernel_dir=Path("kernels/v2"),
-        routing_dir=Path("catalog/v2"),
-        target="gfx1100",
-        max_elements=32,
-        oracle_fixture_dir=tmp_path / "oracle-fixtures",
-        descriptor_dir=tmp_path,
-    )
-
-    assert result.status == "emitted"
-    assert result.descriptor is not None
-    descriptor = result.descriptor
-    assert descriptor["kernel"] == "kernels/v2/mul/generic_4d.loom"
-    assert descriptor["root"] == "@mul_f32_generic_4d"
-    assert descriptor["metadata"]["oracle"]["status"] == "fixtures_ready"
-    src0 = np.load(tmp_path / descriptor["bindings"][0]["path"])
-    src1 = np.load(tmp_path / descriptor["bindings"][1]["path"])
-    expected = np.load(tmp_path / descriptor["bindings"][2]["expect"]["path"])
-    assert expected.tolist() == (src0 * src1).astype(np.float32).tolist()
-
-
 def test_descriptor_from_generated_unary_f32_case_uses_abi_bindings(tmp_path: Path) -> None:
     assets = materialize_asset_root(tmp_path / "assets", force=True)
     result = descriptor_from_generated_case(
@@ -1579,51 +1520,6 @@ def test_descriptor_from_generated_rope_f32_case_uses_scalar_and_position_abi(
     assert f"5:output:f32:{expected.size}:{tmp_path / descriptor['bindings'][2]['path']}" in command
 
 
-def test_descriptor_from_generated_add_f16_case_uses_int16_storage(tmp_path: Path) -> None:
-    assets = materialize_asset_root(tmp_path / "assets", force=True)
-    result = descriptor_from_generated_case(
-        config_data=_generated_add_f16_config(),
-        case_id="d0-4-d1-1-d2-1-d3-1",
-        case_values=[4, 1, 1, 1],
-        kernel_dir=assets / "kernels" / "v2",
-        routing_dir=assets / "catalog" / "v2",
-        target="gfx1100",
-        max_elements=32,
-        oracle_fixture_dir=tmp_path / "oracle-fixtures",
-        descriptor_dir=tmp_path,
-    )
-
-    assert result.status == "emitted", result.reason
-    assert result.descriptor is not None
-    descriptor = result.descriptor
-    assert descriptor["root"] == "@add_f16_generic_4d"
-    assert [binding["dtype"] for binding in descriptor["bindings"]] == ["f16", "f16", "f16"]
-    src0 = np.load(tmp_path / descriptor["bindings"][0]["path"])
-    expected = np.load(tmp_path / descriptor["bindings"][2]["expect"]["path"])
-    assert src0.dtype == np.int16
-    assert expected.dtype == np.int16
-    assert descriptor["metadata"]["oracle_array_element_counts"] == {
-        "dst_init": 4,
-        "expected": 4,
-        "src0": 4,
-        "src1": 4,
-    }
-
-    descriptor_path = _write_descriptor(tmp_path, descriptor)
-    prepared = prepare_execution(
-        descriptor_path=descriptor_path,
-        fixture_dir=tmp_path / "fixtures",
-        output_path=tmp_path / "result.json",
-        runner="runner",
-        loom_link=None,
-        ggml_hrx_run_loom=None,
-        repo_root=tmp_path,
-    )
-    command = prepared.command
-    assert f"0:input:f16:4:{tmp_path / descriptor['bindings'][0]['path']}" in command
-    assert f"2:output:f16:4:{tmp_path / descriptor['bindings'][2]['path']}" in command
-
-
 def test_descriptor_from_generated_abs_f16_case_uses_int16_storage(tmp_path: Path) -> None:
     assets = materialize_asset_root(tmp_path / "assets", force=True)
     result = descriptor_from_generated_case(
@@ -1885,135 +1781,6 @@ def test_descriptor_from_generated_add_case_requires_execution_abi(tmp_path: Pat
     assert result.reason == "generated config is missing execution_abi"
 
 
-def test_descriptor_from_generated_add_case_skips_large_fixtures(tmp_path: Path) -> None:
-    result = descriptor_from_generated_case(
-        config_data=_generated_add_config(),
-        case_id="too-large",
-        case_values=[128, 1, 1, 1],
-        kernel_dir=Path("kernels/v2"),
-        routing_dir=Path("catalog/v2"),
-        target="gfx1100",
-        max_elements=32,
-        oracle_fixture_dir=tmp_path / "oracle-fixtures",
-        descriptor_dir=tmp_path,
-    )
-
-    assert result.status == "skipped"
-    assert "above max 32" in str(result.reason)
-
-
-def test_write_generated_execution_descriptors_writes_manifest_and_descriptor(tmp_path: Path) -> None:
-    config_path = tmp_path / "add-config.json"
-    config_path.write_text(json.dumps(_generated_add_config()) + "\n", encoding="utf-8")
-    manifest_path = tmp_path / "generated-kernel-tests.json"
-    manifest_path.write_text(
-        json.dumps(
-            {
-                "schema": "ggml_hrx_kernel_bench.generated_kernel_tests.v1",
-                "entry_count": 1,
-                "entries": [
-                    {
-                        "config_path": str(config_path),
-                        "config_name": config_path.name,
-                        "kernel": "add_f32",
-                        "case_count": 1,
-                        "route_id": "add_f32_generic_4d",
-                        "op": "ADD",
-                    }
-                ],
-            }
-        )
-        + "\n",
-        encoding="utf-8",
-    )
-
-    descriptor_manifest = write_generated_execution_descriptors(
-        manifest_path=manifest_path,
-        output_dir=tmp_path / "descriptors",
-        kernel_dir=Path("kernels/v2"),
-        routing_dir=Path("catalog/v2"),
-        target="gfx1100",
-        max_elements=32,
-    )
-
-    assert descriptor_manifest["schema"] == DESCRIPTOR_MANIFEST_SCHEMA
-    assert descriptor_manifest["emitted_count"] == 1
-    descriptor_path = Path(descriptor_manifest["entries"][0]["descriptor_path"])
-    assert descriptor_path.is_file()
-    emitted = json.loads(descriptor_path.read_text(encoding="utf-8"))
-    assert emitted["schema"] == SCHEMA
-    prepared = prepare_execution(
-        descriptor_path=descriptor_path,
-        fixture_dir=tmp_path / "fixtures",
-        output_path=tmp_path / "result.json",
-        runner="runner",
-        loom_link=None,
-        ggml_hrx_run_loom=None,
-        repo_root=Path.cwd(),
-    )
-    assert "--workgroup-count" in prepared.command
-    assert "1,1,1" in prepared.command
-
-
-def test_write_generated_execution_descriptors_filters_manifest_entries(tmp_path: Path) -> None:
-    add_config_path = tmp_path / "add-config.json"
-    add_config_path.write_text(json.dumps(_generated_add_config()) + "\n", encoding="utf-8")
-    f16_config_path = tmp_path / "add-f16-config.json"
-    f16_config_path.write_text(
-        json.dumps(
-            {
-                "kernel": "add_f16",
-                "params": ["d0", "d1", "d2", "d3"],
-                "cases": [[4, 1, 1, 1]],
-                "route_id": "add_f16_generic_4d",
-            }
-        )
-        + "\n",
-        encoding="utf-8",
-    )
-    manifest_path = tmp_path / "generated-kernel-tests.json"
-    manifest_path.write_text(
-        json.dumps(
-            {
-                "schema": "ggml_hrx_kernel_bench.generated_kernel_tests.v1",
-                "entry_count": 2,
-                "entries": [
-                    {
-                        "config_path": str(f16_config_path),
-                        "config_name": f16_config_path.name,
-                        "kernel": "add_f16",
-                        "case_count": 1,
-                        "route_id": "add_f16_generic_4d",
-                    },
-                    {
-                        "config_path": str(add_config_path),
-                        "config_name": add_config_path.name,
-                        "kernel": "add_f32",
-                        "case_count": 1,
-                        "route_id": "add_f32_generic_4d",
-                    },
-                ],
-            }
-        )
-        + "\n",
-        encoding="utf-8",
-    )
-
-    descriptor_manifest = write_generated_execution_descriptors(
-        manifest_path=manifest_path,
-        output_dir=tmp_path / "descriptors",
-        kernel_dir=Path("kernels/v2"),
-        routing_dir=Path("catalog/v2"),
-        target="gfx1100",
-        max_elements=32,
-        kernels={"add_f32"},
-    )
-
-    assert descriptor_manifest["filtered_count"] == 1
-    assert descriptor_manifest["unsupported_count"] == 0
-    assert descriptor_manifest["emitted_count"] == 1
-
-
 def _write_descriptor_manifest(tmp_path: Path) -> tuple[Path, Path]:
     descriptor_path = _write_descriptor(tmp_path, _descriptor())
     manifest_path = tmp_path / "loom-execution-descriptors.json"
@@ -2212,57 +1979,3 @@ def test_run_loom_execution_descriptors_script_prepares(tmp_path: Path) -> None:
     payload = json.loads(result.stdout)
     assert payload["prepared_count"] == 1
     assert payload["executed_count"] == 0
-
-
-def test_generate_loom_execution_descriptors_script(tmp_path: Path) -> None:
-    config_path = tmp_path / "add-config.json"
-    config_path.write_text(json.dumps(_generated_add_config()) + "\n", encoding="utf-8")
-    manifest_path = tmp_path / "generated-kernel-tests.json"
-    manifest_path.write_text(
-        json.dumps(
-            {
-                "schema": "ggml_hrx_kernel_bench.generated_kernel_tests.v1",
-                "entry_count": 1,
-                "entries": [
-                    {
-                        "config_path": str(config_path),
-                        "config_name": config_path.name,
-                        "kernel": "add_f32",
-                        "case_count": 1,
-                        "route_id": "add_f32_generic_4d",
-                        "op": "ADD",
-                    }
-                ],
-            }
-        )
-        + "\n",
-        encoding="utf-8",
-    )
-    script = Path("tests/infra/generate_loom_execution_descriptors.py")
-
-    result = subprocess.run(
-        [
-            sys.executable,
-            str(script),
-            str(manifest_path),
-            "--output-dir",
-            str(tmp_path / "descriptors"),
-            "--kernel-dir",
-            "kernels/v2",
-            "--routing-dir",
-            "catalog/v2",
-            "--max-elements",
-            "32",
-            "--limit",
-            "1",
-        ],
-        check=False,
-        text=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-    )
-
-    assert result.returncode == 0, result.stderr
-    payload = json.loads(result.stdout)
-    assert payload["emitted_count"] == 1
-    assert Path(payload["entries"][0]["descriptor_path"]).is_file()

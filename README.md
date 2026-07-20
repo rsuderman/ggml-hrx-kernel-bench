@@ -1,7 +1,7 @@
 # GGML HRX Kernel Bench
 
-Standalone Python project for developing, verifying, benchmarking, and tuning
-GGML HRX Loom kernels outside llama.cpp.
+Standalone Python project for developing, verifying, and optimizing GGML HRX
+Loom kernels outside llama.cpp.
 
 This project is intentionally path-neutral. It does not assume a workspace
 layout, build directory, cache directory, ROCm installation, or llama.cpp
@@ -10,8 +10,8 @@ flags or config files.
 
 ## Status
 
-This project now contains the imported HRX2 Loom corpus and a first usable
-bench pipeline:
+This project contains the imported HRX2 Loom corpus and route/correctness
+infrastructure:
 
 - HRX2 kernel and catalog import/reporting,
 - route-backed candidate planning,
@@ -19,6 +19,7 @@ bench pipeline:
 - atlas-first route schedules with optional observed-shape refinement,
 - NumPy fixture and golden generation for pilot families,
 - focused Loom link/compile/run commands,
+- flash-attention-first route optimization setup,
 - JSONL ledgers plus preserved evidence directories,
 - catalog candidate, reduced-route, and fusion-profitability summaries.
 
@@ -200,129 +201,39 @@ python3 -m ggml_hrx_kernel_bench \
   compile
 ```
 
-Run a generated correctness-gated benchmark:
+Inventory the initial flash attention optimization surface:
 
 ```bash
 python3 -m ggml_hrx_kernel_bench \
-  --output-dir runs/copy-run \
-  --loom-link /path/to/loom-link \
-  --iree-benchmark-loom /path/to/iree-benchmark-loom \
-  --rocm-path /path/to/rocm \
-  --family copy_f32_f16 \
-  --limit 1 \
-  run
+  --output-dir runs/flash-attn-route-inventory \
+  route-inventory --op FLASH_ATTN_EXT
 ```
 
-## Full Supported-Family Sweep
+## Flash Attention Optimization Setup
 
-Use `sweep-supported` for a single top-level workflow that generates ledgers for
-every currently ABI-backed family. It writes stage ledgers under the selected
-run directory:
+The old standalone benchmark materialization and comparison scripts have been
+removed. New optimization tooling starts with `FLASH_ATTN_EXT`, which has the
+smallest model-visible surface in the current imported artifacts.
+
+The first maintained command is:
 
 ```text
-<output-dir>/plan/ledger.jsonl
-<output-dir>/fixtures/ledger.jsonl
-<output-dir>/link/ledger.jsonl
-<output-dir>/compile/ledger.jsonl   # only when --loom-compile is provided
-<output-dir>/run/ledger.jsonl
-<output-dir>/report.md
+route-inventory
 ```
 
-The command requires `--loom-link` and `--iree-benchmark-loom`. Provide
-`--loom-compile` as well when you want standalone compile report summaries in
-the Markdown report. Unsupported or failing candidates remain visible as ledger
-rows and are promoted to the top of the report.
-
-Example:
-
-```bash
-python3 -m ggml_hrx_kernel_bench \
-  --output-dir runs/supported-gfx1100 \
-  --target gfx1100 \
-  --rocm-path /path/to/rocm \
-  --loom-link /path/to/loom-link \
-  --loom-compile /path/to/loom-compile \
-  --iree-benchmark-loom /path/to/iree-benchmark-loom \
-  --iterations 1 \
-  --warmup-iterations 0 \
-  --max-batches 1 \
-  sweep-supported
-```
-
-Use `--family` to smoke a subset, `--limit` to cap candidates during harness
-development, and `--sweep edge` or `--sweep observed` when you want broader
-coverage than the default minimal smoke shape per route.
-
-On a `gfx1151` card running the HRX2 kernels as `gfx1100`, set the ROCr override
-in the environment:
-
-```bash
-HSA_OVERRIDE_GFX_VERSION=11.0.0 \
-python3 -m ggml_hrx_kernel_bench \
-  --output-dir runs/supported-gfx1151-as-gfx1100 \
-  --target gfx1100 \
-  --rocm-path /path/to/rocm \
-  --loom-link /path/to/loom-link \
-  --loom-compile /path/to/loom-compile \
-  --iree-benchmark-loom /path/to/iree-benchmark-loom \
-  --iterations 1 \
-  --warmup-iterations 0 \
-  --max-batches 1 \
-  sweep-supported
-```
-
-## Markdown Reports
-
-`sweep-supported` writes `<output-dir>/report.md` automatically. To regenerate a
-report from existing stage ledgers:
-
-```bash
-python3 -m ggml_hrx_kernel_bench \
-  --output-dir runs/supported-gfx1100 \
-  report
-```
-
-To summarize arbitrary ledgers:
-
-```bash
-python3 -m ggml_hrx_kernel_bench \
-  --output-dir runs/report-only \
-  --ledger runs/supported-gfx1100/run/ledger.jsonl \
-  --ledger runs/supported-gfx1100/compile/ledger.jsonl \
-  --report-output runs/report-only/report.md \
-  report
-```
-
-Reports put failures, unsupported workbenches, rejected correctness checks, and
-tool errors first. They then summarize status counts, per-family timing winners,
-candidate shapes/config bindings/dispatch metadata, and standalone compile
-statistics when available.
-
-## Catalog Summaries
-
-The `catalog` command consumes existing stage ledgers under `--output-dir` and
-writes:
+It consumes route import artifacts and writes:
 
 ```text
-<output-dir>/catalog/candidates.json
-<output-dir>/catalog/reduced_routes.json
-<output-dir>/catalog/fusion_profitability.json
+<output-dir>/route-inventory.json
+<output-dir>/ledger.jsonl
 ```
 
-`candidates.json` is the raw per-candidate evidence join. `reduced_routes.json`
-is a conservative summary of candidates that have compile evidence and no failed
-run evidence. `fusion_profitability.json` compares fused timings against the
-best available decomposed component timings and marks fusions as missing
-baseline evidence until the individual component rows are present.
+Use `--generated-import-dir` to point at a specific route import artifact root.
+By default the command reads the generated Llama 3.3 8B Q8_0 model route import
+under `build/tests/models/artifacts/`.
 
-Example:
-
-```bash
-python3 -m ggml_hrx_kernel_bench \
-  --output-dir runs/supported-gfx1100 \
-  --sweep edge \
-  catalog
-```
+Next commands to author are `route-correctness`, `route-benchmark`,
+`route-compare`, and `optimization-report`.
 
 Legacy single-spec mode is still available:
 
@@ -348,22 +259,6 @@ python3 -m ggml_hrx_kernel_bench \
 When this project is promoted to its own repository, CI and local examples
 should provide a small synthetic Loom source rather than depending on the HRX
 workspace checkout.
-
-## Benchmark Module Materialization
-
-Run-mode should benchmark a focused benchmark module, not an entire multi-kernel
-source catalog. The intended pipeline is:
-
-```text
-kernel library + benchmark wrapper + concrete config
-  -> selective materialization
-  -> correctness-gated benchmark
-```
-
-Today that materialization is done with `loom-link --mode=link --root=...`
-before invoking `iree-benchmark-loom`. The linked module is kept under the
-candidate evidence directory so compiler reports, workbenches, fixtures, and
-failure logs can be inspected together.
 
 ## Outputs
 

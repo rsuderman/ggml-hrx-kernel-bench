@@ -221,7 +221,7 @@ def render_markdown(rows: list[dict[str, Any]], ledger_paths: list[Path], option
                 + " |"
             )
     else:
-        lines.append("No standalone compile summaries found. Provide `--loom-compile` to `sweep-supported` to collect them.")
+        lines.append("No standalone compile summaries found in the selected ledgers.")
 
     lines.extend(["", "## Ledger Inputs", ""])
     for path in ledger_paths:

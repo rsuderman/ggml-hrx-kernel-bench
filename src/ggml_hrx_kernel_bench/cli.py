@@ -20,6 +20,7 @@ from .observed_shapes import load_observed_shapes, read_observations_jsonl, save
 from .oracles import generate_oracle, write_workbench
 from .reporting import ReportOptions, write_markdown_report
 from .route_reducer import reduce_routes
+from .route_optimization import route_inventory_payload, write_route_inventory
 from .specs import KernelSpec, config_args, file_sha256, spec_sha256
 from .tools import CommandResult, run_command
 
@@ -102,11 +103,13 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers.add_parser("compile")
     subparsers.add_parser("run")
     subparsers.add_parser("verify")
-    subparsers.add_parser("tune")
     subparsers.add_parser("catalog")
     subparsers.add_parser("export-llama")
-    subparsers.add_parser("sweep-supported")
     subparsers.add_parser("report")
+    route_inventory = subparsers.add_parser("route-inventory")
+    route_inventory.add_argument("--op", default="FLASH_ATTN_EXT")
+    route_inventory.add_argument("--generated-import-dir", type=Path)
+    route_inventory.add_argument("--output", type=Path)
     return parser
 
 
@@ -129,8 +132,8 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if args.command == "accumulate-shapes":
             return command_accumulate_shapes(args, ledger)
-        if args.command == "sweep-supported":
-            return command_sweep_supported(args, config, ledger)
+        if args.command == "route-inventory":
+            return command_route_inventory(args, ledger)
         if args.command == "report":
             return command_report(args, ledger)
         if args.command == "export-llama":
@@ -209,90 +212,41 @@ def command_corpus(args: argparse.Namespace, config: BenchConfig, ledger: Ledger
         rows = [fixtures_row(args, candidate, action="verify") for candidate in candidates]
         ledger.write_all(rows)
         return status_code_from_rows(rows)
-    if args.command == "tune":
-        rows = tune_rows(args, config, candidates)
-        ledger.write_all(rows)
-        write_tune_summary(args.output_dir, rows)
-        return status_code_from_rows(rows)
     if args.command == "catalog":
         return command_catalog(args, candidates, ledger)
     raise ValueError(f"unsupported command {args.command}")
 
 
-def command_sweep_supported(args: argparse.Namespace, config: BenchConfig, ledger: LedgerWriter) -> int:
-    if config.tools.loom_link is None:
-        raise ValueError("sweep-supported requires --loom-link")
-    if config.tools.iree_benchmark_loom is None:
-        raise ValueError("sweep-supported requires --iree-benchmark-loom")
-
-    requested = filter_set(args.family)
-    families = set(SUPPORTED_RUN_FAMILIES) if requested is None else requested & set(SUPPORTED_RUN_FAMILIES)
-    if not families:
-        raise ValueError("no supported families selected")
-
-    common_args = stage_args(args, args.output_dir, "plan", families)
-    candidates = selected_candidates(common_args)
-    stages: list[dict[str, Any]] = []
-
-    plan_dir = args.output_dir / "plan"
-    plan_args = stage_args(args, plan_dir, "plan", families)
-    plan_rows = [corpus_row(plan_args, candidate, action="plan") for candidate in candidates]
-    LedgerWriter(plan_dir / "ledger.jsonl").write_all(plan_rows)
-    write_summary(plan_dir, candidates)
-    stages.append(stage_summary("plan", plan_dir, plan_rows))
-
-    fixtures_dir = args.output_dir / "fixtures"
-    fixtures_args = stage_args(args, fixtures_dir, "fixtures", families)
-    fixtures_rows = [fixtures_row(fixtures_args, candidate) for candidate in candidates]
-    LedgerWriter(fixtures_dir / "ledger.jsonl").write_all(fixtures_rows)
-    stages.append(stage_summary("fixtures", fixtures_dir, fixtures_rows))
-
-    link_dir = args.output_dir / "link"
-    link_args = stage_args(args, link_dir, "link", families)
-    link_rows = [link_candidate_row(link_args, config, candidate) for candidate in candidates]
-    LedgerWriter(link_dir / "ledger.jsonl").write_all(link_rows)
-    stages.append(stage_summary("link", link_dir, link_rows))
-
-    if config.tools.loom_compile is not None:
-        compile_dir = args.output_dir / "compile"
-        compile_args = stage_args(args, compile_dir, "compile", families)
-        compile_rows = [
-            compile_candidate_row(compile_args, config, candidate, sanitizer=sanitizer)
-            for sanitizer in sanitizer_list(args)
-            for candidate in candidates
-        ]
-        LedgerWriter(compile_dir / "ledger.jsonl").write_all(compile_rows)
-        stages.append(stage_summary("compile", compile_dir, compile_rows))
-
-    run_dir = args.output_dir / "run"
-    run_args = stage_args(args, run_dir, "run", families)
-    run_rows = [
-        run_candidate_row(run_args, config, candidate, sanitizer=sanitizer)
-        for sanitizer in sanitizer_list(args)
-        for candidate in candidates
-    ]
-    LedgerWriter(run_dir / "ledger.jsonl").write_all(run_rows)
-    stages.append(stage_summary("run", run_dir, run_rows))
-
-    report_path = args.report_output or (args.output_dir / "report.md")
-    report = write_markdown_report(
-        [Path(stage["ledger_path"]) for stage in stages],
-        report_path,
-        ReportOptions(max_issues=args.report_max_issues, top_per_family=args.report_top),
+def command_route_inventory(args: argparse.Namespace, ledger: LedgerWriter) -> int:
+    router = create_router(
+        version=args.routing_version,
+        kernel_dir=args.kernel_dir,
+        routing_dir=args.routing_dir,
     )
+    output_path = args.output or (args.output_dir / "route-inventory.json")
+    payload = route_inventory_payload(
+        op=args.op,
+        generated_import_dir=args.generated_import_dir,
+        routing_dir=router.context.routing_dir,
+        kernel_dir=router.context.kernel_dir,
+        target=args.target,
+        repo_root=Path.cwd(),
+    )
+    write_route_inventory(payload, output_path)
     ledger.append(
         {
             "schema": "ggml_hrx_kernel_bench.ledger.v1",
             "run_id": utc_run_id(),
-            "action": "sweep-supported",
+            "action": "route-inventory",
             "status": "ok",
-            "supported_families": sorted(families),
-            "candidate_count": len(candidates),
-            "stages": stages,
-            "report": report,
+            "op": payload["op"],
+            "case_count": payload["case_count"],
+            "selected_route_ids": payload["selected_route_ids"],
+            "output_path": str(output_path),
         }
     )
-    return max(status_code_from_rows(run_rows), status_code_from_rows(link_rows), status_code_from_rows(fixtures_rows))
+    print(json.dumps({"output_path": str(output_path), "case_count": payload["case_count"]}))
+    return 0
 
 
 def command_report(args: argparse.Namespace, ledger: LedgerWriter) -> int:
@@ -742,31 +696,6 @@ def run_candidate_test_row(args: argparse.Namespace, config: BenchConfig, candid
     return row
 
 
-def tune_rows(args: argparse.Namespace, config: BenchConfig, candidates: list[Candidate]) -> list[dict[str, Any]]:
-    rows: list[dict[str, Any]] = []
-    for sanitizer in sanitizer_list(args):
-        for candidate in candidates:
-            if config.tools.iree_benchmark_loom is not None:
-                row = run_candidate_row(args, config, candidate, sanitizer=sanitizer)
-                row["action"] = "tune"
-                row["tune_stage"] = "run"
-            elif config.tools.loom_compile is not None:
-                row = compile_candidate_row(args, config, candidate, sanitizer=sanitizer)
-                row["action"] = "tune"
-                row["tune_stage"] = "compile"
-            elif config.tools.loom_link is not None:
-                row = link_candidate_row(args, config, candidate)
-                row["action"] = "tune"
-                row["tune_stage"] = "link"
-            else:
-                row = corpus_row(args, candidate, action="tune")
-                row["status"] = "planned"
-                row["tune_stage"] = "plan"
-                row["message"] = "provide --iree-benchmark-loom for timing, --loom-compile for compile sweep, or --loom-link for link sweep"
-            rows.append(row)
-    return rows
-
-
 def command_catalog(args: argparse.Namespace, candidates: list[Candidate], ledger: LedgerWriter) -> int:
     ledger_rows = read_jsonl(args.output_dir / "ledger.jsonl")
     by_candidate: dict[str, dict[str, Any]] = {}
@@ -920,42 +849,6 @@ def write_summary(output_dir: Path, candidates: list[Candidate]) -> None:
         summary["by_status"][candidate.status] = summary["by_status"].get(candidate.status, 0) + 1
         summary["by_family"][candidate.family] = summary["by_family"].get(candidate.family, 0) + 1
     (output_dir / "plan_summary.json").write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-
-
-def write_tune_summary(output_dir: Path, rows: list[dict[str, Any]]) -> None:
-    ranked = []
-    for row in rows:
-        candidate = row.get("candidate") or {}
-        benchmark = row.get("benchmark") or {}
-        summary = benchmark.get("summary") or {}
-        timing = summary.get("operation_timing_ns") or {}
-        mean = timing.get("mean")
-        ranked.append(
-            {
-                "candidate_id": candidate.get("candidate_id"),
-                "family": candidate.get("family"),
-                "status": row.get("status"),
-                "tune_stage": row.get("tune_stage"),
-                "shape": candidate.get("shape"),
-                "config_bindings": candidate.get("config_bindings"),
-                "mean_operation_timing_ns": mean,
-                "correctness": summary.get("correctness"),
-                "rejection": None if row.get("status") == "ran" else row.get("status"),
-            }
-        )
-    ranked.sort(key=lambda item: (item["mean_operation_timing_ns"] is None, item["mean_operation_timing_ns"] or 0))
-    status_counts: dict[str, int] = {}
-    for row in rows:
-        status = str(row.get("status"))
-        status_counts[status] = status_counts.get(status, 0) + 1
-    summary = {
-        "schema": "ggml_hrx_kernel_bench.tune_summary.v1",
-        "candidate_count": len(rows),
-        "status_counts": status_counts,
-        "best": ranked[0] if ranked else None,
-        "ranked": ranked,
-    }
-    (output_dir / "tune_summary.json").write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
 def status_code_from_rows(rows: list[dict[str, Any]]) -> int:

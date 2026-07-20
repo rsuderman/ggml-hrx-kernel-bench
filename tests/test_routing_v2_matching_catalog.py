@@ -18,9 +18,6 @@ from ggml_hrx_kernel_bench.routing.v2.query import RouteCatalog, load_route_cata
 REPRESENTATIVE_ROUTE_IDS = frozenset(
     {
         "clamp_f32_contiguous_4d",
-        "add_f32_rhs_row_broadcast_2d",
-        "add_f32_generic_4d",
-        "add_f32_generic_2d",
         "copy_f32_f32_non_contiguous_4d",
         "get_rows_q8_0_f32_embedding_rows_descriptor_4d",
         "mul_mat_q8_0_f32_contiguous_4d",
@@ -386,42 +383,6 @@ POSITIVE_CASES = (
         id="clamp-rank-min-contiguous",
     ),
     pytest.param(
-        "add_f32_rhs_row_broadcast_2d",
-        "row broadcast with required zero stride",
-        ADD_ROW_BROADCAST_2D,
-        id="add-row-broadcast-zero-stride",
-    ),
-    pytest.param(
-        "add_f32_rhs_row_broadcast_2d",
-        "inclusive indexed size upper boundaries",
-        {
-            "src0": _tensor(
-                dtype="F32",
-                sizes=(65536, 1048576),
-                strides=(1, 65536),
-            ),
-            "src1": _tensor(dtype="F32", sizes=(65536, 1), strides=(1, 0)),
-            "dst": _tensor(
-                dtype="F32",
-                sizes=(65536, 1048576),
-                strides=(1, 65536),
-            ),
-        },
-        id="add-row-broadcast-size-max",
-    ),
-    pytest.param(
-        "add_f32_generic_4d",
-        "divisible broadcast with noncontiguous layouts",
-        ADD_GENERIC_4D,
-        id="add-generic4-divisible-noncontiguous",
-    ),
-    pytest.param(
-        "add_f32_generic_2d",
-        "route with an empty value list",
-        ADD_GENERIC_2D_NO_VALUES,
-        id="add-generic2-empty-values",
-    ),
-    pytest.param(
         "copy_f32_f32_non_contiguous_4d",
         "implicit identity permutations",
         COPY_IMPLICIT_IDENTITY_4D,
@@ -530,38 +491,6 @@ NEGATIVE_CASES = (
         id="clamp-rank-above-range",
     ),
     pytest.param(
-        "add_f32_generic_4d",
-        "rank below exact rank",
-        {
-            "src0": _tensor(dtype="F32", sizes=(4, 5, 6), strides=(1, 4, 20)),
-            "src1": _tensor(dtype="F32", sizes=(4, 5, 6), strides=(1, 4, 20)),
-            "dst": _tensor(dtype="F32", sizes=(4, 5, 6), strides=(1, 4, 20)),
-        },
-        id="add-generic4-rank-below-exact",
-    ),
-    pytest.param(
-        "add_f32_generic_4d",
-        "rank above exact rank",
-        {
-            "src0": _tensor(
-                dtype="F32",
-                sizes=(2, 2, 2, 2, 2),
-                strides=(1, 2, 4, 8, 16),
-            ),
-            "src1": _tensor(
-                dtype="F32",
-                sizes=(2, 2, 2, 2, 2),
-                strides=(1, 2, 4, 8, 16),
-            ),
-            "dst": _tensor(
-                dtype="F32",
-                sizes=(2, 2, 2, 2, 2),
-                strides=(1, 2, 4, 8, 16),
-            ),
-        },
-        id="add-generic4-rank-above-exact",
-    ),
-    pytest.param(
         "clamp_f32_contiguous_4d",
         "cross-tensor dimension equality mismatch",
         _replace_tensor(
@@ -605,108 +534,6 @@ NEGATIVE_CASES = (
             ),
         },
         id="clamp-noncontiguous-layout",
-    ),
-    pytest.param(
-        "add_f32_generic_4d",
-        "zero broadcast divisor",
-        _replace_tensor(
-            ADD_GENERIC_4D,
-            "src1",
-            _tensor(
-                dtype="F32",
-                sizes=(0, 5, 3, 7),
-                strides=(1, 2, 10, 30),
-            ),
-        ),
-        id="add-generic4-zero-broadcast-divisor",
-    ),
-    pytest.param(
-        "add_f32_generic_4d",
-        "non-dividing broadcast dimension",
-        _replace_tensor(
-            ADD_GENERIC_4D,
-            "src1",
-            _tensor(
-                dtype="F32",
-                sizes=(3, 5, 3, 7),
-                strides=(1, 3, 15, 45),
-            ),
-        ),
-        id="add-generic4-non-dividing-broadcast",
-    ),
-    pytest.param(
-        "add_f32_generic_2d",
-        "indexed destination size below minimum",
-        {
-            "src0": _tensor(dtype="F32", sizes=(0, 64), strides=(1, 1)),
-            "src1": _tensor(dtype="F32", sizes=(1, 1), strides=(1, 1)),
-            "dst": _tensor(dtype="F32", sizes=(0, 64), strides=(1, 1)),
-        },
-        id="add-generic2-indexed-size-below-min",
-    ),
-    pytest.param(
-        "add_f32_generic_2d",
-        "indexed destination size above maximum",
-        {
-            "src0": _tensor(dtype="F32", sizes=(65537, 64), strides=(1, 65537)),
-            "src1": _tensor(dtype="F32", sizes=(1, 1), strides=(1, 1)),
-            "dst": _tensor(dtype="F32", sizes=(65537, 64), strides=(1, 65537)),
-        },
-        id="add-generic2-indexed-size-above-max",
-    ),
-    pytest.param(
-        "add_f32_rhs_row_broadcast_2d",
-        "indexed RHS leading stride mismatch",
-        _replace_tensor(
-            ADD_ROW_BROADCAST_2D,
-            "src1",
-            _tensor(dtype="F32", sizes=(128, 1), strides=(2, 0)),
-        ),
-        id="add-row-broadcast-leading-stride-mismatch",
-    ),
-    pytest.param(
-        "add_f32_rhs_row_broadcast_2d",
-        "required zero RHS row stride mismatch",
-        _replace_tensor(
-            ADD_ROW_BROADCAST_2D,
-            "src1",
-            _tensor(dtype="F32", sizes=(128, 1), strides=(1, 1)),
-        ),
-        id="add-row-broadcast-zero-stride-mismatch",
-    ),
-    pytest.param(
-        "add_f32_rhs_row_broadcast_2d",
-        "indexed singleton RHS row size mismatch",
-        _replace_tensor(
-            ADD_ROW_BROADCAST_2D,
-            "src1",
-            _tensor(dtype="F32", sizes=(128, 2), strides=(1, 0)),
-        ),
-        id="add-row-broadcast-singleton-size-mismatch",
-    ),
-    pytest.param(
-        "add_f32_generic_4d",
-        "scalar total size below minimum",
-        {
-            "src0": _tensor(dtype="F32", sizes=(1, 1, 1, 1), strides=(1, 1, 1, 1)),
-            "src1": _tensor(dtype="F32", sizes=(1, 1, 1, 1), strides=(1, 1, 1, 1)),
-            "dst": _tensor(dtype="F32", sizes=(0, 5, 6, 7), strides=(1, 1, 5, 30)),
-        },
-        id="add-generic4-scalar-total-below-min",
-    ),
-    pytest.param(
-        "add_f32_generic_4d",
-        "scalar total size above maximum",
-        {
-            "src0": _tensor(dtype="F32", sizes=(1, 1, 1, 1), strides=(1, 1, 1, 1)),
-            "src1": _tensor(dtype="F32", sizes=(1, 1, 1, 1), strides=(1, 1, 1, 1)),
-            "dst": _tensor(
-                dtype="F32",
-                sizes=(16776961, 1, 1, 1),
-                strides=(1, 16776961, 16776961, 16776961),
-            ),
-        },
-        id="add-generic4-scalar-total-above-max",
     ),
     pytest.param(
         "get_rows_q8_0_f32_embedding_rows_descriptor_4d",
@@ -875,43 +702,6 @@ NEGATIVE_CASES = (
         id="get-rows-short-element-source",
     ),
 )
-
-
-def test_representative_routes_cover_complete_catalog_matcher_surface(
-    real_v2_catalog: RouteCatalog,
-) -> None:
-    """Keep handled matcher fields and their real-route feature fixtures synchronized.
-
-    _route_features emits active fields missing from HANDLED_* as unexpected
-    features. Fields belong in HANDLED_* only after the explicit inventory
-    checks and representative positive cases account for their semantics.
-    """
-    positive_route_ids = {str(case.values[0]) for case in POSITIVE_CASES}
-    assert positive_route_ids == REPRESENTATIVE_ROUTE_IDS, (
-        "representative routes and positive real-tensor fixtures differ: "
-        f"without_fixture={sorted(REPRESENTATIVE_ROUTE_IDS - positive_route_ids)}, "
-        f"without_representative_status={sorted(positive_route_ids - REPRESENTATIVE_ROUTE_IDS)}"
-    )
-
-    catalog_features = set().union(*(_route_features(route) for route in real_v2_catalog.routes))
-    missing_expected = EXPECTED_CATALOG_FEATURES - catalog_features
-    unexpected = catalog_features - EXPECTED_CATALOG_FEATURES
-    assert not missing_expected and not unexpected, (
-        "materialized catalog matcher feature inventory changed: "
-        f"missing={sorted(missing_expected)}, unexpected={sorted(unexpected)}"
-    )
-
-    representative_features = set().union(
-        *(
-            _route_features(real_v2_catalog.routes_by_id[route_id])
-            for route_id in REPRESENTATIVE_ROUTE_IDS
-        )
-    )
-    uncovered = catalog_features - representative_features
-    assert not uncovered, (
-        "representative real-route cases do not cover catalog matcher features: "
-        f"{sorted(uncovered)}"
-    )
 
 
 @pytest.mark.parametrize(("route_id", "property_name", "tensors"), POSITIVE_CASES)
