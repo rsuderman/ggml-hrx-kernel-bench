@@ -286,6 +286,41 @@ void TestRouteIdsRemainCaseSensitive() {
                "case-sensitive allowlist route ID");
 }
 
+void TestEmptyAttributesPreserveSelection() {
+  const std::string query = R"json({
+  "op": "ABS",
+  "tensors": {
+    "src0": {"dtype": "F32", "dimensions": [5, 7], "strides": [1, 5]},
+    "dst": {"dtype": "F32", "dimensions": [5, 7], "strides": [1, 5]}
+  },
+  "attributes": {}
+})json";
+
+  const auto result = Invoke({"--input", "-"}, query);
+  ExpectResult(result, 0, std::string(kF32Route) + "\n", "",
+               "empty attributes");
+}
+
+void TestNonemptyAttributesAreUnsupported() {
+  const std::string query = R"json({
+  "op": "ABS",
+  "tensors": {
+    "src0": {"dtype": "F32", "dimensions": [5, 7], "strides": [1, 5]},
+    "dst": {"dtype": "F32", "dimensions": [5, 7], "strides": [1, 5]}
+  },
+  "attributes": {
+    "enabled": true,
+    "parameters": [null, -7, 1.5, "value", {"nested": false}]
+  }
+})json";
+
+  const auto result = Invoke({"--input", "-"}, query);
+  ExpectResult(
+      result, 1, "",
+      "error: UNSUPPORTED: selector cannot evaluate operation 'ABS'\n",
+      "nonempty recursive attributes");
+}
+
 void TestMatchingExpectedRoute() {
   const auto result =
       Invoke({"--input", "-", "--expect-route", kF32Route}, ValidQuery());
@@ -442,6 +477,22 @@ void TestSchemaErrors() {
       {"wrong allowlist entry type",
        R"json({"op":"ABS","tensors":{},"allowed_route_ids":[7]})json",
        "error: input field 'allowed_route_ids' element 0 must be a string\n"},
+      {"null attributes",
+       R"json({"op":"ABS","tensors":{},"attributes":null})json",
+       "error: input field 'attributes' must be an object\n"},
+      {"wrong attributes type",
+       R"json({"op":"ABS","tensors":{},"attributes":[]})json",
+       "error: input field 'attributes' must be an object\n"},
+      {"out-of-int64 attribute",
+       R"json({"op":"ABS","tensors":{},"attributes":{"axis":9223372036854775808}})json",
+       "error: input attribute 'axis' is outside the signed 64-bit integer "
+       "range\n"},
+      {"attribute below int64 parser range",
+       R"json({"op":"ABS","tensors":{},"attributes":{"axis":-9223372036854775809}})json",
+       "error: input contains an integer outside the signed 64-bit range\n"},
+      {"attribute above uint64 parser range",
+       R"json({"op":"ABS","tensors":{},"attributes":{"axis":18446744073709551616}})json",
+       "error: input contains an integer outside the signed 64-bit range\n"},
   };
 
   for (const auto &test_case : cases) {
@@ -587,6 +638,8 @@ int main() {
   TestAllowlistFiltersSelectedRoute();
   TestEmptyAllowlistMatchesNoRoutes();
   TestRouteIdsRemainCaseSensitive();
+  TestEmptyAttributesPreserveSelection();
+  TestNonemptyAttributesAreUnsupported();
   TestMatchingExpectedRoute();
   TestMismatchingExpectedRoute();
   TestValidQueryWithNoMatch();

@@ -15,7 +15,8 @@ build/tools/v2-route-selector/ggml-hrx-v2-route-selector \
   --expect-route abs_f32_contiguous_4d
 ```
 
-The input contains an operation and its tensor descriptors. An optional
+The input contains an operation and its tensor descriptors. Optional
+`attributes` contains JSON-neutral operation attributes, and an optional
 `allowed_route_ids` array restricts which routes may be selected:
 
 ```json
@@ -42,6 +43,11 @@ to `null` means the identity permutation. An explicit permutation must contain
 one signed 64-bit integer per tensor dimension. Rank mismatches, duplicate
 axes, and axes outside the tensor rank produce no match; invalid JSON types or
 integers outside the signed 64-bit range are input errors.
+
+An absent or empty `attributes` object preserves tensor-only selection.
+Attribute values may recursively contain null, booleans, signed integers,
+floating-point values, strings, arrays, and string-keyed objects. Until native
+attribute predicates are implemented, a nonempty object returns `UNSUPPORTED`.
 
 On success the command prints the selected route ID. `--expect-route` checks
 the result without changing the input allowlist.

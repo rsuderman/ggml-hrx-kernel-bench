@@ -35,9 +35,9 @@ add_materialized_asset_target(
   METADATA_PATH ${GGML_HRX_ACTIVE_ASSET_ROOT_METADATA_PATH}
 )
 
-add_subdirectory(native/v2_route_selector)
-
 include(CTest)
+
+add_subdirectory(native/v2_route_selector)
 
 add_subdirectory(tools/v2-route-selector)
 add_subdirectory(tools/run-loom-simple)
