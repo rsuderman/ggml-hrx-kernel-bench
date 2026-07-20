@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from pathlib import Path
 from statistics import mean
 from typing import Any, Iterable
@@ -89,7 +90,7 @@ def public_case_result(result: dict[str, Any]) -> dict[str, Any]:
 def benchmark_config_payload(
     config_path: Path,
     *,
-    case_selectors: list[str] | None,
+    case_indices: Sequence[int] | None,
     tool_dir: str | None,
     target: str,
     rocm_path: str | None,
@@ -106,7 +107,7 @@ def benchmark_config_payload(
 
     raw_results: list[dict[str, Any]] = []
     for current_case_id, current_case_values in router.select_cases(
-        config_data, case_selectors
+        config_data, case_indices
     ):
         case_output_dir = artifact_dir / current_case_id
         try:
@@ -465,7 +466,7 @@ def materialize_benchmark_set(
         result_output = results_dir / f"{slug}.json"
         payload = benchmark_config_payload(
             config_path,
-            case_selectors=None,
+            case_indices=None,
             tool_dir=tool_dir,
             target=target,
             rocm_path=rocm_path,

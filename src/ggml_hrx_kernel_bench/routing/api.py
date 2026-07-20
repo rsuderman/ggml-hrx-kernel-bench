@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -25,11 +26,11 @@ class RoutingBackend(Protocol):
     def export(self, request: ExportRequest) -> RoutingExportResult: ...
 
     def select_case(
-        self, config: dict[str, Any], selector: str
+        self, config: dict[str, Any], index: int
     ) -> tuple[str, list[int]]: ...
 
     def select_cases(
-        self, config: dict[str, Any], selectors: list[str] | None
+        self, config: dict[str, Any], indices: Sequence[int] | None
     ) -> list[tuple[str, list[int]]]: ...
 
     def execute_case(self, request: RuntimeCaseRequest) -> ExecutedCase: ...

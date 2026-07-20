@@ -21,7 +21,7 @@ def _load_script_module(relative_path: str, module_name: str):
     return module
 
 
-def test_generate_kernel_runtime_tests_cmake_omits_case_selector(
+def test_generate_kernel_runtime_tests_cmake_omits_case_index(
     tmp_path: Path, monkeypatch
 ) -> None:
     module = _load_script_module(
@@ -56,7 +56,7 @@ def test_generate_kernel_runtime_tests_cmake_omits_case_selector(
 
     assert module.main() == 0
     generated = output_path.read_text(encoding="utf-8")
-    assert "--case-selector" not in generated
+    assert "--case-index" not in generated
     assert "kernel-run-llama-cpp-tests-v2-ADD-generated" in generated
     assert "SKIP_RETURN_CODE 125" in generated
     assert "ENVIRONMENT_MODIFICATION" not in generated
@@ -114,8 +114,8 @@ def test_run_generated_kernel_tests_executes_all_cases(
     class _FakeRouter:
         context = _FakeContext()
 
-        def select_cases(self, config: dict[str, object], selectors):
-            assert selectors is None
+        def select_cases(self, config: dict[str, object], indices):
+            assert indices is None
             assert config["cases"] == [[1], [2]]
             return [("n1", [1]), ("n2", [2])]
 
@@ -211,8 +211,8 @@ def test_run_generated_kernel_tests_truncates_long_case_directory_names(
     class _FakeRouter:
         context = _FakeContext()
 
-        def select_cases(self, config: dict[str, object], selectors):
-            assert selectors is None
+        def select_cases(self, config: dict[str, object], indices):
+            assert indices is None
             assert config["cases"] == [[1]]
             return [("case-" + ("y" * 240), [1])]
 

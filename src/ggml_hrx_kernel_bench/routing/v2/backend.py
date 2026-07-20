@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from dataclasses import dataclass
 from functools import cached_property
 from pathlib import Path
@@ -74,13 +75,15 @@ class V2RoutingBackend:
             },
         )
 
-    def select_case(self, config: dict[str, object], selector: str) -> tuple[str, list[int]]:
-        return shared_select_case(config, selector)
+    def select_case(
+        self, config: dict[str, object], index: int
+    ) -> tuple[str, list[int]]:
+        return shared_select_case(config, index)
 
     def select_cases(
-        self, config: dict[str, object], selectors: list[str] | None
+        self, config: dict[str, object], indices: Sequence[int] | None
     ) -> list[tuple[str, list[int]]]:
-        return shared_select_cases(config, selectors)
+        return shared_select_cases(config, indices)
 
     def execute_case(self, request: RuntimeCaseRequest) -> ExecutedCase:
         kernel_dir = request.kernel_dir or self.context.kernel_dir

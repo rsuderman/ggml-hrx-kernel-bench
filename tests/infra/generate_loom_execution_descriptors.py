@@ -22,7 +22,14 @@ def main() -> int:
     parser.add_argument("--limit", type=int)
     parser.add_argument("--kernel", action="append", help="only emit descriptors for this generated kernel family; may repeat")
     parser.add_argument("--route-id", action="append", help="only emit descriptors for this route id; may repeat")
-    parser.add_argument("--case-selector", action="append", help="case index or id to emit from each selected config; may repeat")
+    parser.add_argument(
+        "--case-index",
+        action="append",
+        type=int,
+        dest="case_indices",
+        metavar="INDEX",
+        help="zero-based case index to emit from each selected config; may repeat",
+    )
     parser.add_argument("--quiet", action="store_true", help="do not print the generated descriptor manifest")
     args = parser.parse_args()
 
@@ -36,7 +43,7 @@ def main() -> int:
         limit=args.limit,
         kernels=set(args.kernel) if args.kernel else None,
         route_ids=set(args.route_id) if args.route_id else None,
-        case_selectors=args.case_selector,
+        case_indices=args.case_indices,
     )
     if not args.quiet:
         print(json.dumps(manifest, indent=2, sort_keys=True))

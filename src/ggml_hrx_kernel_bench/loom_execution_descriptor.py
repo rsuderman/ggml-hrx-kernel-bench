@@ -719,7 +719,7 @@ def write_generated_execution_descriptors(
     limit: int | None = None,
     kernels: set[str] | None = None,
     route_ids: set[str] | None = None,
-    case_selectors: list[str] | None = None,
+    case_indices: Sequence[int] | None = None,
 ) -> dict[str, Any]:
     payload = json.loads(manifest_path.read_text(encoding="utf-8"))
     _expect(isinstance(payload, dict), "generated manifest must be a JSON object")
@@ -746,7 +746,7 @@ def write_generated_execution_descriptors(
         config_path = Path(str(entry.get("config_path") or ""))
         _expect(config_path.is_file(), f"missing generated config {config_path}")
         config_data = load_config(config_path)
-        for case_id, case_values in select_cases(config_data, case_selectors):
+        for case_id, case_values in select_cases(config_data, case_indices):
             if limit is not None and emitted_count >= limit:
                 break
             name = _safe_name(f"{entry_index:03d}-{config_path.stem}-{case_id}")
