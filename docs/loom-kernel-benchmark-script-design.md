@@ -176,18 +176,18 @@ loom-bench-materialize \
 
 Run a route. The first positional argument is the run directory; every later
 argument is passed directly to `iree-benchmark-loom`.
+Generated case scripts default to the AMDGPU HAL provider path:
+`--device=amdgpu --measure=dispatch_complete`.
 
 ```bash
 build/benchmarks/loom-kernels/catalog/v2/MUL_MAT/mul_mat_f16_f32_tiled_batched_4d/run.sh \
   /tmp/mul-mat-baseline \
-  --device=hip://0 \
   --iterations=100
 ```
 
 ```bash
 /tmp/mul-mat-candidate-tree/catalog/v2/MUL_MAT/mul_mat_f16_f32_tiled_batched_4d/run.sh \
   /tmp/mul-mat-candidate \
-  --device=hip://0 \
   --iterations=100
 ```
 

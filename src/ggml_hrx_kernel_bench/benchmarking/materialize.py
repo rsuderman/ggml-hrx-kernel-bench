@@ -37,6 +37,8 @@ def _script_literal(value: str | Path) -> str:
 def _case_script_text(
     *,
     benchmark_runner: str,
+    benchmark_device: str,
+    benchmark_measure: str,
     benchmark_symbol: str,
 ) -> str:
     return f"""#!/usr/bin/env bash
@@ -44,6 +46,8 @@ set -uo pipefail
 
 CASE_DIR="$(cd "$(dirname "${{BASH_SOURCE[0]}}")" && pwd)"
 BENCHMARK_RUNNER={_script_literal(benchmark_runner)}
+BENCHMARK_DEVICE={_script_literal(benchmark_device)}
+BENCHMARK_MEASURE={_script_literal(benchmark_measure)}
 BENCHMARK_SYMBOL={_script_literal(benchmark_symbol)}
 
 RUN_CASE_DIR="${{1:-$CASE_DIR/runs/$(date -u +%Y%m%dT%H%M%SZ)}}"
@@ -54,6 +58,8 @@ OUTPUT="$RUN_CASE_DIR/benchmark-results.jsonl"
 COMMAND=(
   "$BENCHMARK_RUNNER"
   "$CASE_DIR/benchmark.loom"
+  "--device=$BENCHMARK_DEVICE"
+  "--measure=$BENCHMARK_MEASURE"
   "--benchmark=$BENCHMARK_SYMBOL"
   "--output-format=jsonl"
   "--output=$OUTPUT"
@@ -198,6 +204,8 @@ def _generated_script_case_manifest(
     preparation: dict[str, Any],
     repo_root: Path,
     benchmark_runner: str,
+    benchmark_device: str,
+    benchmark_measure: str,
 ) -> dict[str, Any]:
     flop_estimate = estimate_case_flops(case)
     run_case_dir_name = _run_case_dir_name(case)
@@ -228,6 +236,8 @@ def _generated_script_case_manifest(
         "preparation": preparation,
         "defaults": {
             "benchmark_runner": benchmark_runner,
+            "benchmark_device": benchmark_device,
+            "benchmark_measure": benchmark_measure,
         },
     }
 
@@ -242,6 +252,8 @@ def _generated_script_route_manifest(
     asset_root: Path | None,
     output_root: Path,
     benchmark_runner: str,
+    benchmark_device: str,
+    benchmark_measure: str,
 ) -> dict[str, Any]:
     return {
         "schema": SCRIPT_ROUTE_MANIFEST_SCHEMA,
@@ -277,6 +289,8 @@ def _generated_script_route_manifest(
         ],
         "defaults": {
             "benchmark_runner": benchmark_runner,
+            "benchmark_device": benchmark_device,
+            "benchmark_measure": benchmark_measure,
         },
     }
 
@@ -295,6 +309,8 @@ def command_generate_scripts(args: argparse.Namespace) -> int:
     catalog_root = output_root / "catalog" / "v2"
     benchmark_runner = args.benchmark_runner or resolve_tool("iree-benchmark-loom", tool_dir=args.tool_dir)
     benchmark_runner = benchmark_runner or "iree-benchmark-loom"
+    benchmark_device = getattr(args, "benchmark_device", None) or "amdgpu"
+    benchmark_measure = getattr(args, "benchmark_measure", None) or "dispatch_complete"
     loom_link = args.loom_link or require_tool("loom-link", tool_dir=args.tool_dir)
     collect_tool = getattr(args, "collect_tool", None) or "loom-bench-collect"
     kernel_source_override = args.kernel_source.resolve() if args.kernel_source else None
@@ -323,12 +339,16 @@ def command_generate_scripts(args: argparse.Namespace) -> int:
                 preparation=preparation,
                 repo_root=repo_root,
                 benchmark_runner=benchmark_runner,
+                benchmark_device=benchmark_device,
+                benchmark_measure=benchmark_measure,
             )
             _write_json_file(case_dir / "manifest.json", case_manifest)
             _write_executable_script(
                 case_dir / "run.sh",
                 _case_script_text(
                     benchmark_runner=benchmark_runner,
+                    benchmark_device=benchmark_device,
+                    benchmark_measure=benchmark_measure,
                     benchmark_symbol=bench_symbol,
                 ),
             )
@@ -343,6 +363,8 @@ def command_generate_scripts(args: argparse.Namespace) -> int:
             asset_root=asset_root,
             output_root=output_root,
             benchmark_runner=benchmark_runner,
+            benchmark_device=benchmark_device,
+            benchmark_measure=benchmark_measure,
         )
         _write_json_file(route_dir / "manifest.json", route_manifest)
         _write_executable_script(
@@ -420,6 +442,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--output-root", type=Path, default=Path("build/benchmarks/loom-kernels"))
     parser.add_argument("--tool-dir")
     parser.add_argument("--benchmark-runner")
+    parser.add_argument("--benchmark-device", default="amdgpu")
+    parser.add_argument("--benchmark-measure", default="dispatch_complete")
     parser.add_argument("--loom-link")
     parser.add_argument("--kernel-source", type=Path, help="candidate kernel source to bake into generated benchmarks")
     parser.add_argument("--collect-tool", help="command used by generated collect.sh scripts")

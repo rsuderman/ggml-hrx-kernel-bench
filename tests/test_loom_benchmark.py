@@ -502,6 +502,8 @@ def test_generate_scripts_materializes_catalog_tree(tmp_path: Path, monkeypatch)
             output_root=output_root,
             tool_dir=None,
             benchmark_runner="/tools/iree-benchmark-loom",
+            benchmark_device="amdgpu",
+            benchmark_measure="dispatch_complete",
             loom_link="/tools/loom-link",
             python_executable=sys.executable,
         )
@@ -520,6 +522,10 @@ def test_generate_scripts_materializes_catalog_tree(tmp_path: Path, monkeypatch)
     assert (route_dir / "collect.sh").stat().st_mode & 0o111
     assert case_manifest_path.is_file()
     assert "iree-benchmark-loom" in case_script
+    assert "--device=$BENCHMARK_DEVICE" in case_script
+    assert "BENCHMARK_DEVICE=amdgpu" in case_script
+    assert "--measure=$BENCHMARK_MEASURE" in case_script
+    assert "BENCHMARK_MEASURE=dispatch_complete" in case_script
     assert "while [[ $# -gt 0 ]]" not in case_script
     assert "while [[ $# -gt 0 ]]" not in route_script
     assert "while [[ $# -gt 0 ]]" not in collect_script
@@ -531,6 +537,11 @@ def test_generate_scripts_materializes_catalog_tree(tmp_path: Path, monkeypatch)
     assert route_manifest["schema"] == common.SCRIPT_ROUTE_MANIFEST_SCHEMA
     assert route_manifest["case_count"] == 1
     assert route_manifest["defaults"]["benchmark_runner"] == "/tools/iree-benchmark-loom"
+    assert route_manifest["defaults"]["benchmark_device"] == "amdgpu"
+    assert route_manifest["defaults"]["benchmark_measure"] == "dispatch_complete"
+    case_manifest = json.loads(case_manifest_path.read_text(encoding="utf-8"))
+    assert case_manifest["defaults"]["benchmark_device"] == "amdgpu"
+    assert case_manifest["defaults"]["benchmark_measure"] == "dispatch_complete"
     assert not (stale_route_dir / "run.sh").exists()
     assert not (stale_route_dir / "cases").exists()
     assert (stale_route_dir / "runs" / "keep.txt").is_file()
@@ -576,6 +587,8 @@ def test_generate_scripts_bakes_candidate_kernel_source(tmp_path: Path, monkeypa
                 output_root=output_root,
                 tool_dir=None,
                 benchmark_runner="/tools/iree-benchmark-loom",
+                benchmark_device="amdgpu",
+                benchmark_measure="dispatch_complete",
                 loom_link="/tools/loom-link",
                 python_executable=sys.executable,
             )
@@ -642,6 +655,8 @@ def test_collect_generated_route_run_writes_results_and_summary(tmp_path: Path, 
                 output_root=output_root,
                 tool_dir=None,
                 benchmark_runner="/tools/iree-benchmark-loom",
+                benchmark_device="amdgpu",
+                benchmark_measure="dispatch_complete",
                 loom_link="/tools/loom-link",
                 python_executable=sys.executable,
             )
