@@ -27,9 +27,6 @@ class RequiredToolAvailabilityTest(unittest.TestCase):
     def test_ggml_hrx_run_loom_available(self) -> None:
         self.assertTrue(require_tool("ggml-hrx-run-loom"))
 
-    def test_iree_benchmark_loom_available(self) -> None:
-        self.assertTrue(require_tool("iree-benchmark-loom"))
-
     def test_env_tool_dir_is_used(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             tool_path = os.path.join(tmpdir, "loom-link")

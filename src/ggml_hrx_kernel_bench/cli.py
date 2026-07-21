@@ -6,7 +6,6 @@ from pathlib import Path
 from typing import Any
 
 from .config import BenchConfig, ToolPaths
-from .fusion_profitability import analyze_fusion_profitability
 from .routing.api import (
     Candidate,
     CandidateQuery,
@@ -18,8 +17,6 @@ from .routing.api import (
 from .ledger import LedgerWriter, utc_run_id
 from .observed_shapes import load_observed_shapes, read_observations_jsonl, save_observed_shapes
 from .oracles import generate_oracle, write_workbench
-from .reporting import ReportOptions, write_markdown_report
-from .route_reducer import reduce_routes
 from .route_optimization import route_inventory_payload, write_route_inventory
 from .specs import KernelSpec, config_args, file_sha256, spec_sha256
 from .tools import CommandResult, run_command
@@ -69,7 +66,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--rocm-path", type=Path)
     parser.add_argument("--loom-link", type=Path)
     parser.add_argument("--loom-compile", type=Path)
-    parser.add_argument("--iree-benchmark-loom", type=Path)
+    parser.add_argument("--iree-test-loom", type=Path)
     parser.add_argument("--values", type=Path, help="JSON object containing concrete parameter values for --spec mode")
     parser.add_argument(
         "--routing-version",
@@ -85,13 +82,6 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--sweep", choices=["minimal", "edge", "observed"], default="minimal")
     parser.add_argument("--include-source-only", action="store_true", help="include source-only/probe kernel rows in addition to route-backed catalog rows")
     parser.add_argument("--sanitizers", default="none", help="comma list, for example none,asan,tsan")
-    parser.add_argument("--iterations", type=int, default=1)
-    parser.add_argument("--warmup-iterations", type=int, default=0)
-    parser.add_argument("--max-batches", type=int, default=1)
-    parser.add_argument("--ledger", type=Path, action="append", default=[], help="ledger path for report; may be repeated")
-    parser.add_argument("--report-output", type=Path, help="markdown report path; defaults to <output-dir>/report.md")
-    parser.add_argument("--report-max-issues", type=int, default=50)
-    parser.add_argument("--report-top", type=int, default=5, help="timed rows to list per family in markdown reports")
     parser.add_argument("--llama-catalog-dir", type=Path, help="sparse llama.cpp generated/catalog directory to update")
     parser.add_argument("--llama-catalog-id", help="catalog id to write when exporting llama.cpp catalog metadata")
 
@@ -105,7 +95,6 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers.add_parser("verify")
     subparsers.add_parser("catalog")
     subparsers.add_parser("export-llama")
-    subparsers.add_parser("report")
     route_inventory = subparsers.add_parser("route-inventory")
     route_inventory.add_argument("--op", default="FLASH_ATTN_EXT")
     route_inventory.add_argument("--generated-import-dir", type=Path)
@@ -125,7 +114,7 @@ def main(argv: list[str] | None = None) -> int:
         tools=ToolPaths(
             loom_link=args.loom_link,
             loom_compile=args.loom_compile,
-            iree_benchmark_loom=args.iree_benchmark_loom,
+            iree_test_loom=args.iree_test_loom,
         ),
     )
 
@@ -134,8 +123,6 @@ def main(argv: list[str] | None = None) -> int:
             return command_accumulate_shapes(args, ledger)
         if args.command == "route-inventory":
             return command_route_inventory(args, ledger)
-        if args.command == "report":
-            return command_report(args, ledger)
         if args.command == "export-llama":
             return command_export_llama(args, ledger)
         if args.spec:
@@ -205,7 +192,7 @@ def command_corpus(args: argparse.Namespace, config: BenchConfig, ledger: Ledger
         rows: list[dict[str, Any]] = []
         for sanitizer in sanitizer_list(args):
             for candidate in candidates:
-                rows.append(run_candidate_row(args, config, candidate, sanitizer=sanitizer))
+                rows.append(run_candidate_test_row(args, config, candidate, sanitizer=sanitizer))
         ledger.write_all(rows)
         return status_code_from_rows(rows)
     if args.command == "verify":
@@ -246,26 +233,6 @@ def command_route_inventory(args: argparse.Namespace, ledger: LedgerWriter) -> i
         }
     )
     print(json.dumps({"output_path": str(output_path), "case_count": payload["case_count"]}))
-    return 0
-
-
-def command_report(args: argparse.Namespace, ledger: LedgerWriter) -> int:
-    ledger_paths = report_ledger_paths(args)
-    output_path = args.report_output or (args.output_dir / "report.md")
-    report = write_markdown_report(
-        ledger_paths,
-        output_path,
-        ReportOptions(max_issues=args.report_max_issues, top_per_family=args.report_top),
-    )
-    ledger.append(
-        {
-            "schema": "ggml_hrx_kernel_bench.ledger.v1",
-            "run_id": utc_run_id(),
-            "action": "report",
-            "status": "ok",
-            **report,
-        }
-    )
     return 0
 
 
@@ -319,15 +286,6 @@ def stage_summary(stage: str, output_dir: Path, rows: list[dict[str, Any]]) -> d
         "row_count": len(rows),
         "status_counts": counts,
     }
-
-
-def report_ledger_paths(args: argparse.Namespace) -> list[Path]:
-    if args.ledger:
-        return args.ledger
-    paths = sorted(path for path in args.output_dir.rglob("ledger.jsonl") if path != args.output_dir / "ledger.jsonl")
-    if paths:
-        return paths
-    return [args.output_dir / "ledger.jsonl"]
 
 
 def selected_candidates(args: argparse.Namespace) -> list[Candidate]:
@@ -493,84 +451,6 @@ def compile_candidate_row(args: argparse.Namespace, config: BenchConfig, candida
     return row
 
 
-def run_candidate_row(args: argparse.Namespace, config: BenchConfig, candidate: Candidate, *, sanitizer: str) -> dict[str, Any]:
-    row = corpus_row(args, candidate, action="run")
-    row["sanitizer"] = sanitizer
-    if candidate.status != "planned":
-        return row
-    out_dir = candidate_dir(args, candidate, "run", sanitizer)
-    out_dir.mkdir(parents=True, exist_ok=True)
-    fixture = generate_oracle(candidate, out_dir / "fixtures")
-    row["oracle"] = fixture.to_ledger()
-    if fixture.status != "fixtures_ready" or fixture.fixture_dir is None:
-        row["status"] = fixture.status
-        return row
-
-    linked = out_dir / "linked.loom"
-    link_result = run_command(
-        [
-            config.tools.require_loom_link(),
-            candidate.source_path,
-            "--mode=link",
-            "--to=text",
-            "--require-resolved-config",
-            f"--root={candidate.root_symbol}",
-            f"--output={linked}",
-            *config_args(candidate.config),
-        ],
-        env=config.command_env(),
-    )
-    row["link"] = command_evidence(link_result, out_dir, prefix="link")
-    if link_result.returncode != 0:
-        row["status"] = "link_failed"
-        return row
-
-    workbench = out_dir / "workbench.loom"
-    bench_name, workbench_meta = write_workbench(candidate, linked, workbench, fixture.fixture_dir)
-    row["workbench"] = workbench_meta
-    if bench_name is None:
-        row["status"] = workbench_meta.get("status", "unsupported_golden")
-        return row
-
-    results = out_dir / "results.jsonl"
-    bundle_dir = out_dir / "bundle"
-    benchmark_tool = config.tools.require_iree_benchmark_loom().resolve()
-    max_batches = max(args.max_batches, args.iterations)
-    cmd: list[str | Path] = [
-        benchmark_tool,
-        workbench.resolve(),
-        "--device=amdgpu",
-        f"--benchmark={bench_name}",
-        "--measure=dispatch_complete",
-        "--batch-size=1",
-        "--input-ring-count=1",
-        f"--iterations={args.iterations}",
-        f"--warmup-iterations={args.warmup_iterations}",
-        f"--max-batches={max_batches}",
-        "--profile-final-batch=true",
-        "--sample-compilation=per_sample",
-        "--compile-report=details",
-        "--artifact-manifest=analysis",
-        f"--artifact-bundle-dir={bundle_dir.resolve()}",
-        "--artifact-bundle-policy=debug",
-        f"--output={results.resolve()}",
-        "--output-format=jsonl",
-    ]
-    if sanitizer != "none":
-        cmd.append(f"--sanitizer={sanitizer}")
-    result = run_command(cmd, env=config.command_env(), cwd=out_dir)
-    row["benchmark"] = command_evidence(result, out_dir, prefix="benchmark")
-    row["benchmark"].update(
-        {
-            "results_path": str(results) if results.exists() else None,
-            "artifact_bundle_dir": str(bundle_dir) if bundle_dir.exists() else None,
-            "summary": benchmark_summary(results),
-        }
-    )
-    row["status"] = "ran" if result.returncode == 0 else "run_failed"
-    return row
-
-
 def _case_symbol(candidate: Candidate) -> str:
     return f"@case_{candidate.id}"
 
@@ -719,7 +599,7 @@ def command_catalog(args: argparse.Namespace, candidates: list[Candidate], ledge
                 "candidate": candidate.to_ledger(),
                 "compile": (compile_row or {}).get("compile"),
                 "oracle": (run_row or {}).get("oracle"),
-                "benchmark": (run_row or {}).get("benchmark"),
+                "test": (run_row or {}).get("test"),
                 "rejection_reasons": rejection_reasons(candidate, compile_row, run_row),
             }
         )
@@ -727,15 +607,6 @@ def command_catalog(args: argparse.Namespace, candidates: list[Candidate], ledge
     catalog_dir.mkdir(parents=True, exist_ok=True)
     catalog_path = catalog_dir / "candidates.json"
     catalog_path.write_text(json.dumps(catalog_rows, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    reduced_routes = reduce_routes(catalog_rows)
-    reduced_routes_path = catalog_dir / "reduced_routes.json"
-    reduced_routes_path.write_text(json.dumps(reduced_routes, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    fusion_profitability = analyze_fusion_profitability(catalog_rows)
-    fusion_profitability_path = catalog_dir / "fusion_profitability.json"
-    fusion_profitability_path.write_text(
-        json.dumps(fusion_profitability, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
     ledger.append(
         {
             "schema": "ggml_hrx_kernel_bench.ledger.v1",
@@ -743,12 +614,8 @@ def command_catalog(args: argparse.Namespace, candidates: list[Candidate], ledge
             "action": "catalog",
             "status": "ok",
             "catalog_path": str(catalog_path),
-            "reduced_routes_path": str(reduced_routes_path),
-            "fusion_profitability_path": str(fusion_profitability_path),
             "candidate_count": len(catalog_rows),
             "catalog_ready_count": sum(1 for row in catalog_rows if row["catalog_ready"]),
-            "reduced_route_count": reduced_routes["summary"]["accepted_count"],
-            "profitable_fusion_count": fusion_profitability["summary"]["accepted_count"],
         }
     )
     return 0
@@ -792,28 +659,6 @@ def compile_report_summary(path: Path) -> dict[str, Any]:
         "static_instruction_mix": report.get("static_instruction_mix"),
         "entries_row_count": len(dig(report, "entries", "rows") or []),
     }
-
-
-def benchmark_summary(path: Path) -> dict[str, Any]:
-    events = read_jsonl(path)
-    summary: dict[str, Any] = {"event_count": len(events)}
-    for event in events:
-        if event.get("row") == "benchmark":
-            result = event.get("benchmark_result", {})
-            measurement = result.get("measurement", {})
-            summary.update(
-                {
-                    "state": result.get("state"),
-                    "correctness": result.get("correctness"),
-                    "operation_timing_ns": measurement.get("operation_timing_ns"),
-                    "mean_physical_dispatch_duration_ns": measurement.get("mean_physical_dispatch_duration_ns"),
-                    "physical_dispatches_per_logical_operation": measurement.get("physical_dispatches_per_logical_operation"),
-                    "failure": result.get("failure"),
-                }
-            )
-        elif event.get("row") == "failure":
-            summary.setdefault("failures", []).append(event)
-    return summary
 
 
 def dig(value: dict[str, Any] | None, *keys: str) -> Any:

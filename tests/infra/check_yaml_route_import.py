@@ -181,7 +181,7 @@ def main() -> int:
     parser.add_argument("--expected-coverage", type=Path, required=True)
     parser.add_argument(
         "--tool-dir",
-        help="optional PATH-style search list containing loom-link, loom-compile, ggml-hrx-run-loom, iree-test-loom, and iree-benchmark-loom",
+        help="optional PATH-style search list containing loom-link, loom-compile, ggml-hrx-run-loom, and iree-test-loom",
     )
     args = parser.parse_args()
 

@@ -1,7 +1,7 @@
 # GGML HRX Kernel Bench
 
-Standalone Python project for developing, verifying, and optimizing GGML HRX
-Loom kernels outside llama.cpp.
+Standalone Python project for developing and verifying GGML HRX Loom kernels
+outside llama.cpp.
 
 This project is intentionally path-neutral. It does not assume a workspace
 layout, build directory, cache directory, ROCm installation, or llama.cpp
@@ -13,15 +13,15 @@ flags or config files.
 This project contains the imported HRX2 Loom corpus and route/correctness
 infrastructure:
 
-- HRX2 kernel and catalog import/reporting,
+- HRX2 kernel and catalog import validation,
 - route-backed candidate planning,
 - explicit per-family config binding specs,
 - atlas-first route schedules with optional observed-shape refinement,
 - NumPy fixture and golden generation for pilot families,
-- focused Loom link/compile/run commands,
-- flash-attention-first route optimization setup,
+- focused Loom link/compile/correctness-run commands,
+- flash-attention-first route inventory setup,
 - JSONL ledgers plus preserved evidence directories,
-- catalog candidate, reduced-route, and fusion-profitability summaries.
+- catalog candidate summaries.
 
 Unsupported or broken kernels are represented as ledger rows instead of being
 excluded. Imported HRX2 kernels should remain source-faithful; target-specific
@@ -88,10 +88,10 @@ cmake -S . -B build \
 cmake --build build
 ```
 
-That build produces `loom-link`, `loom-compile`, `iree-test-loom`, and
-`iree-benchmark-loom` under `build/tools`, and the bench
-tests/import validation targets use that in-tree directory automatically. It
-also builds the standalone native v2 route selector.
+That build produces `loom-link`, `loom-compile`, `ggml-hrx-run-loom`, and
+`iree-test-loom` under `build/tools`, and the tests/import validation targets
+use that in-tree directory automatically. It also builds the standalone native
+v2 route selector.
 
 If you only need the Python/materialized-asset targets and do not want the
 nested Loom build, disable it explicitly:
@@ -201,7 +201,7 @@ python3 -m ggml_hrx_kernel_bench \
   compile
 ```
 
-Inventory the initial flash attention optimization surface:
+Inventory the initial flash attention route surface:
 
 ```bash
 python3 -m ggml_hrx_kernel_bench \
@@ -209,11 +209,12 @@ python3 -m ggml_hrx_kernel_bench \
   route-inventory --op FLASH_ATTN_EXT
 ```
 
-## Flash Attention Optimization Setup
+## Flash Attention Route Inventory
 
-The old standalone benchmark materialization and comparison scripts have been
-removed. New optimization tooling starts with `FLASH_ATTN_EXT`, which has the
-smallest model-visible surface in the current imported artifacts.
+The old standalone benchmark materialization, comparison, timing report, and
+profitability reducer tooling has been removed. The maintained route inventory
+tool starts with `FLASH_ATTN_EXT`, which has the smallest model-visible surface
+in the current imported artifacts.
 
 The first maintained command is:
 
@@ -231,9 +232,6 @@ It consumes route import artifacts and writes:
 Use `--generated-import-dir` to point at a specific route import artifact root.
 By default the command reads the generated Llama 3.3 8B Q8_0 model route import
 under `build/tests/models/artifacts/`.
-
-Next commands to author are `route-correctness`, `route-benchmark`,
-`route-compare`, and `optimization-report`.
 
 Legacy single-spec mode is still available:
 

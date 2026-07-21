@@ -804,7 +804,7 @@ def _summary_markdown(summary: dict[str, Any]) -> str:
         f"- Matched: `{summary['matched_case_count']}`",
         f"- Ambiguous: `{summary['ambiguous_case_count']}`",
         f"- Unmatched: `{summary['unmatched_case_count']}`",
-        f"- Generated benchmark configs: `{summary['generated_config_count']}`",
+        f"- Generated import configs: `{summary['generated_config_count']}`",
         "",
         "| Op | Cases | Invalid | Routes | Matched | Ambiguous | Unmatched | Configs |",
         "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",

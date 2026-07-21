@@ -6,4 +6,4 @@ PyYAML>=6.0
 # External non-Python tools used by compile/run flows are installed separately:
 # - loom-link
 # - loom-compile
-# - iree-benchmark-loom
+# - iree-test-loom

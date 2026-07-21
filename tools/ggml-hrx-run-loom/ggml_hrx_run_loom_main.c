@@ -169,7 +169,7 @@ IREE_FLAG_CALLBACK_NAMED(
     iree_run_loom_print_kernel_input_buffer_flag, NULL, kernel_input_buffer,
     "kernel-input-buffer",
     "Appends a HAL kernel buffer binding. Bindings use the same "
-    "shape/type/data syntax as iree-benchmark-executable and may use '&' for "
+    "shape/type/data syntax as IREE tool inputs and may use '&' for "
     "in-place storage buffers.");
 
 static iree_status_t iree_run_loom_parse_expected_kernel_buffer_flag(
@@ -444,8 +444,7 @@ static void iree_run_loom_print_agents_markdown(FILE *stream) {
       "it\n"
       "for quick scalar VM checks, single-kernel HAL smoke tests, and "
       "emit-only\n"
-      "artifact probes before moving a scenario into `check.case` or\n"
-      "`check.benchmark`.\n"
+      "artifact probes before moving a scenario into `check.case`.\n"
       "\n"
       "### VM flow\n"
       "\n"
@@ -475,7 +474,7 @@ static void iree_run_loom_print_agents_markdown(FILE *stream) {
       "\n"
       "`--binding` and `--expected-binding` use the same shape/type/value "
       "syntax\n"
-      "as `iree-benchmark-executable`. `--workgroup-count` overrides a static\n"
+      "as IREE tool inputs. `--workgroup-count` overrides a static\n"
       "`kernel.launch.config` dispatch count when the test needs a different\n"
       "grid. `--emit-only` is HAL-only and stops after producing artifacts.\n"
       "\n"
@@ -490,9 +489,7 @@ static void iree_run_loom_print_agents_markdown(FILE *stream) {
       "`--compile-report=summary|details` prints the same structured compile\n"
       "report family as `loom-compile`. Use `iree-test-loom` once the "
       "scenario\n"
-      "belongs in checked `check.case` coverage, and `iree-benchmark-loom` "
-      "once\n"
-      "the same case should produce benchmark evidence.\n");
+      "belongs in checked `check.case` coverage.\n");
 }
 
 static bool ggml_hrx_run_loom_help_filter(iree_string_view_t flag_file,

@@ -11,7 +11,6 @@ REQUIRED_TOOL_NAMES = (
     "loom-compile",
     "ggml-hrx-run-loom",
     "iree-test-loom",
-    "iree-benchmark-loom",
 )
 TOOL_DIR_ENV_VAR = "GGML_HRX_TOOL_DIR"
 GGML_HRX_RUN_LOOM_TOOL_NAME = "ggml-hrx-run-loom"

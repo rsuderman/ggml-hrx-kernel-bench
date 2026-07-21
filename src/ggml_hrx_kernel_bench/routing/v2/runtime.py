@@ -7,7 +7,7 @@ from typing import Any
 
 from ...cli import run_candidate_test_row
 from ...config import BenchConfig, ToolPaths
-from ...reporting import correctness_ok
+from ...result_status import correctness_ok
 from ..models import ExecutedCase, RuntimeCaseRequest
 from .candidates import candidate_from_shape
 from .layout import decode_shape

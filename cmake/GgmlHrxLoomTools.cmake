@@ -177,7 +177,7 @@ endfunction()
 function(ggml_hrx_configure_loom_tools)
   option(
     GGML_HRX_BUILD_LOOM_TOOLS
-    "Build loom-link, loom-compile, ggml-hrx-run-loom, iree-test-loom, and iree-benchmark-loom from an hrx-systems source tree."
+    "Build loom-link, loom-compile, ggml-hrx-run-loom, and iree-test-loom from an hrx-systems source tree."
     ON
   )
 
@@ -280,14 +280,12 @@ function(ggml_hrx_configure_loom_tools)
       loom_tools_loom-compile_loom-compile
       ${_ggml_hrx_local_run_loom_target}
       ${_ggml_hrx_local_iree_test_loom_target}
-      loom_tools_iree-benchmark-loom_iree-benchmark-loom
     )
     set(_ggml_hrx_staged_tool_paths
       ${GGML_HRX_BUILT_TOOL_DIR}/loom-link${CMAKE_EXECUTABLE_SUFFIX}
       ${GGML_HRX_BUILT_TOOL_DIR}/loom-compile${CMAKE_EXECUTABLE_SUFFIX}
       ${GGML_HRX_BUILT_TOOL_DIR}/ggml-hrx-run-loom${CMAKE_EXECUTABLE_SUFFIX}
       ${GGML_HRX_BUILT_TOOL_DIR}/iree-test-loom${CMAKE_EXECUTABLE_SUFFIX}
-      ${GGML_HRX_BUILT_TOOL_DIR}/iree-benchmark-loom${CMAKE_EXECUTABLE_SUFFIX}
     )
 
     add_custom_command(
@@ -305,16 +303,12 @@ function(ggml_hrx_configure_loom_tools)
       COMMAND ${CMAKE_COMMAND} -E copy_if_different
         $<TARGET_FILE:${_ggml_hrx_local_iree_test_loom_target}>
         ${GGML_HRX_BUILT_TOOL_DIR}/iree-test-loom${CMAKE_EXECUTABLE_SUFFIX}
-      COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        $<TARGET_FILE:loom_tools_iree-benchmark-loom_iree-benchmark-loom>
-        ${GGML_HRX_BUILT_TOOL_DIR}/iree-benchmark-loom${CMAKE_EXECUTABLE_SUFFIX}
       DEPENDS
         ${_ggml_hrx_stage_tool_targets}
         $<TARGET_FILE:loom_tools_loom-link_loom-link>
         $<TARGET_FILE:loom_tools_loom-compile_loom-compile>
         $<TARGET_FILE:${_ggml_hrx_local_run_loom_target}>
         $<TARGET_FILE:${_ggml_hrx_local_iree_test_loom_target}>
-        $<TARGET_FILE:loom_tools_iree-benchmark-loom_iree-benchmark-loom>
       COMMENT "Staging loom tools in ${GGML_HRX_BUILT_TOOL_DIR}"
       VERBATIM
     )
@@ -337,7 +331,7 @@ function(ggml_hrx_configure_loom_tools)
       GGML_HRX_TOOL_DIR
       "${_ggml_hrx_tool_dir_default}"
       CACHE STRING
-      "PATH-style search list containing loom-link, loom-compile, ggml-hrx-run-loom, iree-test-loom, and iree-benchmark-loom"
+      "PATH-style search list containing loom-link, loom-compile, ggml-hrx-run-loom, and iree-test-loom"
       FORCE
     )
   else()
@@ -345,7 +339,7 @@ function(ggml_hrx_configure_loom_tools)
       GGML_HRX_TOOL_DIR
       "${_ggml_hrx_tool_dir_default}"
       CACHE STRING
-      "PATH-style search list containing loom-link, loom-compile, ggml-hrx-run-loom, iree-test-loom, and iree-benchmark-loom"
+      "PATH-style search list containing loom-link, loom-compile, ggml-hrx-run-loom, and iree-test-loom"
     )
   endif()
 

@@ -1123,8 +1123,6 @@ check.case public {case_name} {{
 {body.rstrip()}
   check.return
 }}
-
-check.benchmark<{case_name}> {bench_name}
 """,
     )
     return bench_name, {"status": "ok", "workbench_path": str(workbench_path)}
@@ -2727,8 +2725,6 @@ check.case public {case_name} {{
   check.expect.close actual(%dst) expected(%expected) atol(0.08) rtol(0.02) nan(same) : tensor<{dst_elems}xf32>
   check.return
 }}
-
-check.benchmark<{case_name}> {bench_name}
 """
     _source_plus_case(linked_source, workbench_path, suffix)
     return bench_name, {"status": "ok", "workbench_path": str(workbench_path)}
@@ -2760,8 +2756,6 @@ check.case public {case_name} {{
   check.expect.close actual(%dst) expected(%expected) atol(0.08) rtol(0.02) nan(same) : tensor<{dst_elems}xf32>
   check.return
 }}
-
-check.benchmark<{case_name}> {bench_name}
 """
     _source_plus_case(linked_source, workbench_path, suffix)
     return bench_name, {"status": "ok", "workbench_path": str(workbench_path)}
@@ -2793,8 +2787,6 @@ check.case public {case_name} {{
   check.expect.close actual(%dst) expected(%expected) atol(0.12) rtol(0.04) nan(same) : tensor<{dst_elems}xf32>
   check.return
 }}
-
-check.benchmark<{case_name}> {bench_name}
 """
     _source_plus_case(linked_source, workbench_path, suffix)
     return bench_name, {"status": "ok", "workbench_path": str(workbench_path)}
@@ -2826,8 +2818,6 @@ check.case public {case_name} {{
   check.expect.close actual(%dst) expected(%expected) atol(0.12) rtol(0.04) nan(same) : tensor<{dst_elems}xf32>
   check.return
 }}
-
-check.benchmark<{case_name}> {bench_name}
 """
     _source_plus_case(linked_source, workbench_path, suffix)
     return bench_name, {"status": "ok", "workbench_path": str(workbench_path)}
@@ -2848,8 +2838,6 @@ check.case public {case_name} {{
   check.expect.close actual(%dst) expected(%expected) atol(0.0001) rtol(0.0001) nan(same) : tensor<{elems}xf32>
   check.return
 }}
-
-check.benchmark<{case_name}> {bench_name}
 """
     _source_plus_case(linked_source, workbench_path, suffix)
     return bench_name, {"status": "ok", "workbench_path": str(workbench_path)}
@@ -2870,8 +2858,6 @@ check.case public {case_name} {{
   check.expect.close actual(%dst) expected(%expected) atol(0.0001) rtol(0.0001) nan(same) : tensor<{elems}xf32>
   check.return
 }}
-
-check.benchmark<{case_name}> {bench_name}
 """
     _source_plus_case(linked_source, workbench_path, suffix)
     return bench_name, {"status": "ok", "workbench_path": str(workbench_path)}
@@ -2896,8 +2882,6 @@ check.case public {case_name} {{
   check.expect.close actual(%dst) expected(%expected) atol(0.0001) rtol(0.0001) nan(same) : tensor<{elems}xf32>
   check.return
 }}
-
-check.benchmark<{case_name}> {bench_name}
 """
     _source_plus_case(linked_source, workbench_path, suffix)
     return bench_name, {"status": "ok", "workbench_path": str(workbench_path)}
@@ -2957,8 +2941,6 @@ check.case public {case_name} {{
   check.expect.close actual(%dst) expected(%expected) atol(0.0) rtol(0.0) nan(same) : tensor<{elems}xf32>
   check.return
 }}
-
-check.benchmark<{case_name}> {bench_name}
 """
     _source_plus_case(linked_source, workbench_path, suffix)
     return bench_name, {"status": "ok", "workbench_path": str(workbench_path)}
@@ -3462,8 +3444,6 @@ check.case public {case_name} {{
   check.expect.close actual(%dst) expected(%expected) atol(0.0005) rtol(0.0005) nan(same) : tensor<{dst_elems}xf32>
   check.return
 }}
-
-check.benchmark<{case_name}> {bench_name}
 """
         _source_plus_case(linked_source, workbench_path, suffix)
         return bench_name, {"status": "ok", "workbench_path": str(workbench_path)}

@@ -17,7 +17,7 @@ if(NOT DEFINED GGML_HRX_TOOL_DIR)
     GGML_HRX_TOOL_DIR
     "${_ggml_hrx_tool_dir_default}"
     CACHE STRING
-    "Optional PATH-style search list containing loom-link, loom-compile, ggml-hrx-run-loom, iree-test-loom, and iree-benchmark-loom"
+    "Optional PATH-style search list containing loom-link, loom-compile, ggml-hrx-run-loom, and iree-test-loom"
   )
 endif()
 
