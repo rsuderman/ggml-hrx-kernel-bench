@@ -1,99 +1,27 @@
 from __future__ import annotations
 
-import hashlib
 import json
 import shutil
 from collections import Counter, defaultdict
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Iterable, Mapping
+from typing import Any, Iterable
 
 import yaml
 
-from .routing.v2.layout import EncodedRouteShape, contiguous_strides, encode_route_shape
-from .routing.v2.matching import (
-    route_accepts_attributes,
-    route_accepts_tensors,
-    route_captures,
-    route_values,
+from .route_query_config import ROUTE_QUERY_IMPORT_SCHEMA, materialize_route_query_configs
+from .routing.v2.layout import contiguous_strides
+from .routing.v2.models import ConcreteTensor, ConcreteTensorDimension
+from .routing.v2.query import RouteCatalog, load_route_catalog, routes_for_op
+from .routing.v2.selection import (
+    RouteQuery,
+    select_route_query,
 )
-from .routing.v2.models import ConcreteTensor, ConcreteTensorDimension, V2Route
-from .routing.v2.query import load_route_catalog, routes_for_op
 
 
 YAML_ROUTE_IMPORT_SCHEMA = "ggml_hrx_kernel_bench.yaml_route_import.v1"
 YAML_SURFACE_SCHEMA = "ggml_hrx_kernel_bench.yaml_surface.v1"
 IMPORT_TEST_COVERAGE_SCHEMA = "ggml_hrx_kernel_bench.import_test_coverage.v1"
-GENERATED_KERNEL_TESTS_SCHEMA = "ggml_hrx_kernel_bench.generated_kernel_tests.v1"
-ROUTE_EXECUTION_ABI_SCHEMA = "ggml_hrx_kernel_bench.route_execution_abi.v1"
-STATIC_SCALAR_ABI_BY_FAMILY: dict[str, tuple[dict[str, Any], ...]] = {
-    "scale_f32": (
-        {"role": "scale", "dtype": "f32", "value": 0.625},
-        {"role": "bias", "dtype": "f32", "value": -0.125},
-    ),
-    "clamp_f32": (
-        {"role": "min", "dtype": "f32", "value": -0.45},
-        {"role": "max", "dtype": "f32", "value": 0.55},
-    ),
-    "clamp_f16": (
-        {"role": "min", "dtype": "f32", "value": -0.45},
-        {"role": "max", "dtype": "f32", "value": 0.55},
-    ),
-    "rope_f32": (
-        {"role": "theta_scale", "dtype": "f32", "value": 0.75},
-    ),
-    "rope_neox_f32": (
-        {"role": "theta_scale", "dtype": "f32", "value": 0.75},
-    ),
-    "rope_f16": (
-        {"role": "theta_scale", "dtype": "f32", "value": 0.75},
-    ),
-    "rope_neox_f16": (
-        {"role": "theta_scale", "dtype": "f32", "value": 0.75},
-    ),
-}
-ATTRIBUTE_SCALAR_ABI_BY_FAMILY: dict[str, tuple[dict[str, Any], ...]] = {
-    "rms_norm_f32": (
-        {"role": "eps", "dtype": "f32", "attribute": "eps"},
-    ),
-    "soft_max_f32": (
-        {"role": "scale", "dtype": "f32", "attribute": "scale", "default": 0.75},
-    ),
-    "rope_f32": (
-        {"role": "freq_scale", "dtype": "f32", "attribute": "freq_scale", "default": 1.1},
-        {"role": "attn_factor", "dtype": "f32", "attribute": "attn_factor", "default": 0.9},
-    ),
-    "rope_neox_f32": (
-        {"role": "freq_scale", "dtype": "f32", "attribute": "freq_scale", "default": 1.1},
-        {"role": "attn_factor", "dtype": "f32", "attribute": "attn_factor", "default": 0.9},
-    ),
-    "rope_f16": (
-        {"role": "freq_scale", "dtype": "f32", "attribute": "freq_scale", "default": 1.1},
-        {"role": "attn_factor", "dtype": "f32", "attribute": "attn_factor", "default": 0.9},
-    ),
-    "rope_neox_f16": (
-        {"role": "freq_scale", "dtype": "f32", "attribute": "freq_scale", "default": 1.1},
-        {"role": "attn_factor", "dtype": "f32", "attribute": "attn_factor", "default": 0.9},
-    ),
-    "flash_attn_ext_f32_f16": (
-        {"role": "scale", "dtype": "f32", "attribute": "scale", "default": 0.08838834764831843},
-    ),
-    "softmax_kqv_f32_f16": (
-        {"role": "scale", "dtype": "f32", "attribute": "scale", "default": 0.75},
-    ),
-}
-FIXTURE_BY_FAMILY_ROLE: dict[tuple[str, str], str] = {
-    ("get_rows_f32", "src1"): "indices",
-    ("rms_norm_f32", "src0"): "src",
-    ("soft_max_f32", "mask"): "mask",
-    ("rope_f32", "src1"): "positions",
-    ("rope_neox_f32", "src1"): "positions",
-    ("rope_f16", "src1"): "positions",
-    ("rope_neox_f16", "src1"): "positions",
-}
-INPUT_ROLES_BY_FAMILY: dict[str, frozenset[str]] = {
-    "soft_max_f32": frozenset({"mask"}),
-}
 
 
 def _normalize_value(value: Any) -> Any:
@@ -113,30 +41,6 @@ def _json_key(value: Any) -> str:
 
 def _histogram(counter: Counter[str]) -> dict[str, int]:
     return {key: counter[key] for key in sorted(counter)}
-
-
-def _safe_name(name: str) -> str:
-    return "".join(char if char.isalnum() or char in ("-", "_") else "_" for char in name)
-
-
-def _params_signature(params_key: tuple[str, ...]) -> str:
-    payload = json.dumps(list(params_key), separators=(",", ":"))
-    return hashlib.sha1(payload.encode("utf-8")).hexdigest()[:12]
-
-
-def _config_filename(
-    kernel_family: str,
-    route_id: str | None,
-    params_key: tuple[str, ...],
-    *,
-    require_params_suffix: bool,
-) -> str:
-    parts = [_safe_name(kernel_family)]
-    if route_id:
-        parts.append(_safe_name(route_id))
-    if require_params_suffix:
-        parts.append(_params_signature(params_key))
-    return ".".join(parts) + ".json"
 
 
 def _dtype(value: Any) -> str:
@@ -491,201 +395,29 @@ def _query_tensors(case: YamlCase) -> dict[str, ConcreteTensor]:
     return tensors
 
 
-def _synthetic_dimension_sizes(
-    dimensions_source: Any,
-    captures: Mapping[str, Any],
-) -> tuple[int, ...] | None:
-    if isinstance(dimensions_source, str):
-        dimensions = captures.get(dimensions_source)
-        if not isinstance(dimensions, tuple):
-            return None
-        return tuple(int(value) for value in dimensions)
-    if not isinstance(dimensions_source, tuple):
-        return None
-    sizes: list[int] = []
-    for entry in dimensions_source:
-        if isinstance(entry, int) and not isinstance(entry, bool):
-            sizes.append(int(entry))
-            continue
-        if not isinstance(entry, Mapping):
-            return None
-        source = entry.get("source")
-        index = entry.get("index")
-        if not isinstance(source, str) or not isinstance(index, int) or isinstance(index, bool):
-            return None
-        source_dimensions = captures.get(source)
-        if not isinstance(source_dimensions, tuple) or index < 0 or index >= len(source_dimensions):
-            return None
-        sizes.append(int(source_dimensions[index]))
-    return tuple(sizes)
+def _route_query_for_case(case: YamlCase) -> RouteQuery:
+    return RouteQuery(
+        operation=case.op,
+        tensors=_query_tensors(case),
+        attributes=case.attributes,
+    )
 
 
-def _route_tensors_for_case(route: V2Route, case: YamlCase) -> dict[str, ConcreteTensor] | None:
-    tensors = _query_tensors(case)
-    if not route.synthetic_tensors:
-        return tensors
-    real_tensor_names = set(route.tensors) - set(route.synthetic_tensors)
-    captures = route_captures(route, tensors, tensor_names=real_tensor_names)
-    if captures is None:
-        return None
-    merged = dict(tensors)
-    for tensor_name, synthetic in route.synthetic_tensors.items():
-        sizes = _synthetic_dimension_sizes(synthetic.dimensions_source, captures)
-        if sizes is None:
-            return None
-        strides = contiguous_strides(sizes)
-        merged[tensor_name] = ConcreteTensor(
-            dtype=synthetic.dtype,
-            dimensions=tuple(
-                ConcreteTensorDimension(
-                    name=f"d{index}",
-                    size=sizes[index],
-                    stride=strides[index],
-                )
-                for index in range(len(sizes))
-            ),
-        )
-    return merged
-
-
-def _shape_binding_defaults(
-    route: V2Route,
-    tensors: dict[str, ConcreteTensor],
-    existing: dict[str, int],
-) -> dict[str, int]:
-    defaults: dict[str, int] = {}
-    for binding in route.bindings:
-        if binding.source is None or not binding.source.startswith("shape."):
-            continue
-        key = binding.source.removeprefix("shape.")
-        if key in existing or key in defaults:
-            continue
-        resolved = _resolve_shape_binding_default(key, tensors)
-        if resolved is not None:
-            defaults[key] = resolved
-    return defaults
-
-
-def _shape_binding_attribute_defaults(
-    route: V2Route,
-    attributes: Mapping[str, Any] | None,
-    existing: dict[str, int],
-) -> dict[str, int]:
-    if attributes is None:
-        return {}
-    defaults: dict[str, int] = {}
-    for binding in route.bindings:
-        if binding.source is None or not binding.source.startswith("attribute."):
-            continue
-        if not binding.key.startswith("@shape."):
-            continue
-        shape_key = binding.key.removeprefix("@shape.")
-        if shape_key in existing or shape_key in defaults:
-            continue
-        attribute_key = binding.source.removeprefix("attribute.")
-        value = attributes.get(attribute_key)
-        if isinstance(value, bool) or not isinstance(value, int):
-            continue
-        defaults[shape_key] = int(value)
-    return defaults
-
-
-def _shape_binding_value_defaults(
-    route: V2Route,
-    tensors: dict[str, ConcreteTensor],
-    existing: dict[str, int],
-    attributes: Mapping[str, Any] | None = None,
-) -> dict[str, int]:
-    values = route_values(route, tensors, attributes)
-    if values is None:
-        return {}
-    defaults: dict[str, int] = {}
-    for binding in route.bindings:
-        if binding.source is None or not binding.source.startswith("shape."):
-            continue
-        key = binding.source.removeprefix("shape.")
-        if key in existing or key in defaults:
-            continue
-        value = values.get(key)
-        if isinstance(value, int):
-            defaults[key] = int(value)
-    return defaults
-
-
-def _resolve_shape_binding_default(
-    key: str,
-    tensors: dict[str, ConcreteTensor],
-) -> int | None:
-    if key.endswith("_stride"):
-        base_key = key.removesuffix("_stride")
-        split_at = base_key.rfind("_")
-        if split_at <= 0:
-            return None
-        tensor_name = base_key[:split_at]
-        dimension_name = base_key[split_at + 1 :]
-        tensor = tensors.get(tensor_name)
-        if tensor is None:
-            return None
-        for dimension in tensor.dimensions:
-            if dimension.name == dimension_name:
-                return int(dimension.stride)
-        return None
-    split_at = key.rfind("_")
-    if split_at <= 0:
-        return None
-    tensor_name = key[:split_at]
-    dimension_name = key[split_at + 1 :]
-    tensor = tensors.get(tensor_name)
-    if tensor is None:
-        return None
-    for dimension in tensor.dimensions:
-        if dimension.name == dimension_name:
-            return int(dimension.size)
-    return None
-
-
-def _shape_for_matched_route(
-    route: V2Route,
-    tensors: dict[str, ConcreteTensor],
-    attributes: Mapping[str, Any] | None = None,
-) -> EncodedRouteShape:
-    encoded = dict(encode_route_shape(route, tensors).items)
-    encoded.update(_shape_binding_value_defaults(route, tensors, encoded, attributes))
-    encoded.update(_shape_binding_attribute_defaults(route, attributes, encoded))
-    encoded.update(_shape_binding_defaults(route, tensors, encoded))
-    return EncodedRouteShape(items=tuple(encoded.items()))
-
-
-def _match_case(case: YamlCase, routes: list[Any]) -> dict[str, Any]:
-    tensors = _query_tensors(case)
-    tensor_names = set(tensors)
-    candidate_matches = []
-    route_tensors_by_id: dict[str, dict[str, ConcreteTensor]] = {}
-    for route in routes:
-        required_tensor_names = set(route.tensors) - set(route.synthetic_tensors)
-        if required_tensor_names != tensor_names or not route_accepts_attributes(route, case.attributes):
-            continue
-        route_tensors = _route_tensors_for_case(route, case)
-        if route_tensors is None or not route_accepts_tensors(route, route_tensors, case.attributes):
-            continue
-        candidate_matches.append(route)
-        route_tensors_by_id[route.id] = route_tensors
-    matches = candidate_matches[:1]
-    if matches:
-        status = "matched"
-    else:
-        status = "unmatched"
+def _match_case(case: YamlCase, catalog: RouteCatalog) -> dict[str, Any]:
+    query = _route_query_for_case(case)
+    selection = select_route_query(catalog, query)
+    routes = routes_for_op(catalog, case.op)
     return {
-        "status": status,
+        "status": selection.status,
         "source_id": case.source_id,
         "source_path": case.source_path,
         "op": case.op,
         "case_index": case.case_index,
         "surface_signature": _json_key(_case_signature(case)),
-        "tensor_names": sorted(tensor_names),
+        "tensor_names": sorted(query.tensors),
         "candidate_route_count": len(routes),
-        "candidate_matched_route_ids": [route.id for route in candidate_matches],
-        "matched_route_ids": [route.id for route in matches],
+        "candidate_matched_route_ids": list(selection.candidate_route_ids),
+        "matched_route_ids": list(selection.route_ids),
         "case": case.to_json(),
     }
 
@@ -786,244 +518,6 @@ def _import_coverage_payload(
     }
 
 
-def _generated_kernel_test_entries(config_paths: list[Path], *, op: str | None = None) -> list[dict[str, Any]]:
-    entries: list[dict[str, Any]] = []
-    for path in sorted(config_paths):
-        payload = json.loads(path.read_text(encoding="utf-8"))
-        entry = {
-            "config_path": str(path),
-            "config_name": path.name,
-            "kernel": str(payload.get("kernel") or ""),
-            "case_count": len(payload.get("cases", [])),
-        }
-        route_id = payload.get("route_id")
-        if route_id:
-            entry["route_id"] = str(route_id)
-        if op:
-            entry["op"] = op
-        entries.append(entry)
-    return entries
-
-
-def _write_generated_kernel_tests_json(
-    *,
-    yaml_paths: list[Path],
-    config_paths: list[Path],
-    path: Path,
-    op: str | None = None,
-) -> dict[str, Any]:
-    payload: dict[str, Any] = {
-        "schema": GENERATED_KERNEL_TESTS_SCHEMA,
-        "entry_count": len(config_paths),
-        "entries": _generated_kernel_test_entries(config_paths, op=op),
-    }
-    if len(yaml_paths) == 1:
-        payload["source_path"] = str(yaml_paths[0])
-    else:
-        payload["source_paths"] = [str(yaml_path) for yaml_path in yaml_paths]
-    if op is not None:
-        payload["op"] = op
-    _write_ordered_json(path, payload)
-    return payload
-
-
-def _runtime_dtype(dtype: str | None) -> str:
-    return str(dtype or "").strip().lower()
-
-
-def _attribute_scalar_values_for_route(route: V2Route, attributes: Mapping[str, Any]) -> dict[str, Any]:
-    values: dict[str, Any] = {}
-    for scalar in ATTRIBUTE_SCALAR_ABI_BY_FAMILY.get(route.family, ()):
-        attribute_name = str(scalar["attribute"])
-        if attribute_name in attributes:
-            values[attribute_name] = attributes[attribute_name]
-        elif "default" in scalar:
-            values[attribute_name] = scalar["default"]
-    return values
-
-
-def _attribute_scalar_key(route: V2Route, attributes: Mapping[str, Any]) -> str:
-    return _json_key(_attribute_scalar_values_for_route(route, attributes))
-
-
-def _role_sort_key(role: str) -> tuple[int, int, str]:
-    if role.startswith("src") and role[3:].isdigit():
-        return (0, int(role[3:]), role)
-    if role == "mask":
-        return (0, 1000, role)
-    if role == "dst":
-        return (1, 0, role)
-    if role.startswith("dst") and role[3:].isdigit():
-        return (1, int(role[3:]), role)
-    return (2, 0, role)
-
-
-def _execution_abi_for_route(route: V2Route, attributes: Mapping[str, Any] | None = None) -> dict[str, Any]:
-    if route.family in {"set_rows_f32", "cont_set_rows_f32"}:
-        update_role, index_role = (
-            ("src1", "src2") if "src2" in route.tensors else ("src0", "src1")
-        )
-        output_dtype = "f16" if route.family == "cont_set_rows_f32" else "f32"
-        return {
-            "schema": ROUTE_EXECUTION_ABI_SCHEMA,
-            "route_id": route.id,
-            "entries": [
-                {
-                    "position": 0,
-                    "role": update_role,
-                    "kind": "input",
-                    "dtype": "f32",
-                    "fixture": "src0",
-                },
-                {
-                    "position": 1,
-                    "role": index_role,
-                    "kind": "input",
-                    "dtype": "i32",
-                    "fixture": "indices",
-                },
-                {
-                    "position": 2,
-                    "role": "dst",
-                    "kind": "output",
-                    "dtype": output_dtype,
-                    "fixture": "dst_init",
-                    "expect": {
-                        "fixture": "expected",
-                        "mode": "close",
-                    },
-                },
-            ],
-        }
-    entries: list[dict[str, Any]] = []
-    position = 0
-    for scalar in STATIC_SCALAR_ABI_BY_FAMILY.get(route.family, ()):
-        entries.append(
-            {
-                "position": position,
-                "role": scalar["role"],
-                "kind": "scalar",
-                "dtype": scalar["dtype"],
-                "value": scalar["value"],
-            }
-        )
-        position += 1
-    attribute_values = _attribute_scalar_values_for_route(route, attributes or {})
-    for scalar in ATTRIBUTE_SCALAR_ABI_BY_FAMILY.get(route.family, ()):
-        attribute_name = str(scalar["attribute"])
-        if attribute_name not in attribute_values:
-            continue
-        entries.append(
-            {
-                "position": position,
-                "role": scalar["role"],
-                "kind": "scalar",
-                "dtype": scalar["dtype"],
-                "value": attribute_values[attribute_name],
-            }
-        )
-        position += 1
-    for role in sorted(route.tensors, key=_role_sort_key):
-        tensor = route.tensors[role]
-        kind = "input" if role.startswith("src") or role in INPUT_ROLES_BY_FAMILY.get(route.family, frozenset()) else "output"
-        entry: dict[str, Any] = {
-            "position": position,
-            "role": role,
-            "kind": kind,
-            "dtype": _runtime_dtype(tensor.dtype),
-            "fixture": FIXTURE_BY_FAMILY_ROLE.get((route.family, role), role),
-        }
-        if kind == "output":
-            entry["fixture"] = f"{role}_init" if role != "dst" else "dst_init"
-            entry["expect"] = {
-                "fixture": "expected" if role == "dst" else f"{role}_expected",
-                "mode": "close",
-            }
-        entries.append(entry)
-        position += 1
-    return {
-        "schema": ROUTE_EXECUTION_ABI_SCHEMA,
-        "route_id": route.id,
-        "entries": entries,
-    }
-
-
-def _emit_compact_configs(
-    *,
-    yaml_paths: list[Path],
-    op: str,
-    cases: list[YamlCase],
-    rows: list[dict[str, Any]],
-    routes_by_id: Mapping[str, V2Route],
-    output_dir: Path,
-) -> list[Path]:
-    output_dir.mkdir(parents=True, exist_ok=True)
-    grouped: dict[tuple[str, str, tuple[str, ...], str], list[list[int]]] = defaultdict(list)
-    group_attributes: dict[tuple[str, str, tuple[str, ...], str], dict[str, Any]] = {}
-    seen_cases: dict[tuple[str, str, tuple[str, ...], str], set[tuple[int, ...]]] = defaultdict(set)
-
-    for case, row in zip(cases, rows, strict=True):
-        if row["status"] != "matched":
-            continue
-        route_id = row["matched_route_ids"][0]
-        route = routes_by_id[route_id]
-        route_tensors = _route_tensors_for_case(route, case)
-        if route_tensors is None:
-            raise RuntimeError(f"matched route {route.id!r} could not materialize route tensors for {case.source_id}")
-        shape = _shape_for_matched_route(route, route_tensors, case.attributes)
-        params_key = tuple(shape.params)
-        values_key = tuple(shape.values)
-        attribute_key = _attribute_scalar_key(route, case.attributes)
-        group_key = (route.family, route.id, params_key, attribute_key)
-        if values_key in seen_cases[group_key]:
-            continue
-        seen_cases[group_key].add(values_key)
-        group_attributes[group_key] = _attribute_scalar_values_for_route(route, case.attributes)
-        grouped[group_key].append(shape.values)
-
-    base_key_counts = Counter((kernel_family, route_id) for kernel_family, route_id, _, _ in grouped)
-    emitted: list[Path] = []
-    seen_paths: set[Path] = set()
-    for (kernel_family, route_id, params_key, attribute_key), cases_for_config in sorted(
-        grouped.items(),
-        key=lambda item: (item[0][0], item[0][1], item[0][2], item[0][3]),
-    ):
-        group_key = (kernel_family, route_id, params_key, attribute_key)
-        payload: dict[str, Any] = {
-            "kernel": kernel_family,
-            "params": list(params_key),
-            "cases": cases_for_config,
-            "route_id": route_id,
-            "execution_abi": _execution_abi_for_route(
-                routes_by_id[route_id],
-                attributes=group_attributes[group_key],
-            ),
-        }
-        filename = _config_filename(
-            kernel_family,
-            route_id,
-            params_key,
-            require_params_suffix=base_key_counts[(kernel_family, route_id)] > 1,
-        )
-        if attribute_key != "{}":
-            digest = hashlib.sha1(attribute_key.encode("utf-8")).hexdigest()[:12]
-            filename = f"{Path(filename).stem}.{digest}.json"
-        path = output_dir / filename
-        if path in seen_paths:
-            raise RuntimeError(f"generated config path collision for {path}")
-        seen_paths.add(path)
-        _write_ordered_json(path, payload)
-        emitted.append(path)
-
-    _write_generated_kernel_tests_json(
-        yaml_paths=yaml_paths,
-        config_paths=emitted,
-        path=output_dir.parent / "generated-kernel-tests.json",
-        op=op,
-    )
-    return emitted
-
-
 def _iteration_log(summary: dict[str, Any]) -> str:
     return "\n".join(
         [
@@ -1081,7 +575,7 @@ def _op_iteration_log(op: str, surface: dict[str, Any], counts: Counter[str]) ->
     )
 
 
-def materialize_yaml_route_import(
+def materialize_yaml_route_queries(
     yaml_paths: list[Path],
     *,
     output_dir: Path,
@@ -1103,7 +597,7 @@ def materialize_yaml_route_import(
 
     all_matches: list[dict[str, Any]] = []
     all_unmatched: list[dict[str, Any]] = []
-    all_generated_config_paths: list[Path] = []
+    matched_queries: list[RouteQuery] = []
     operation_rows: list[dict[str, Any]] = []
     surfaces: dict[str, dict[str, Any]] = {}
 
@@ -1113,22 +607,18 @@ def materialize_yaml_route_import(
         op_routes = list(routes_for_op(catalog, op))
         surface = _surface_for_op(op, op_cases, op_invalid, len(op_routes))
         surfaces[op] = surface
-        rows = [_match_case(case, op_routes) for case in op_cases]
+        rows = [_match_case(case, catalog) for case in op_cases]
         counts = Counter(row["status"] for row in rows)
         matches = [row for row in rows if row["status"] == "matched"]
         non_matches = [row for row in rows if row["status"] != "matched"]
         all_matches.extend(matches)
         all_unmatched.extend(non_matches)
-        op_dir = output_dir / "ops" / op
-        generated_config_paths = _emit_compact_configs(
-            yaml_paths=yaml_paths,
-            op=op,
-            cases=op_cases,
-            rows=rows,
-            routes_by_id=catalog.routes_by_id,
-            output_dir=op_dir / "generated-import-configs",
+        matched_queries.extend(
+            _route_query_for_case(case)
+            for case, row in zip(op_cases, rows, strict=True)
+            if row["status"] == "matched"
         )
-        all_generated_config_paths.extend(generated_config_paths)
+        op_dir = output_dir / "ops" / op
         _write_json(op_dir / "yaml-surface.json", surface)
         _write_text(op_dir / "yaml-surface.md", _surface_markdown(surface))
         op_summary = {
@@ -1140,9 +630,9 @@ def materialize_yaml_route_import(
             "matched_case_count": counts.get("matched", 0),
             "ambiguous_case_count": counts.get("ambiguous", 0),
             "unmatched_case_count": counts.get("unmatched", 0),
-            "generated_config_count": len(generated_config_paths),
+            "generated_config_count": 0,
             "generated_kernel_tests_path": str(op_dir / "generated-kernel-tests.json"),
-            "generated_config_paths": [str(path) for path in generated_config_paths],
+            "generated_config_paths": [],
         }
         _write_json(op_dir / "route-import-summary.json", op_summary)
         _write_ordered_json(
@@ -1164,9 +654,9 @@ def materialize_yaml_route_import(
         "matched_case_count": len(all_matches),
         "ambiguous_case_count": sum(1 for row in all_unmatched if row["status"] == "ambiguous"),
         "unmatched_case_count": sum(1 for row in all_unmatched if row["status"] == "unmatched"),
-        "generated_config_count": len(all_generated_config_paths),
+        "generated_config_count": 0,
         "generated_kernel_tests_path": str(output_dir / "generated-kernel-tests.json"),
-        "generated_config_paths": [str(path) for path in all_generated_config_paths],
+        "generated_config_paths": [],
         "operations": sorted(operation_rows, key=lambda row: row["op"]),
     }
     surface_summary = {
@@ -1195,12 +685,55 @@ def materialize_yaml_route_import(
         output_dir / "import-coverage.json",
         _import_coverage_payload(operation_rows=operation_rows),
     )
-    _write_generated_kernel_tests_json(
-        yaml_paths=yaml_paths,
-        config_paths=all_generated_config_paths,
-        path=output_dir / "generated-kernel-tests.json",
-    )
     _write_json(output_dir / "route-matches.json", {"schema": YAML_ROUTE_IMPORT_SCHEMA, "rows": all_matches})
     _write_json(output_dir / "route-unmatched.json", {"schema": YAML_ROUTE_IMPORT_SCHEMA, "rows": all_unmatched})
     _write_text(output_dir / "iteration-log.md", _iteration_log(summary))
+
+    query_path = output_dir / "route-queries.jsonl"
+    query_path.write_text(
+        "".join(
+            json.dumps(query.to_json(), separators=(",", ":")) + "\n"
+            for query in matched_queries
+        ),
+        encoding="utf-8",
+    )
+    metadata = {
+        "schema": ROUTE_QUERY_IMPORT_SCHEMA,
+        "yaml_paths": [str(path) for path in yaml_paths],
+        "routing_dir": str(routing_dir),
+        "query_path": str(query_path),
+        "query_count": len(matched_queries),
+        "operation_count": len(operation_rows),
+        "operations": [
+            {
+                "op": row["op"],
+                "case_count": row["case_count"],
+                "invalid_case_count": row["invalid_case_count"],
+                "matched_case_count": row["matched_case_count"],
+                "ambiguous_case_count": row["ambiguous_case_count"],
+                "unmatched_case_count": row["unmatched_case_count"],
+            }
+            for row in sorted(operation_rows, key=lambda row: row["op"])
+        ],
+    }
+    _write_json(output_dir / "route-query-import.json", metadata)
     return summary
+
+
+def materialize_yaml_route_import(
+    yaml_paths: list[Path],
+    *,
+    output_dir: Path,
+    routing_dir: Path,
+) -> dict[str, Any]:
+    materialize_yaml_route_queries(
+        yaml_paths,
+        output_dir=output_dir,
+        routing_dir=routing_dir,
+    )
+    return materialize_route_query_configs(
+        output_dir / "route-queries.jsonl",
+        metadata_path=output_dir / "route-query-import.json",
+        output_dir=output_dir,
+        routing_dir=routing_dir,
+    )
