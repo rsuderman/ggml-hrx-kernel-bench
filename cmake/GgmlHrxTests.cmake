@@ -82,6 +82,7 @@ function(add_yaml_route_import_target)
       ${CMAKE_SOURCE_DIR}/src/ggml_hrx_kernel_bench/routing/v2/matching.py
       ${CMAKE_SOURCE_DIR}/src/ggml_hrx_kernel_bench/routing/v2/models.py
       ${CMAKE_SOURCE_DIR}/src/ggml_hrx_kernel_bench/routing/v2/query.py
+      ${CMAKE_SOURCE_DIR}/src/ggml_hrx_kernel_bench/routing/v2/selection.py
     COMMENT "Materializing descriptor YAML route import reports for ${GGML_HRX_YRI_NAME}"
     VERBATIM
   )

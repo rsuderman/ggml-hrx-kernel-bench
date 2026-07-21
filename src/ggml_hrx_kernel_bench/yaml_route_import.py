@@ -11,14 +11,14 @@ from typing import Any, Iterable, Mapping
 import yaml
 
 from .routing.v2.layout import EncodedRouteShape, contiguous_strides, encode_route_shape
-from .routing.v2.matching import (
-    route_accepts_attributes,
-    route_accepts_tensors,
-    route_captures,
-    route_values,
-)
+from .routing.v2.matching import route_values
 from .routing.v2.models import ConcreteTensor, ConcreteTensorDimension, V2Route
-from .routing.v2.query import load_route_catalog, routes_for_op
+from .routing.v2.query import RouteCatalog, load_route_catalog, routes_for_op
+from .routing.v2.selection import (
+    RouteQuery,
+    materialize_route_query_tensors,
+    select_route_query,
+)
 
 
 YAML_ROUTE_IMPORT_SCHEMA = "ggml_hrx_kernel_bench.yaml_route_import.v1"
@@ -491,61 +491,12 @@ def _query_tensors(case: YamlCase) -> dict[str, ConcreteTensor]:
     return tensors
 
 
-def _synthetic_dimension_sizes(
-    dimensions_source: Any,
-    captures: Mapping[str, Any],
-) -> tuple[int, ...] | None:
-    if isinstance(dimensions_source, str):
-        dimensions = captures.get(dimensions_source)
-        if not isinstance(dimensions, tuple):
-            return None
-        return tuple(int(value) for value in dimensions)
-    if not isinstance(dimensions_source, tuple):
-        return None
-    sizes: list[int] = []
-    for entry in dimensions_source:
-        if isinstance(entry, int) and not isinstance(entry, bool):
-            sizes.append(int(entry))
-            continue
-        if not isinstance(entry, Mapping):
-            return None
-        source = entry.get("source")
-        index = entry.get("index")
-        if not isinstance(source, str) or not isinstance(index, int) or isinstance(index, bool):
-            return None
-        source_dimensions = captures.get(source)
-        if not isinstance(source_dimensions, tuple) or index < 0 or index >= len(source_dimensions):
-            return None
-        sizes.append(int(source_dimensions[index]))
-    return tuple(sizes)
-
-
-def _route_tensors_for_case(route: V2Route, case: YamlCase) -> dict[str, ConcreteTensor] | None:
-    tensors = _query_tensors(case)
-    if not route.synthetic_tensors:
-        return tensors
-    real_tensor_names = set(route.tensors) - set(route.synthetic_tensors)
-    captures = route_captures(route, tensors, tensor_names=real_tensor_names)
-    if captures is None:
-        return None
-    merged = dict(tensors)
-    for tensor_name, synthetic in route.synthetic_tensors.items():
-        sizes = _synthetic_dimension_sizes(synthetic.dimensions_source, captures)
-        if sizes is None:
-            return None
-        strides = contiguous_strides(sizes)
-        merged[tensor_name] = ConcreteTensor(
-            dtype=synthetic.dtype,
-            dimensions=tuple(
-                ConcreteTensorDimension(
-                    name=f"d{index}",
-                    size=sizes[index],
-                    stride=strides[index],
-                )
-                for index in range(len(sizes))
-            ),
-        )
-    return merged
+def _route_query_for_case(case: YamlCase) -> RouteQuery:
+    return RouteQuery(
+        operation=case.op,
+        tensors=_query_tensors(case),
+        attributes=case.attributes,
+    )
 
 
 def _shape_binding_defaults(
@@ -656,36 +607,21 @@ def _shape_for_matched_route(
     return EncodedRouteShape(items=tuple(encoded.items()))
 
 
-def _match_case(case: YamlCase, routes: list[Any]) -> dict[str, Any]:
-    tensors = _query_tensors(case)
-    tensor_names = set(tensors)
-    candidate_matches = []
-    route_tensors_by_id: dict[str, dict[str, ConcreteTensor]] = {}
-    for route in routes:
-        required_tensor_names = set(route.tensors) - set(route.synthetic_tensors)
-        if required_tensor_names != tensor_names or not route_accepts_attributes(route, case.attributes):
-            continue
-        route_tensors = _route_tensors_for_case(route, case)
-        if route_tensors is None or not route_accepts_tensors(route, route_tensors, case.attributes):
-            continue
-        candidate_matches.append(route)
-        route_tensors_by_id[route.id] = route_tensors
-    matches = candidate_matches[:1]
-    if matches:
-        status = "matched"
-    else:
-        status = "unmatched"
+def _match_case(case: YamlCase, catalog: RouteCatalog) -> dict[str, Any]:
+    query = _route_query_for_case(case)
+    selection = select_route_query(catalog, query)
+    routes = routes_for_op(catalog, case.op)
     return {
-        "status": status,
+        "status": selection.status,
         "source_id": case.source_id,
         "source_path": case.source_path,
         "op": case.op,
         "case_index": case.case_index,
         "surface_signature": _json_key(_case_signature(case)),
-        "tensor_names": sorted(tensor_names),
+        "tensor_names": sorted(query.tensors),
         "candidate_route_count": len(routes),
-        "candidate_matched_route_ids": [route.id for route in candidate_matches],
-        "matched_route_ids": [route.id for route in matches],
+        "candidate_matched_route_ids": list(selection.candidate_route_ids),
+        "matched_route_ids": list(selection.route_ids),
         "case": case.to_json(),
     }
 
@@ -967,7 +903,7 @@ def _emit_compact_configs(
             continue
         route_id = row["matched_route_ids"][0]
         route = routes_by_id[route_id]
-        route_tensors = _route_tensors_for_case(route, case)
+        route_tensors = materialize_route_query_tensors(route, _route_query_for_case(case))
         if route_tensors is None:
             raise RuntimeError(f"matched route {route.id!r} could not materialize route tensors for {case.source_id}")
         shape = _shape_for_matched_route(route, route_tensors, case.attributes)
@@ -1113,7 +1049,7 @@ def materialize_yaml_route_import(
         op_routes = list(routes_for_op(catalog, op))
         surface = _surface_for_op(op, op_cases, op_invalid, len(op_routes))
         surfaces[op] = surface
-        rows = [_match_case(case, op_routes) for case in op_cases]
+        rows = [_match_case(case, catalog) for case in op_cases]
         counts = Counter(row["status"] for row in rows)
         matches = [row for row in rows if row["status"] == "matched"]
         non_matches = [row for row in rows if row["status"] != "matched"]
