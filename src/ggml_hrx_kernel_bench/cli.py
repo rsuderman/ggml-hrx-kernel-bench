@@ -15,59 +15,18 @@ from .routing.api import (
     supported_routing_versions,
 )
 from .ledger import LedgerWriter, utc_run_id
-from .observed_shapes import load_observed_shapes, read_observations_jsonl, save_observed_shapes
 from .oracles import generate_oracle, write_workbench
-from .route_optimization import route_inventory_payload, write_route_inventory
-from .specs import KernelSpec, config_args, file_sha256, spec_sha256
 from .tools import CommandResult, run_command
-
-
-SUPPORTED_RUN_FAMILIES = (
-    "add_f32",
-    "argsort_f32_i32",
-    "clamp_f32",
-    "clamp_f16",
-    "cont_f32",
-    "cont_set_rows_f32",
-    "copy_bf16_bf16",
-    "copy_bf16_f16",
-    "copy_bf16_f32",
-    "copy_f16_bf16",
-    "copy_f16_f16",
-    "copy_f16_f32",
-    "copy_f32_bf16",
-    "copy_f32_f16",
-    "copy_f32_f32",
-    "copy_i32_i32",
-    "div_f32",
-    "get_rows_f32",
-    "mul_f32",
-    "mul_mat_q4_k_f32",
-    "mul_mat_q8_0_f32",
-    "quantize_q8_1_f32",
-    "rms_norm_f32",
-    "rope_f32",
-    "rope_neox_f32",
-    "rope_scale_f32",
-    "scale_f32",
-    "set_rows_f32",
-    "soft_max_f32",
-    "sum_rows_f32",
-    "swiglu_f32",
-)
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="ggml-hrx-kernel-bench")
-    parser.add_argument("--spec", type=Path, help="single legacy kernel spec")
-    parser.add_argument("--kernel-source", type=Path, help="override source for --spec mode")
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--target", default="gfx1100")
     parser.add_argument("--rocm-path", type=Path)
     parser.add_argument("--loom-link", type=Path)
     parser.add_argument("--loom-compile", type=Path)
     parser.add_argument("--iree-test-loom", type=Path)
-    parser.add_argument("--values", type=Path, help="JSON object containing concrete parameter values for --spec mode")
     parser.add_argument(
         "--routing-version",
         choices=supported_routing_versions(),
@@ -75,18 +34,15 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--kernel-dir", type=Path)
     parser.add_argument("--routing-dir", type=Path)
-    parser.add_argument("--observed-shapes", type=Path, help="observed shape metadata JSON; defaults to <routing-dir>/observed_shapes.json")
-    parser.add_argument("--shape-trace", type=Path, action="append", default=[], help="JSONL observed-shape trace to merge with accumulate-shapes")
     parser.add_argument("--family", action="append", default=[], help="family/source/route filter; may be repeated or comma separated")
     parser.add_argument("--limit", type=int, help="limit corpus candidates")
-    parser.add_argument("--sweep", choices=["minimal", "edge", "observed"], default="minimal")
+    parser.add_argument("--sweep", choices=["minimal", "edge"], default="minimal")
     parser.add_argument("--include-source-only", action="store_true", help="include source-only/probe kernel rows in addition to route-backed catalog rows")
     parser.add_argument("--sanitizers", default="none", help="comma list, for example none,asan,tsan")
     parser.add_argument("--llama-catalog-dir", type=Path, help="sparse llama.cpp generated/catalog directory to update")
     parser.add_argument("--llama-catalog-id", help="catalog id to write when exporting llama.cpp catalog metadata")
 
     subparsers = parser.add_subparsers(dest="command", required=True)
-    subparsers.add_parser("accumulate-shapes")
     subparsers.add_parser("plan")
     subparsers.add_parser("fixtures")
     subparsers.add_parser("link")
@@ -95,10 +51,6 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers.add_parser("verify")
     subparsers.add_parser("catalog")
     subparsers.add_parser("export-llama")
-    route_inventory = subparsers.add_parser("route-inventory")
-    route_inventory.add_argument("--op", default="FLASH_ATTN_EXT")
-    route_inventory.add_argument("--generated-import-dir", type=Path)
-    route_inventory.add_argument("--output", type=Path)
     return parser
 
 
@@ -119,14 +71,8 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     try:
-        if args.command == "accumulate-shapes":
-            return command_accumulate_shapes(args, ledger)
-        if args.command == "route-inventory":
-            return command_route_inventory(args, ledger)
         if args.command == "export-llama":
             return command_export_llama(args, ledger)
-        if args.spec:
-            return command_legacy_spec(args, config, ledger)
         return command_corpus(args, config, ledger)
     except Exception as exc:
         ledger.append(
@@ -140,33 +86,6 @@ def main(argv: list[str] | None = None) -> int:
             }
         )
         raise
-
-
-def command_accumulate_shapes(args: argparse.Namespace, ledger: LedgerWriter) -> int:
-    if not args.shape_trace:
-        raise ValueError("accumulate-shapes requires at least one --shape-trace JSONL file")
-    path = observed_shapes_path(args)
-    catalog = load_observed_shapes(path)
-    observations = read_observations_jsonl(args.shape_trace)
-    before_count = len(catalog.rows)
-    catalog.merge(observations)
-    save_observed_shapes(path, catalog)
-    ledger.append(
-        {
-            "schema": "ggml_hrx_kernel_bench.ledger.v1",
-            "run_id": utc_run_id(),
-            "action": "accumulate-shapes",
-            "status": "ok",
-            "observed_shapes_path": str(path),
-            "trace_paths": [str(path) for path in args.shape_trace],
-            "input_observation_count": len(observations),
-            "row_count_before": before_count,
-            "row_count_after": len(catalog.rows),
-        }
-    )
-    return 0
-
-
 def command_corpus(args: argparse.Namespace, config: BenchConfig, ledger: LedgerWriter) -> int:
     candidates = selected_candidates(args)
     if args.command == "plan":
@@ -203,39 +122,6 @@ def command_corpus(args: argparse.Namespace, config: BenchConfig, ledger: Ledger
         return command_catalog(args, candidates, ledger)
     raise ValueError(f"unsupported command {args.command}")
 
-
-def command_route_inventory(args: argparse.Namespace, ledger: LedgerWriter) -> int:
-    router = create_router(
-        version=args.routing_version,
-        kernel_dir=args.kernel_dir,
-        routing_dir=args.routing_dir,
-    )
-    output_path = args.output or (args.output_dir / "route-inventory.json")
-    payload = route_inventory_payload(
-        op=args.op,
-        generated_import_dir=args.generated_import_dir,
-        routing_dir=router.context.routing_dir,
-        kernel_dir=router.context.kernel_dir,
-        target=args.target,
-        repo_root=Path.cwd(),
-    )
-    write_route_inventory(payload, output_path)
-    ledger.append(
-        {
-            "schema": "ggml_hrx_kernel_bench.ledger.v1",
-            "run_id": utc_run_id(),
-            "action": "route-inventory",
-            "status": "ok",
-            "op": payload["op"],
-            "case_count": payload["case_count"],
-            "selected_route_ids": payload["selected_route_ids"],
-            "output_path": str(output_path),
-        }
-    )
-    print(json.dumps({"output_path": str(output_path), "case_count": payload["case_count"]}))
-    return 0
-
-
 def command_export_llama(args: argparse.Namespace, ledger: LedgerWriter) -> int:
     if args.llama_catalog_dir is None:
         raise ValueError("export-llama requires --llama-catalog-dir")
@@ -248,9 +134,7 @@ def command_export_llama(args: argparse.Namespace, ledger: LedgerWriter) -> int:
         ExportRequest(
             output_dir=args.llama_catalog_dir,
             target_key=args.target,
-            families=filter_set(args.family),
             routing_id=args.llama_catalog_id,
-            sweep=args.sweep,
         )
     )
     ledger.append(
@@ -264,38 +148,12 @@ def command_export_llama(args: argparse.Namespace, ledger: LedgerWriter) -> int:
     )
     return 0
 
-
-def stage_args(args: argparse.Namespace, output_dir: Path, command: str, families: set[str]) -> argparse.Namespace:
-    out = argparse.Namespace(**vars(args))
-    out.output_dir = output_dir
-    out.command = command
-    out.family = [",".join(sorted(families))]
-    output_dir.mkdir(parents=True, exist_ok=True)
-    return out
-
-
-def stage_summary(stage: str, output_dir: Path, rows: list[dict[str, Any]]) -> dict[str, Any]:
-    counts: dict[str, int] = {}
-    for row in rows:
-        status = str(row.get("status", "unknown"))
-        counts[status] = counts.get(status, 0) + 1
-    return {
-        "stage": stage,
-        "output_dir": str(output_dir),
-        "ledger_path": str(output_dir / "ledger.jsonl"),
-        "row_count": len(rows),
-        "status_counts": counts,
-    }
-
-
 def selected_candidates(args: argparse.Namespace) -> list[Candidate]:
     families = filter_set(args.family)
-    observed = load_observed_shapes(observed_shapes_path(args)) if args.sweep == "observed" else None
     router = create_router(
         version=args.routing_version,
         kernel_dir=args.kernel_dir,
         routing_dir=args.routing_dir,
-        observed_shapes=observed,
     )
     return router.candidates(
         CandidateQuery(
@@ -306,16 +164,6 @@ def selected_candidates(args: argparse.Namespace) -> list[Candidate]:
             target=args.target,
         )
     )
-
-
-def observed_shapes_path(args: argparse.Namespace) -> Path:
-    if args.observed_shapes is not None:
-        return args.observed_shapes
-    return create_router(
-        version=args.routing_version,
-        kernel_dir=args.kernel_dir,
-        routing_dir=args.routing_dir,
-    ).context.routing_dir / "observed_shapes.json"
 
 
 def filter_set(values: list[str]) -> set[str] | None:
@@ -331,6 +179,10 @@ def filter_set(values: list[str]) -> set[str] | None:
 def sanitizer_list(args: argparse.Namespace) -> list[str]:
     values = [part.strip() for part in args.sanitizers.split(",") if part.strip()]
     return values or ["none"]
+
+
+def config_args(bindings: dict[str, str]) -> list[str]:
+    return [f"--config={key}={bindings[key]}" for key in sorted(bindings)]
 
 
 def corpus_row(args: argparse.Namespace, candidate: Candidate, *, action: str) -> dict[str, Any]:
@@ -701,121 +553,3 @@ def status_code_from_rows(rows: list[dict[str, Any]]) -> int:
     if any(row.get("status") in hard_failures for row in rows):
         return 2
     return 0
-
-
-def command_legacy_spec(args: argparse.Namespace, config: BenchConfig, ledger: LedgerWriter) -> int:
-    spec = KernelSpec.from_json(args.spec, kernel_source_override=args.kernel_source)
-    values = load_values(args.values)
-    if args.command == "plan":
-        ledger.append(base_spec_row(args, spec, values, config, action="plan"))
-        return 0
-    if args.command == "link":
-        ledger.append(link_spec_row(args, spec, values, config))
-        return 0
-    if args.command == "compile":
-        ledger.append(compile_spec_row(args, spec, values, config))
-        return 0
-    row = base_spec_row(args, spec, values, config, action=args.command)
-    row["status"] = "unsupported_for_spec_mode"
-    row["message"] = f"{args.command} is implemented for routed corpus mode; omit --spec"
-    ledger.append(row)
-    return 2
-
-
-def load_values(path: Path | None) -> dict[str, Any]:
-    if path is None:
-        return {}
-    return json.loads(path.read_text(encoding="utf-8"))
-
-
-def base_spec_row(
-    args: argparse.Namespace,
-    spec: KernelSpec,
-    values: dict[str, Any],
-    config: BenchConfig,
-    *,
-    action: str,
-) -> dict[str, Any]:
-    return {
-        "schema": "ggml_hrx_kernel_bench.ledger.v1",
-        "run_id": utc_run_id(),
-        "action": action,
-        "status": "planned",
-        "spec": {
-            "path": str(args.spec),
-            "sha256": spec_sha256(args.spec),
-            "id": spec.id,
-            "op": spec.op,
-            "root_symbol": spec.root_symbol,
-            "export_name": spec.export_name,
-            "types": spec.types,
-        },
-        "source": {
-            "path": str(spec.source),
-            "sha256": file_sha256(spec.source),
-        },
-        "machine": {
-            "target": config.target,
-            "rocm_path": str(config.rocm_path) if config.rocm_path else None,
-        },
-        "values": values,
-        "config_bindings": spec.config_bindings(values),
-    }
-
-
-def link_spec_row(args: argparse.Namespace, spec: KernelSpec, values: dict[str, Any], config: BenchConfig) -> dict[str, Any]:
-    row = base_spec_row(args, spec, values, config, action="link")
-    output = args.output_dir / f"{spec.id}.linked.loom"
-    result = run_command(
-        [
-            config.tools.require_loom_link(),
-            spec.source,
-            "--mode=link",
-            "--to=text",
-            "--require-resolved-config",
-            f"--root={spec.root_symbol}",
-            f"--output={output}",
-            *config_args(spec.config_bindings(values)),
-        ],
-        env=config.command_env(),
-    )
-    row["link"] = command_evidence(result, args.output_dir, prefix="link")
-    row["link"]["output"] = str(output) if output.exists() else None
-    row["status"] = "linked" if result.returncode == 0 else "link_failed"
-    return row
-
-
-def compile_spec_row(args: argparse.Namespace, spec: KernelSpec, values: dict[str, Any], config: BenchConfig) -> dict[str, Any]:
-    row = base_spec_row(args, spec, values, config, action="compile")
-    report = args.output_dir / f"{spec.id}.compile_report.json"
-    manifest = args.output_dir / f"{spec.id}.artifact_manifest.json"
-    artifact = args.output_dir / f"{spec.id}.artifact.bin"
-    target_artifact = args.output_dir / f"{spec.id}.target.bin"
-    result = run_command(
-        [
-            config.tools.require_loom_compile(),
-            spec.source,
-            "--backend=amdgpu-hal",
-            f"--target={config.target}",
-            f"--root={spec.root_symbol}",
-            f"--output={artifact}",
-            f"--emit-target-artifact={target_artifact}",
-            "--compile-report=details",
-            f"--compile-report-output={report}",
-            "--artifact-manifest=analysis",
-            f"--emit-artifact-manifest={manifest}",
-            *config_args(spec.config_bindings(values)),
-        ],
-        env=config.command_env(),
-    )
-    row["compile"] = command_evidence(result, args.output_dir, prefix="compile")
-    row["compile"].update(
-        {
-            "report": str(report) if report.exists() else None,
-            "manifest": str(manifest) if manifest.exists() else None,
-            "artifact": str(artifact) if artifact.exists() else None,
-            "target_artifact": str(target_artifact) if target_artifact.exists() else None,
-        }
-    )
-    row["status"] = "compiled" if result.returncode == 0 else "compile_failed"
-    return row

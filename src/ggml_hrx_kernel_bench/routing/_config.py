@@ -65,10 +65,8 @@ def build_routing_context(
     version: str,
     kernel_dir: Path | None,
     routing_dir: Path | None,
-    observed_shapes,
 ) -> RoutingContext:
     return RoutingContext(
         kernel_dir=resolve_kernel_dir(version, kernel_dir, routing_dir=routing_dir),
         routing_dir=resolve_routing_dir(version, routing_dir, kernel_dir=kernel_dir),
-        observed_shapes=observed_shapes,
     )

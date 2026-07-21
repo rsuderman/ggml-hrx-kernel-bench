@@ -1,11 +1,9 @@
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
-
-from ..observed_shapes import ObservedShapeCatalog
-from ..specs import file_sha256
 
 
 @dataclass(frozen=True)
@@ -52,11 +50,20 @@ class Candidate:
         }
 
 
+def file_sha256(path: Path) -> str | None:
+    if not path.exists() or not path.is_file():
+        return None
+    digest = hashlib.sha256()
+    with path.open("rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
 @dataclass(frozen=True)
 class RoutingContext:
     kernel_dir: Path
     routing_dir: Path
-    observed_shapes: ObservedShapeCatalog | None = None
 
 
 @dataclass(frozen=True)
@@ -72,9 +79,7 @@ class CandidateQuery:
 class ExportRequest:
     output_dir: Path
     target_key: str
-    families: set[str] | None = None
     routing_id: str | None = None
-    sweep: str = "minimal"
 
 
 @dataclass(frozen=True)

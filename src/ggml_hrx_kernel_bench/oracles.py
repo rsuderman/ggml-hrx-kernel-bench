@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Mapping
 
+from .fixtures import require_numpy
 from .routing.api import Candidate
 
 
@@ -55,14 +56,6 @@ class LogicalOracleSpec:
     tolerance: dict[str, float]
     build: Callable[[Any, Candidate, int], dict[str, Any]]
     exact_kernel_abi: bool = False
-
-
-def require_numpy():
-    try:
-        import numpy as np
-    except ImportError as exc:
-        raise RuntimeError("NumPy is required for fixture and golden generation; install the numpy extra") from exc
-    return np
 
 
 def q4_k_bytes(k: int, rows: int) -> int:

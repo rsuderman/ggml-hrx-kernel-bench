@@ -45,30 +45,6 @@ def _normalize_dtype(value: Any) -> str | None:
     return text.upper()
 
 
-def route_accepts_dtype(route: V2Route, dtype: Mapping[str, Any]) -> bool:
-    if route.op == "GET_ROWS" and "type" in dtype:
-        src_descriptor = route.tensors.get("src0")
-        src_expected = None if src_descriptor is None else src_descriptor.dtype
-        if src_expected is not None and _normalize_dtype(dtype["type"]) != src_expected:
-            return False
-        idx_descriptor = route.tensors.get("src1")
-        idx_expected = None if idx_descriptor is None else idx_descriptor.dtype
-        return "type_idx" not in dtype or idx_expected is None or _normalize_dtype(dtype["type_idx"]) == idx_expected
-    for tensor_name, keys in (
-        ("src0", ("type_src0", "type_src", "type")),
-        ("src1", ("type_src1", "type_idx", "type_src")),
-        ("dst", ("type_dst", "type")),
-    ):
-        descriptor = route.tensors.get(tensor_name)
-        expected = None if descriptor is None else descriptor.dtype
-        if expected is None:
-            continue
-        provided = next((dtype[key] for key in keys if key in dtype), None)
-        if provided is not None and _normalize_dtype(provided) != expected:
-            return False
-    return True
-
-
 def _attribute_values_equal(lhs: Any, rhs: Any) -> bool:
     if isinstance(lhs, tuple) and isinstance(rhs, list | tuple):
         return len(lhs) == len(rhs) and all(
@@ -540,39 +516,6 @@ def shape_from_tensors(tensors: Mapping[str, ConcreteTensor]) -> dict[str, int]:
         for dimension in tensor.dimensions:
             shape.setdefault(dimension.name, int(dimension.size))
     return shape
-
-
-def shape_overrides_from_tensors(tensors: Mapping[str, ConcreteTensor]) -> dict[str, int]:
-    shape = shape_from_tensors(tensors)
-    overrides: dict[str, int] = {}
-    for tensor_name, tensor in tensors.items():
-        sizes = [int(dimension.size) for dimension in tensor.dimensions]
-        default_strides = contiguous_strides(tuple(sizes))
-        for index, dimension in enumerate(tensor.dimensions):
-            base_key = f"{tensor_name}_{dimension.name}"
-            if int(dimension.size) != int(shape[dimension.name]):
-                overrides[base_key] = int(dimension.size)
-            if int(dimension.stride) != int(default_strides[index]):
-                overrides[f"{base_key}_stride"] = int(dimension.stride)
-    return overrides
-
-
-def shape_permutations_for_route(
-    route: V2Route,
-    tensors: Mapping[str, ConcreteTensor],
-) -> dict[str, int]:
-    overrides: dict[str, int] = {}
-    for tensor_name, descriptor in route.tensors.items():
-        if descriptor.permutation_capture is None:
-            continue
-        tensor = tensors.get(tensor_name)
-        if tensor is None or tensor.permutation is None:
-            continue
-        if tensor.permutation == tuple(range(len(tensor.permutation))):
-            continue
-        for index, axis in enumerate(tensor.permutation):
-            overrides[f"{tensor_name}_perm{index}"] = int(axis)
-    return overrides
 
 
 def _constraint_for_capture(
