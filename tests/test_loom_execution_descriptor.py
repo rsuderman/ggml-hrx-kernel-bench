@@ -1277,6 +1277,36 @@ def test_descriptor_from_generated_mul_mat_float_case_uses_kernel_abi(
     assert f"2:output:f32:{expected.size}:{tmp_path / descriptor['bindings'][2]['path']}" in command
 
 
+def test_descriptor_from_generated_tiled_batched_f16_case_uses_resolved_src0_batch_dims(tmp_path: Path) -> None:
+    assets = materialize_asset_root(tmp_path / "assets", force=True)
+    case_values = [16, 1, 3, 4, 256, 16, 2, 256]
+    result = descriptor_from_generated_case(
+        config_data=_generated_mul_mat_config(
+            "mul_mat_f16_f32_tiled_batched",
+            "mul_mat_f16_f32_tiled_batched_4d",
+            ["d0", "d1", "d2", "d3", "src0_d0", "src0_d1", "src0_d3", "src1_d0"],
+            case_values,
+            src0_dtype="f16",
+        ),
+        case_id="mul-mat-tiled-batched-broadcast",
+        case_values=case_values,
+        kernel_dir=assets / "kernels" / "v2",
+        routing_dir=assets / "catalog" / "v2",
+        target="gfx1100",
+        max_elements=65536,
+        oracle_fixture_dir=tmp_path / "oracle-fixtures",
+        descriptor_dir=tmp_path,
+    )
+
+    assert result.status == "emitted", result.reason
+    assert result.descriptor is not None
+    descriptor = result.descriptor
+    assert descriptor["metadata"]["element_counts"]["src0"] == 24576
+    assert descriptor["metadata"]["oracle_array_element_counts"]["src0"] == 24576
+    src0 = np.load(tmp_path / descriptor["bindings"][0]["path"])
+    assert src0.size == 24576
+
+
 @pytest.mark.parametrize(
     ("family", "route_id", "params", "case_values", "src0_dtype", "expected_root"),
     [
