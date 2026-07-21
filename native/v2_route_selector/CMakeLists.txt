@@ -45,7 +45,8 @@ set_source_files_properties(
     HEADER_FILE_ONLY TRUE
 )
 
-find_package(nlohmann_json CONFIG REQUIRED)
+include(GgmlHrxNlohmannJson)
+ggml_hrx_ensure_nlohmann_json()
 
 add_library(
   ggml_hrx_v2_route_query_parser STATIC
