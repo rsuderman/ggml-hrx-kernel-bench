@@ -656,56 +656,6 @@ def _shape_for_matched_route(
     return EncodedRouteShape(items=tuple(encoded.items()))
 
 
-def _route_specificity_score(route: Any, tensors: dict[str, ConcreteTensor]) -> int:
-    dimension_ranks: dict[str, int] = {}
-    for tensor_name, descriptor in route.tensors.items():
-        tensor = tensors.get(tensor_name)
-        if tensor is None:
-            continue
-        dimension_ranks[descriptor.dimensions_capture] = len(tensor.dimensions)
-
-    score = 0
-    has_exact_rank_match = False
-    has_rank_range_match = False
-    for check in route.constraints.checks:
-        if check.length is not None and check.name in dimension_ranks:
-            if dimension_ranks[check.name] == int(check.length):
-                has_exact_rank_match = True
-            continue
-        if (check.rank_min is not None or check.rank_max is not None) and check.name in dimension_ranks:
-            rank = dimension_ranks[check.name]
-            if (check.rank_min is None or rank >= int(check.rank_min)) and (
-                check.rank_max is None or rank <= int(check.rank_max)
-            ):
-                has_rank_range_match = True
-            continue
-        if check.equals:
-            score += 100
-            continue
-        if check.divides:
-            score += 10
-            continue
-        if check.name is not None:
-            score += 1
-    if has_exact_rank_match:
-        score += 500
-    if has_rank_range_match:
-        score += 250
-    score += 25 * len(route.attributes)
-    return score
-
-
-def _select_preferred_routes(
-    routes: list[Any],
-    tensors: dict[str, ConcreteTensor],
-) -> list[Any]:
-    if len(routes) <= 1:
-        return routes
-    scored = [(route, _route_specificity_score(route, tensors)) for route in routes]
-    best_score = max(score for _, score in scored)
-    return [route for route, score in scored if score == best_score]
-
-
 def _match_case(case: YamlCase, routes: list[Any]) -> dict[str, Any]:
     tensors = _query_tensors(case)
     tensor_names = set(tensors)
@@ -720,14 +670,9 @@ def _match_case(case: YamlCase, routes: list[Any]) -> dict[str, Any]:
             continue
         candidate_matches.append(route)
         route_tensors_by_id[route.id] = route_tensors
-    matches = _select_preferred_routes(
-        candidate_matches,
-        route_tensors_by_id[candidate_matches[0].id] if candidate_matches else tensors,
-    )
-    if len(matches) == 1:
+    matches = candidate_matches[:1]
+    if matches:
         status = "matched"
-    elif matches:
-        status = "ambiguous"
     else:
         status = "unmatched"
     return {
