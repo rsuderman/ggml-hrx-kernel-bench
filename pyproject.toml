@@ -20,6 +20,9 @@ dev = ["pytest>=8", "ruff>=0.6"]
 
 [project.scripts]
 ggml-hrx-kernel-bench = "ggml_hrx_kernel_bench.cli:main"
+loom-bench-materialize = "ggml_hrx_kernel_bench.benchmarking.materialize:main"
+loom-bench-collect = "ggml_hrx_kernel_bench.benchmarking.collect:main"
+loom-bench-compare = "ggml_hrx_kernel_bench.benchmarking.compare:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

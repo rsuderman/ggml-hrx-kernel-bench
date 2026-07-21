@@ -381,6 +381,52 @@ def test_yaml_route_import_accepts_numeric_cont_offsets(tmp_path: Path) -> None:
     assert route_matches["rows"][1]["matched_route_ids"] == ["cont_copy_f32_f32_storage_4d"]
 
 
+def test_yaml_route_import_selects_first_matching_route_for_overlaps(tmp_path: Path) -> None:
+    routing_dir = tmp_path / "routing"
+    _write_v2_descriptor(routing_dir)
+
+    yaml_path = tmp_path / "add.v2.yaml"
+    yaml_path.write_text(
+        json.dumps(
+            {
+                "ops": {
+                    "ADD": [
+                        {
+                            "inputs": [
+                                {"dtype": "F32", "shape": [4, 1, 1, 1]},
+                                {"dtype": "F32", "shape": [4, 1, 1, 1]},
+                            ],
+                            "destinations": [{"dtype": "F32", "shape": [4, 1, 1, 1]}],
+                        }
+                    ]
+                }
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    output_dir = tmp_path / "route-import"
+    summary = materialize_yaml_route_import(
+        [yaml_path],
+        output_dir=output_dir,
+        routing_dir=routing_dir,
+    )
+
+    op_summary = next(row for row in summary["operations"] if row["op"] == "ADD")
+    assert op_summary["matched_case_count"] == 1
+    assert op_summary["ambiguous_case_count"] == 0
+    assert op_summary["unmatched_case_count"] == 0
+
+    route_matches = json.loads((output_dir / "ops" / "ADD" / "route-matches.json").read_text())
+    assert route_matches["rows"][0]["candidate_matched_route_ids"] == [
+        "add_f32_contiguous_1d",
+        "add_f32_generic_4d",
+    ]
+    assert route_matches["rows"][0]["matched_route_ids"] == ["add_f32_contiguous_1d"]
+
+
 def test_yaml_route_import_emits_execution_abi_for_add_f32_case(tmp_path: Path) -> None:
     yaml_path = tmp_path / "add.v2.yaml"
     yaml_path.write_text(

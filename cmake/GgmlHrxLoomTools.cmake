@@ -278,12 +278,14 @@ function(ggml_hrx_configure_loom_tools)
     set(_ggml_hrx_stage_tool_targets
       loom_tools_loom-link_loom-link
       loom_tools_loom-compile_loom-compile
+      loom::tools::iree-benchmark-loom
       ${_ggml_hrx_local_run_loom_target}
       ${_ggml_hrx_local_iree_test_loom_target}
     )
     set(_ggml_hrx_staged_tool_paths
       ${GGML_HRX_BUILT_TOOL_DIR}/loom-link${CMAKE_EXECUTABLE_SUFFIX}
       ${GGML_HRX_BUILT_TOOL_DIR}/loom-compile${CMAKE_EXECUTABLE_SUFFIX}
+      ${GGML_HRX_BUILT_TOOL_DIR}/iree-benchmark-loom${CMAKE_EXECUTABLE_SUFFIX}
       ${GGML_HRX_BUILT_TOOL_DIR}/ggml-hrx-run-loom${CMAKE_EXECUTABLE_SUFFIX}
       ${GGML_HRX_BUILT_TOOL_DIR}/iree-test-loom${CMAKE_EXECUTABLE_SUFFIX}
     )
@@ -298,6 +300,9 @@ function(ggml_hrx_configure_loom_tools)
         $<TARGET_FILE:loom_tools_loom-compile_loom-compile>
         ${GGML_HRX_BUILT_TOOL_DIR}/loom-compile${CMAKE_EXECUTABLE_SUFFIX}
       COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        $<TARGET_FILE:loom::tools::iree-benchmark-loom>
+        ${GGML_HRX_BUILT_TOOL_DIR}/iree-benchmark-loom${CMAKE_EXECUTABLE_SUFFIX}
+      COMMAND ${CMAKE_COMMAND} -E copy_if_different
         $<TARGET_FILE:${_ggml_hrx_local_run_loom_target}>
         ${GGML_HRX_BUILT_TOOL_DIR}/ggml-hrx-run-loom${CMAKE_EXECUTABLE_SUFFIX}
       COMMAND ${CMAKE_COMMAND} -E copy_if_different
@@ -307,6 +312,7 @@ function(ggml_hrx_configure_loom_tools)
         ${_ggml_hrx_stage_tool_targets}
         $<TARGET_FILE:loom_tools_loom-link_loom-link>
         $<TARGET_FILE:loom_tools_loom-compile_loom-compile>
+        $<TARGET_FILE:loom::tools::iree-benchmark-loom>
         $<TARGET_FILE:${_ggml_hrx_local_run_loom_target}>
         $<TARGET_FILE:${_ggml_hrx_local_iree_test_loom_target}>
       COMMENT "Staging loom tools in ${GGML_HRX_BUILT_TOOL_DIR}"

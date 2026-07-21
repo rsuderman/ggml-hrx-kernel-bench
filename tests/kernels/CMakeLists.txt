@@ -30,3 +30,62 @@ add_yaml_route_import_descriptor_tests(
   KERNEL_DIR ${GGML_HRX_KERNEL_DIR_V2}
   ${_ggml_hrx_descriptor_hsa_arg}
 )
+
+add_custom_target(
+  kernel-benchmark-llama-cpp-v2-materialize
+  DEPENDS
+    kernel-prepare-llama-cpp-v2-generated
+)
+
+set(GGML_HRX_LLAMA_CPP_KERNEL_BENCHMARK_DIR ${CMAKE_BINARY_DIR}/benchmarks/loom-kernels)
+set(GGML_HRX_LLAMA_CPP_KERNEL_BENCHMARK_INDEX
+  ${GGML_HRX_LLAMA_CPP_KERNEL_BENCHMARK_DIR}/catalog/v2/index.json
+)
+set(GGML_HRX_LLAMA_CPP_KERNEL_BENCHMARK_COMMAND
+  ${Python3_EXECUTABLE}
+  ${CMAKE_SOURCE_DIR}/tests/infra/materialize_loom_benchmarks.py
+  --prepare-root ${CMAKE_CURRENT_BINARY_DIR}/artifacts/kernel-prepare-llama-cpp-v2
+  --repo-root ${CMAKE_SOURCE_DIR}
+  --asset-root ${GGML_HRX_ASSET_ROOT}
+  --output-root ${GGML_HRX_LLAMA_CPP_KERNEL_BENCHMARK_DIR}
+)
+if(GGML_HRX_TOOL_DIR)
+  list(APPEND GGML_HRX_LLAMA_CPP_KERNEL_BENCHMARK_COMMAND
+    --tool-dir ${GGML_HRX_TOOL_DIR}
+  )
+endif()
+
+set(GGML_HRX_LLAMA_CPP_KERNEL_BENCHMARK_DEPENDS
+  kernel-benchmark-llama-cpp-v2-materialize
+  ${CMAKE_SOURCE_DIR}/tests/infra/materialize_loom_benchmarks.py
+  ${CMAKE_SOURCE_DIR}/src/ggml_hrx_kernel_bench/benchmarking/common.py
+  ${CMAKE_SOURCE_DIR}/src/ggml_hrx_kernel_bench/benchmarking/discovery.py
+  ${CMAKE_SOURCE_DIR}/src/ggml_hrx_kernel_bench/benchmarking/materialize.py
+  ${CMAKE_SOURCE_DIR}/src/ggml_hrx_kernel_bench/benchmarking/workbench.py
+)
+if(GGML_HRX_TOOL_BUILD_TARGET)
+  list(APPEND GGML_HRX_LLAMA_CPP_KERNEL_BENCHMARK_DEPENDS
+    ${GGML_HRX_TOOL_BUILD_TARGET}
+  )
+endif()
+
+add_custom_command(
+  OUTPUT ${GGML_HRX_LLAMA_CPP_KERNEL_BENCHMARK_INDEX}
+  COMMAND ${GGML_HRX_LLAMA_CPP_KERNEL_BENCHMARK_COMMAND}
+  DEPENDS
+    ${GGML_HRX_LLAMA_CPP_KERNEL_BENCHMARK_DEPENDS}
+  COMMENT "Generating Loom kernel benchmark scripts"
+  VERBATIM
+)
+
+add_custom_target(
+  kernel-benchmark-llama-cpp-v2-scripts
+  DEPENDS
+    ${GGML_HRX_LLAMA_CPP_KERNEL_BENCHMARK_INDEX}
+)
+
+add_custom_target(
+  kernel-benchmark-llama-cpp-v2
+  DEPENDS
+    kernel-benchmark-llama-cpp-v2-scripts
+)

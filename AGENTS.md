@@ -53,6 +53,37 @@ Use that workflow unless the user explicitly asks for a different process.
   including the worktree path, final coverage delta, validation results, and
   any blocked or intentionally deferred cases.
 
+## Implementation Architecture Policy
+
+Implementation plans must include cleanup and organization as first-class work.
+Do not treat architecture as a follow-up after functionality appears to work.
+
+Hard requirements:
+
+- Before implementing a non-trivial feature or tool, identify the subsystem
+  boundary it belongs to and name the files or modules that should own each
+  responsibility.
+- Do not dump new behavior into a large existing file simply because useful
+  helpers are already there. Reuse helpers through explicit module boundaries,
+  or move those helpers into a focused shared module first.
+- Keep CLI entry points thin. Argument parsing, user-facing command dispatch,
+  and error presentation may live in CLI files; discovery, materialization,
+  generation, execution, aggregation, reporting, and persistence should live in
+  focused implementation modules.
+- If a change adds multiple responsibilities, split them into coherent modules
+  in the same implementation pass unless there is a concrete blocker. Document
+  the blocker if the split cannot be completed.
+- When extending an existing subsystem, remove or simplify obsolete paths made
+  redundant by the new design. Do not leave compatibility shims, duplicate
+  runners, dead helper functions, or parallel command paths unless the user has
+  explicitly asked for a migration window.
+- Tests should reinforce the intended boundaries. Prefer unit tests for focused
+  modules and a smaller number of CLI integration tests over tests that require
+  one monolithic command module to own all behavior.
+- A final implementation report must call out the resulting module ownership
+  and any remaining intentionally deferred cleanup. Missing cleanup is a defect,
+  not a polish item.
+
 ## Kernel Coverage Expansion Goals
 
 - Coverage expansion is for basic functional correctness first, not
