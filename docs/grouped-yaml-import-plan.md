@@ -7,8 +7,11 @@ custom Python mapping registries or op-specific route-resolution code.
 
 ## Current Path
 
-- Entry point: `src/ggml_hrx_kernel_bench/yaml_route_import.py`
-- Build-time checker: `tests/infra/check_yaml_route_import.py`
+- YAML-to-query materializer: `src/ggml_hrx_kernel_bench/yaml_route_import.py`
+- Query-to-config materializer: `src/ggml_hrx_kernel_bench/route_query_config.py`
+- Build-time YAML importer: `tests/infra/import_yaml_route_queries.py`
+- Build-time config generator: `tests/infra/generate_route_configs.py`
+- Compatibility checker: `tests/infra/check_yaml_route_import.py`
 - Descriptor test materializer:
   `tests/infra/generate_loom_descriptor_tests_cmake.py`
 - Descriptor execution runner:
@@ -31,6 +34,14 @@ targets, so building the aggregate YAML route-import target materializes route
 import artifacts, emits compact Loom execution descriptors, and prepares the
 descriptor runner command manifests. HSA execution remains a CTest-only phase
 behind `GGML_HRX_ENABLE_HSA_DESCRIPTOR_TESTS`.
+
+Each import target has two ordered materialization stages. The first parses the
+grouped YAML, retains matched and unmatched reports, and writes matched bare
+`RouteQuery` objects to `route-queries.jsonl` plus
+`route-query-import.json` metadata. The second rereads that JSONL, selects the
+routes again, and generates the compact per-op configs and manifests. The
+Python `materialize_yaml_route_import` API remains as a compatibility facade
+that executes both stages through the same on-disk boundary.
 
 The old generated runtime CTest suites were named with
 `kernel-run-*-yaml-route-import-v2-<OP>-generated`. They have been retired in
@@ -179,6 +190,13 @@ Per-op artifacts are written under:
 `build/tests/kernels/artifacts/grouped-yaml-import/ops/<OP>/`
 
 or the corresponding build output directory for the selected CMake target.
+
+The top-level `route-queries.jsonl` contains one query for every matched YAML
+case, including duplicates. Unmatched and invalid cases are deliberately absent
+from JSONL but remain visible in the existing coverage and route-unmatched
+artifacts. Config generation continues to group by route, ordered parameter
+schema, and ABI-relevant scalar attributes, then deduplicates identical encoded
+case vectors within each group.
 
 Do not reintroduce the old generated `imported-workload.json` /
 `unmapped.json` model. Current status is tracked by the route-import coverage

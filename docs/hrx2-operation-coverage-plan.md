@@ -35,11 +35,12 @@ The active generated artifact roots are currently:
 - `build/tests/kernels/artifacts/llama-cpp-yaml-route-import-v2/`
 - `build/tests/models/artifacts/Llama-3.3-8B-Instruct.Q8_0-route-import-v2/`
 
-As of 2026-07-13, the generated llama.cpp route import reported 805 matched
-cases and 10,392 unmatched cases across 115 operations. The generated model
-route import reported 24 matched cases and 8 unmatched cases across 10
-operations, with the remaining unmatched model surface in `FLASH_ATTN_EXT`,
-`ROPE`, and `SWIGLU`.
+As of 2026-07-21, the generated llama.cpp route import reports 1,098 matched
+cases and 10,099 unmatched cases across 115 operations. The generated model
+route import reports 32 matched cases and zero unmatched cases across 10
+operations. The two-stage importer materializes 268 llama.cpp configs and 17
+model configs from matched `RouteQuery` JSONL while retaining the same coverage
+and diagnostic artifacts.
 
 ## Active Task List
 

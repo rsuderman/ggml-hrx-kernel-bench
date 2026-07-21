@@ -173,6 +173,17 @@ def _validate_generated_configs(output_dir: Path, summary: dict) -> None:
         )
 
 
+def validate_yaml_route_import(
+    output_dir: Path,
+    summary: dict,
+    expected_coverage_path: Path | None = None,
+) -> None:
+    _validate_import_coverage(output_dir, summary)
+    if expected_coverage_path is not None:
+        _validate_expected_import_coverage(output_dir, expected_coverage_path)
+    _validate_generated_configs(output_dir, summary)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Materialize descriptor YAML route import reports.")
     parser.add_argument("output_dir")
@@ -194,9 +205,7 @@ def main() -> int:
         output_dir=output_dir,
         routing_dir=args.routing_dir.resolve(),
     )
-    _validate_import_coverage(output_dir, summary)
-    _validate_expected_import_coverage(output_dir, args.expected_coverage.resolve())
-    _validate_generated_configs(output_dir, summary)
+    validate_yaml_route_import(output_dir, summary, args.expected_coverage.resolve())
     return 0
 
 
