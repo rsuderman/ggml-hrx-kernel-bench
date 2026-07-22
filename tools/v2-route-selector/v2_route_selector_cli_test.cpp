@@ -2,8 +2,10 @@
 
 #include <chrono>
 #include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <sstream>
+#include <streambuf>
 #include <string>
 #include <vector>
 
@@ -13,7 +15,7 @@ using ggml_hrx::v2_route_selector_cli::Run;
 
 constexpr const char *kUsage =
     "Usage: ggml-hrx-v2-route-selector --input <file|-> "
-    "[--expect-route <route-id>]\n";
+    "[--batch] [--expect-route <route-id>]\n";
 constexpr const char *kF32Route = "abs_f32_contiguous_4d";
 constexpr const char *kPermutedCopyRoute =
     "copy_f32_f32_non_contiguous_4d";
@@ -103,6 +105,30 @@ const std::string &ValidQuery() {
     }
   }
 })json";
+  return query;
+}
+
+const std::string &ValidQueryLine() {
+  static const std::string query =
+      R"json({"op":"ABS","tensors":{"src0":{"dtype":"F32","dimensions":[5,7],"strides":[1,5]},"dst":{"dtype":"F32","dimensions":[5,7],"strides":[1,5]}}})json";
+  return query;
+}
+
+const std::string &NoMatchQueryLine() {
+  static const std::string query =
+      R"json({"op":"ABS","tensors":{"src0":{"dtype":"I32","dimensions":[5,7],"strides":[1,5]},"dst":{"dtype":"I32","dimensions":[5,7],"strides":[1,5]}}})json";
+  return query;
+}
+
+const std::string &UnsupportedOperationQueryLine() {
+  static const std::string query =
+      R"json({"op":"DOES_NOT_EXIST","tensors":{}})json";
+  return query;
+}
+
+const std::string &UnsupportedAttributesQueryLine() {
+  static const std::string query =
+      R"json({"op":"ABS","tensors":{},"attributes":{"axis":0}})json";
   return query;
 }
 
@@ -414,6 +440,109 @@ void TestMalformedJson() {
   ExpectResult(result, 2, "", "error: malformed JSON\n", "malformed JSON");
 }
 
+void TestBatchMixedRowsPreservePhysicalLineNumbers() {
+  const std::string input =
+      "\r\n" + ValidQueryLine() + "\r\n \t\r\n" +
+      NoMatchQueryLine() + "\r\n" + UnsupportedOperationQueryLine() +
+      "\r\n" + UnsupportedAttributesQueryLine() +
+      "\r\n{\"op\":\"ABS\"\r\n{\"op\":\"ABS\"}\r\n" +
+      ValidQueryLine();
+
+  const auto result = Invoke({"--input", "-", "--batch"}, input);
+  const std::string expected_output =
+      "{\"line\":2,\"status\":\"MATCH\",\"route_id\":\"abs_f32_contiguous_4d\"}\n"
+      "{\"line\":4,\"status\":\"NO_MATCH\",\"diagnostic\":\"no route matched operation 'ABS'\"}\n"
+      "{\"line\":5,\"status\":\"UNSUPPORTED\",\"diagnostic\":\"operation 'DOES_NOT_EXIST' is not supported\"}\n"
+      "{\"line\":6,\"status\":\"UNSUPPORTED\",\"diagnostic\":\"selector cannot evaluate operation 'ABS'\"}\n"
+      "{\"line\":7,\"status\":\"ERROR\",\"diagnostic\":\"malformed JSON\"}\n"
+      "{\"line\":8,\"status\":\"ERROR\",\"diagnostic\":\"input is missing required field 'tensors'\"}\n"
+      "{\"line\":9,\"status\":\"MATCH\",\"route_id\":\"abs_f32_contiguous_4d\"}\n";
+  ExpectResult(result, 0, expected_output, "",
+               "batch mixed rows and line numbering");
+}
+
+void TestBatchEmptyInput() {
+  const auto empty = Invoke({"--batch", "--input", "-"});
+  ExpectResult(empty, 0, "", "", "batch empty input");
+
+  const auto blank =
+      Invoke({"--input", "-", "--batch"}, "\n\r\n \t\r\n");
+  ExpectResult(blank, 0, "", "", "batch blank-only input");
+}
+
+void TestBatchDoesNotTreatUnicodeWhitespaceAsBlank() {
+  const auto result = Invoke({"--input", "-", "--batch"},
+                             "\xC2\xA0\n" + ValidQueryLine());
+  const std::string expected_output =
+      "{\"line\":1,\"status\":\"ERROR\",\"diagnostic\":\"malformed JSON\"}\n"
+      "{\"line\":2,\"status\":\"MATCH\",\"route_id\":\"abs_f32_contiguous_4d\"}\n";
+  ExpectResult(result, 0, expected_output, "",
+               "batch Unicode whitespace is a malformed row");
+}
+
+void TestBatchFileInput() {
+  const auto suffix =
+      std::chrono::steady_clock::now().time_since_epoch().count();
+  const std::filesystem::path input_path =
+      std::filesystem::temp_directory_path() /
+      ("ggml-hrx-v2-route-selector-batch-" + std::to_string(suffix) +
+       ".jsonl");
+  {
+    std::ofstream input_file(input_path, std::ios::binary);
+    Expect(static_cast<bool>(input_file), "batch file input: create fixture");
+    if (!input_file) {
+      return;
+    }
+    input_file << ValidQueryLine() << "\n\n" << NoMatchQueryLine();
+  }
+
+  const auto result = Invoke({"--input", input_path.string(), "--batch"});
+  const std::string expected_output =
+      "{\"line\":1,\"status\":\"MATCH\",\"route_id\":\"abs_f32_contiguous_4d\"}\n"
+      "{\"line\":3,\"status\":\"NO_MATCH\",\"diagnostic\":\"no route matched operation 'ABS'\"}\n";
+  ExpectResult(result, 0, expected_output, "", "batch file input");
+
+  std::error_code remove_error;
+  std::filesystem::remove(input_path, remove_error);
+  Expect(!remove_error, "batch file input: remove fixture");
+}
+
+class FailingInputBuffer final : public std::streambuf {
+ protected:
+  int_type underflow() override {
+    throw std::ios_base::failure("injected input failure");
+  }
+};
+
+class FailingOutputBuffer final : public std::streambuf {
+ protected:
+  int_type overflow(int_type) override { return traits_type::eof(); }
+};
+
+void TestBatchIoFailuresAreFatal() {
+  FailingInputBuffer input_buffer;
+  std::istream failing_input(&input_buffer);
+  std::ostringstream input_output;
+  std::ostringstream input_error;
+  const int input_exit_code =
+      Run({"--input", "-", "--batch"}, failing_input, input_output,
+          input_error);
+  ExpectResult({input_exit_code, input_output.str(), input_error.str()}, 2, "",
+               "error: failed while reading input\n",
+               "batch input I/O failure");
+
+  std::istringstream valid_input(ValidQueryLine());
+  FailingOutputBuffer output_buffer;
+  std::ostream failing_output(&output_buffer);
+  std::ostringstream output_error;
+  const int output_exit_code =
+      Run({"--input", "-", "--batch"}, valid_input, failing_output,
+          output_error);
+  ExpectResult({output_exit_code, "", output_error.str()}, 2, "",
+               "error: failed while writing output\n",
+               "batch output I/O failure");
+}
+
 struct SchemaErrorCase {
   const char *name;
   const char *json;
@@ -598,6 +727,11 @@ void TestArgumentErrors() {
        {"--input", "-", "--expect-route", kF32Route, "--expect-route",
         kF32Route},
        "error: duplicate option --expect-route\n"},
+      {"duplicate batch", {"--input", "-", "--batch", "--batch"},
+       "error: duplicate option --batch\n"},
+      {"batch with expected route",
+       {"--input", "-", "--batch", "--expect-route", kF32Route},
+       "error: --batch cannot be combined with --expect-route\n"},
       {"unknown option", {"--bogus"},
        "error: unknown option '--bogus'\n"},
       {"help combined with another option", {"--help", "--bogus"},
@@ -623,6 +757,13 @@ void TestUnreadableInputFile() {
                "error: cannot read input file '" + missing_path.string() +
                    "'\n",
                "unreadable input file");
+
+  const auto batch_result =
+      Invoke({"--input", missing_path.string(), "--batch"});
+  ExpectResult(batch_result, 2, "",
+               "error: cannot read input file '" + missing_path.string() +
+                   "'\n",
+               "unreadable batch input file");
 }
 
 }  // namespace
@@ -647,6 +788,11 @@ int main() {
   TestUnsupportedOperation();
   TestSupportedOperationArithmeticOverflow();
   TestMalformedJson();
+  TestBatchMixedRowsPreservePhysicalLineNumbers();
+  TestBatchEmptyInput();
+  TestBatchDoesNotTreatUnicodeWhitespaceAsBlank();
+  TestBatchFileInput();
+  TestBatchIoFailuresAreFatal();
   TestSchemaErrors();
   TestUnequalDimensionsAndStrides();
   TestNonIntegerDimension();
