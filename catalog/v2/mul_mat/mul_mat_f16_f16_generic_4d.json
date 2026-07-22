@@ -120,22 +120,22 @@
     {
       "name": "k",
       "min": 1,
-      "max": 8192
+      "max": 104857600
     },
     {
       "name": "dst_rows",
       "min": 1,
-      "max": 8192
+      "max": 104857600
     },
     {
       "name": "dst_cols",
       "min": 1,
-      "max": 4096
+      "max": 104857600
     },
     {
       "name": "dst_batch_product",
       "min": 1,
-      "max": 16777216
+      "max": 104857600
     },
     {
       "name": "src0_strides",

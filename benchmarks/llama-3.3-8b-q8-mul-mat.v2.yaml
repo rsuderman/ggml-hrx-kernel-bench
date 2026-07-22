@@ -1,0 +1,66 @@
+ops:
+  MUL_MAT:
+    - inputs:
+        - dtype: f16
+          shape: [4096, 1024, 1, 1]
+        - dtype: f16
+          shape: [4096, 1, 1, 1]
+      destinations:
+        - dtype: f32
+          shape: [1024, 1, 1, 1]
+    - inputs:
+        - dtype: f16
+          shape: [4096, 1024, 1, 1]
+        - dtype: f16
+          shape: [4096, 512, 1, 1]
+      destinations:
+        - dtype: f32
+          shape: [1024, 512, 1, 1]
+    - inputs:
+        - dtype: f16
+          shape: [4096, 14336, 1, 1]
+        - dtype: f16
+          shape: [4096, 1, 1, 1]
+      destinations:
+        - dtype: f32
+          shape: [14336, 1, 1, 1]
+    - inputs:
+        - dtype: f16
+          shape: [4096, 14336, 1, 1]
+        - dtype: f16
+          shape: [4096, 512, 1, 1]
+      destinations:
+        - dtype: f32
+          shape: [14336, 512, 1, 1]
+    - inputs:
+        - dtype: f16
+          shape: [14336, 4096, 1, 1]
+        - dtype: f16
+          shape: [14336, 1, 1, 1]
+      destinations:
+        - dtype: f32
+          shape: [4096, 1, 1, 1]
+    - inputs:
+        - dtype: f16
+          shape: [4096, 4096, 1, 1]
+        - dtype: f16
+          shape: [4096, 1, 1, 1]
+      destinations:
+        - dtype: f32
+          shape: [4096, 1, 1, 1]
+    - inputs:
+        - dtype: f16
+          shape: [14336, 4096, 1, 1]
+        - dtype: f16
+          shape: [14336, 512, 1, 1]
+      destinations:
+        - dtype: f32
+          shape: [4096, 512, 1, 1]
+    - inputs:
+        - dtype: f16
+          shape: [4096, 4096, 1, 1]
+        - dtype: f16
+          shape: [4096, 512, 1, 1]
+      destinations:
+        - dtype: f32
+          shape: [4096, 512, 1, 1]

@@ -153,11 +153,15 @@ It preserves every route-local `runs/` directory.
 Build-time command:
 
 ```bash
-cmake --build build --target kernel-benchmark-llama-cpp-v2-scripts
+cmake -S . -B build -DGGML_HRX_ENABLE_BENCHMARKS=ON
+cmake --build build --target kernel-benchmark-llama-3-3-8b-q8-mul-mat-v2-scripts
 ```
 
-That target invokes `tests/infra/materialize_loom_benchmarks.py`, which calls
-`loom-bench-materialize` logic without inline CMake Python snippets.
+That target imports the root `benchmarks/llama-3.3-8b-q8-mul-mat.v2.yaml`
+fixture, prepares descriptors, and invokes
+`tests/infra/materialize_loom_benchmarks.py`, which calls
+`loom-bench-materialize` logic without inline CMake Python snippets. The
+llama.cpp correctness test suite does not materialize benchmark scripts.
 
 Runtime examples:
 
@@ -165,12 +169,12 @@ Materialize a candidate benchmark tree:
 
 ```bash
 loom-bench-materialize \
-  --prepare-root build/tests/kernels/artifacts/kernel-prepare-llama-cpp-v2 \
+  --prepare-root build/benchmarks/artifacts/kernel-prepare-llama-3.3-8b-q8-mul-mat-v2 \
   --repo-root . \
   --asset-root build/generated/assets \
   --op MUL_MAT \
-  --route-id mul_mat_f16_f32_tiled_batched_4d \
-  --kernel-source /tmp/candidates/f16_f32_tiled_batched.loom \
+  --route-id mul_mat_q8_0_f32_contiguous_4d \
+  --kernel-source /tmp/candidates/q8_0_f32_contiguous.loom \
   --output-root /tmp/mul-mat-candidate-tree
 ```
 
@@ -180,13 +184,13 @@ Generated case scripts default to the AMDGPU HAL provider path:
 `--device=amdgpu --measure=dispatch_complete`.
 
 ```bash
-build/benchmarks/loom-kernels/catalog/v2/MUL_MAT/mul_mat_f16_f32_tiled_batched_4d/run.sh \
+build/benchmarks/loom-kernels/catalog/v2/MUL_MAT/mul_mat_q8_0_f32_contiguous_4d/run.sh \
   /tmp/mul-mat-baseline \
   --iterations=100
 ```
 
 ```bash
-/tmp/mul-mat-candidate-tree/catalog/v2/MUL_MAT/mul_mat_f16_f32_tiled_batched_4d/run.sh \
+/tmp/mul-mat-candidate-tree/catalog/v2/MUL_MAT/mul_mat_q8_0_f32_contiguous_4d/run.sh \
   /tmp/mul-mat-candidate \
   --iterations=100
 ```

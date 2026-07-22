@@ -1,0 +1,99 @@
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
+
+set(GGML_HRX_TESTS_ROOT ${CMAKE_SOURCE_DIR}/tests)
+include(GgmlHrxTests)
+
+set(GGML_HRX_BENCHMARK_LLAMA_3_3_8B_Q8_MUL_MAT_YAML
+  ${CMAKE_CURRENT_SOURCE_DIR}/llama-3.3-8b-q8-mul-mat.v2.yaml
+)
+set(GGML_HRX_BENCHMARK_LLAMA_3_3_8B_Q8_MUL_MAT_EXPECTED_COVERAGE
+  ${CMAKE_CURRENT_SOURCE_DIR}/llama-3.3-8b-q8-mul-mat.import-coverage.json
+)
+set(GGML_HRX_BENCHMARK_LLAMA_3_3_8B_Q8_MUL_MAT_IMPORT_DIR
+  ${CMAKE_CURRENT_BINARY_DIR}/artifacts/llama-3.3-8b-q8-mul-mat-route-import-v2
+)
+set(GGML_HRX_BENCHMARK_LLAMA_3_3_8B_Q8_MUL_MAT_PREPARE_DIR
+  ${CMAKE_CURRENT_BINARY_DIR}/artifacts/kernel-prepare-llama-3.3-8b-q8-mul-mat-v2
+)
+set(GGML_HRX_BENCHMARK_LLAMA_3_3_8B_Q8_MUL_MAT_PREPARE_TARGET
+  kernel-prepare-benchmark-llama-3-3-8b-q8-mul-mat-v2-generated
+)
+set(GGML_HRX_KERNEL_DIR_V2 ${GGML_HRX_ASSET_ROOT}/kernels/v2)
+set(GGML_HRX_ROUTING_DIR_V2 ${GGML_HRX_ASSET_ROOT}/catalog/v2)
+
+add_yaml_route_import_target(
+  NAME benchmark-llama-3-3-8b-q8-mul-mat-yaml-route-import-v2
+  YAML_PATHS
+    ${GGML_HRX_BENCHMARK_LLAMA_3_3_8B_Q8_MUL_MAT_YAML}
+  OUTPUT_DIR ${GGML_HRX_BENCHMARK_LLAMA_3_3_8B_Q8_MUL_MAT_IMPORT_DIR}
+  ROUTING_DIR ${GGML_HRX_ROUTING_DIR_V2}
+  EXPECTED_COVERAGE ${GGML_HRX_BENCHMARK_LLAMA_3_3_8B_Q8_MUL_MAT_EXPECTED_COVERAGE}
+  DEPENDS
+    ${GGML_HRX_RUNTIME_ASSET_TARGET}
+    ${GGML_HRX_ACTIVE_ASSET_ROOT_METADATA_PATH}
+  NO_ALL
+)
+
+add_yaml_route_import_descriptor_tests(
+  NAME benchmark-llama-3-3-8b-q8-mul-mat-v2
+  GENERATED_IMPORT_DIR ${GGML_HRX_BENCHMARK_LLAMA_3_3_8B_Q8_MUL_MAT_IMPORT_DIR}
+  GROUPED_YAML ${GGML_HRX_BENCHMARK_LLAMA_3_3_8B_Q8_MUL_MAT_YAML}
+  ROUTING_DIR ${GGML_HRX_ROUTING_DIR_V2}
+  KERNEL_DIR ${GGML_HRX_KERNEL_DIR_V2}
+  MAX_ELEMENTS 1073741824
+  IMPORT_TARGET benchmark-llama-3-3-8b-q8-mul-mat-yaml-route-import-v2
+  PREPARE_OUTPUT_DIR ${GGML_HRX_BENCHMARK_LLAMA_3_3_8B_Q8_MUL_MAT_PREPARE_DIR}
+  PREPARE_TARGET ${GGML_HRX_BENCHMARK_LLAMA_3_3_8B_Q8_MUL_MAT_PREPARE_TARGET}
+)
+
+set(GGML_HRX_BENCHMARK_LLAMA_3_3_8B_Q8_MUL_MAT_OUTPUT_DIR
+  ${CMAKE_BINARY_DIR}/benchmarks/loom-kernels
+)
+set(GGML_HRX_BENCHMARK_LLAMA_3_3_8B_Q8_MUL_MAT_INDEX
+  ${GGML_HRX_BENCHMARK_LLAMA_3_3_8B_Q8_MUL_MAT_OUTPUT_DIR}/catalog/v2/index.json
+)
+set(GGML_HRX_BENCHMARK_LLAMA_3_3_8B_Q8_MUL_MAT_COMMAND
+  ${Python3_EXECUTABLE}
+  ${CMAKE_SOURCE_DIR}/tests/infra/materialize_loom_benchmarks.py
+  --prepare-root ${GGML_HRX_BENCHMARK_LLAMA_3_3_8B_Q8_MUL_MAT_PREPARE_DIR}
+  --repo-root ${CMAKE_SOURCE_DIR}
+  --asset-root ${GGML_HRX_ASSET_ROOT}
+  --output-root ${GGML_HRX_BENCHMARK_LLAMA_3_3_8B_Q8_MUL_MAT_OUTPUT_DIR}
+  --op MUL_MAT
+)
+if(GGML_HRX_TOOL_DIR)
+  list(APPEND GGML_HRX_BENCHMARK_LLAMA_3_3_8B_Q8_MUL_MAT_COMMAND
+    --tool-dir ${GGML_HRX_TOOL_DIR}
+  )
+endif()
+
+set(GGML_HRX_BENCHMARK_LLAMA_3_3_8B_Q8_MUL_MAT_DEPENDS
+  ${GGML_HRX_BENCHMARK_LLAMA_3_3_8B_Q8_MUL_MAT_PREPARE_TARGET}
+  ${GGML_HRX_BENCHMARK_LLAMA_3_3_8B_Q8_MUL_MAT_IMPORT_DIR}/route-import.stamp
+  ${CMAKE_SOURCE_DIR}/tests/infra/materialize_loom_benchmarks.py
+  ${CMAKE_SOURCE_DIR}/src/ggml_hrx_kernel_bench/benchmarking/common.py
+  ${CMAKE_SOURCE_DIR}/src/ggml_hrx_kernel_bench/benchmarking/discovery.py
+  ${CMAKE_SOURCE_DIR}/src/ggml_hrx_kernel_bench/benchmarking/materialize.py
+  ${CMAKE_SOURCE_DIR}/src/ggml_hrx_kernel_bench/benchmarking/workbench.py
+  ${CMAKE_SOURCE_DIR}/src/ggml_hrx_kernel_bench/loom_execution_descriptor.py
+)
+if(GGML_HRX_TOOL_BUILD_TARGET)
+  list(APPEND GGML_HRX_BENCHMARK_LLAMA_3_3_8B_Q8_MUL_MAT_DEPENDS
+    ${GGML_HRX_TOOL_BUILD_TARGET}
+  )
+endif()
+
+add_custom_command(
+  OUTPUT ${GGML_HRX_BENCHMARK_LLAMA_3_3_8B_Q8_MUL_MAT_INDEX}
+  COMMAND ${GGML_HRX_BENCHMARK_LLAMA_3_3_8B_Q8_MUL_MAT_COMMAND}
+  DEPENDS
+    ${GGML_HRX_BENCHMARK_LLAMA_3_3_8B_Q8_MUL_MAT_DEPENDS}
+  COMMENT "Generating Llama 8B MUL_MAT Loom benchmark scripts"
+  VERBATIM
+)
+
+add_custom_target(
+  kernel-benchmark-llama-3-3-8b-q8-mul-mat-v2-scripts
+  DEPENDS
+    ${GGML_HRX_BENCHMARK_LLAMA_3_3_8B_Q8_MUL_MAT_INDEX}
+)

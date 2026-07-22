@@ -1,8 +1,8 @@
-config.decl @shape.mul_mat_f16_f16_contiguous.k : %value: index where [range(%value, 1, 8192)]
-config.decl @shape.mul_mat_f16_f16_contiguous.rows : %value: index where [range(%value, 1, 8192)]
-config.decl @shape.mul_mat_f16_f16_contiguous.cols : %value: index where [range(%value, 1, 4096)]
-config.decl @shape.mul_mat_f16_f16_contiguous.batch2 : %value: index where [range(%value, 1, 4096)]
-config.decl @shape.mul_mat_f16_f16_contiguous.batch3 : %value: index where [range(%value, 1, 4096)]
+config.decl @shape.mul_mat_f16_f16_contiguous.k : %value: index where [range(%value, 1, 104857600)]
+config.decl @shape.mul_mat_f16_f16_contiguous.rows : %value: index where [range(%value, 1, 104857600)]
+config.decl @shape.mul_mat_f16_f16_contiguous.cols : %value: index where [range(%value, 1, 104857600)]
+config.decl @shape.mul_mat_f16_f16_contiguous.batch2 : %value: index where [range(%value, 1, 104857600)]
+config.decl @shape.mul_mat_f16_f16_contiguous.batch3 : %value: index where [range(%value, 1, 104857600)]
 config.decl @tuning.mul_mat_f16_f16_contiguous.workgroup_size : %value: index where [range(%value, 32, 1024), mul(%value, 32)]
 
 kernel.def export("hrx2_mul_mat_f16_f16_contiguous") @hrx2_mul_mat_f16_f16_contiguous() {

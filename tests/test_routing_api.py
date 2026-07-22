@@ -1807,6 +1807,88 @@ def test_yaml_route_import_matches_rank4_contiguous_f16_f16_mul_mat_descriptor(t
     assert [entry["dtype"] for entry in config["execution_abi"]["entries"]] == ["f16", "f16", "f32"]
 
 
+def test_yaml_route_import_matches_rank4_contiguous_f16_f16_large_mul_mat_descriptor(tmp_path: Path) -> None:
+    max_bound = 104857600
+    yaml_path = tmp_path / "mul_mat_f16_f16_large_contiguous.yaml"
+    yaml_path.write_text(
+        json.dumps(
+            {
+                "ops": {
+                    "MUL_MAT": [
+                        {
+                            "inputs": [
+                                {"dtype": "F16", "shape": [4096, 14336, 1, 1]},
+                                {"dtype": "F16", "shape": [4096, 512, 1, 1]},
+                            ],
+                            "destinations": [
+                                {"dtype": "F32", "shape": [14336, 512, 1, 1]},
+                            ],
+                        },
+                        {
+                            "inputs": [
+                                {"dtype": "F16", "shape": [max_bound, 1, 1, 1]},
+                                {"dtype": "F16", "shape": [max_bound, 1, 1, 1]},
+                            ],
+                            "destinations": [
+                                {"dtype": "F32", "shape": [1, 1, 1, 1]},
+                            ],
+                        },
+                        {
+                            "inputs": [
+                                {"dtype": "F16", "shape": [1, max_bound, 1, 1]},
+                                {"dtype": "F16", "shape": [1, 1, 1, 1]},
+                            ],
+                            "destinations": [
+                                {"dtype": "F32", "shape": [max_bound, 1, 1, 1]},
+                            ],
+                        },
+                        {
+                            "inputs": [
+                                {"dtype": "F16", "shape": [1, 1, 1, 1]},
+                                {"dtype": "F16", "shape": [1, max_bound, 1, 1]},
+                            ],
+                            "destinations": [
+                                {"dtype": "F32", "shape": [1, max_bound, 1, 1]},
+                            ],
+                        },
+                    ]
+                }
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    output_dir = tmp_path / "route-import"
+    summary = materialize_yaml_route_import(
+        [yaml_path],
+        output_dir=output_dir,
+        routing_dir=ACTUAL_V2_ROUTING_DIR,
+    )
+
+    op_summary = next(row for row in summary["operations"] if row["op"] == "MUL_MAT")
+    assert op_summary["matched_case_count"] == 4
+    route_matches = json.loads((output_dir / "ops" / "MUL_MAT" / "route-matches.json").read_text())
+    assert [row["matched_route_ids"] for row in route_matches["rows"]] == [
+        ["mul_mat_f16_f16_contiguous_4d"],
+        ["mul_mat_f16_f16_contiguous_4d"],
+        ["mul_mat_f16_f16_contiguous_4d"],
+        ["mul_mat_f16_f16_contiguous_4d"],
+    ]
+    shapes = []
+    for config_path in summary["generated_config_paths"]:
+        config = json.loads(Path(config_path).read_text())
+        assert config["kernel"] == "mul_mat_f16_f16_generic"
+        assert config["route_id"] == "mul_mat_f16_f16_contiguous_4d"
+        shapes.extend(dict(zip(config["params"], case, strict=True)) for case in config["cases"])
+
+    assert any(shape["src0_d1"] == 14336 and shape["d0"] == 14336 for shape in shapes)
+    assert any(shape["src0_d0"] == max_bound for shape in shapes)
+    assert any(shape["d0"] == max_bound for shape in shapes)
+    assert any(shape["d1"] == max_bound for shape in shapes)
+
+
 def test_yaml_route_import_falls_back_to_generic_rank4_f16_f16_broadcast_mul_mat_descriptor(tmp_path: Path) -> None:
     yaml_path = tmp_path / "mul_mat_f16_f16_broadcast.yaml"
     yaml_path.write_text(
@@ -1848,6 +1930,51 @@ def test_yaml_route_import_falls_back_to_generic_rank4_f16_f16_broadcast_mul_mat
     assert config["kernel"] == "mul_mat_f16_f16_generic"
     assert config["route_id"] == "mul_mat_f16_f16_generic_4d"
     assert [entry["dtype"] for entry in config["execution_abi"]["entries"]] == ["f16", "f16", "f32"]
+
+
+def test_yaml_route_import_falls_back_to_generic_rank4_f16_f16_large_broadcast_mul_mat_descriptor(
+    tmp_path: Path,
+) -> None:
+    max_bound = 104857600
+    yaml_path = tmp_path / "mul_mat_f16_f16_large_broadcast.yaml"
+    yaml_path.write_text(
+        json.dumps(
+            {
+                "ops": {
+                    "MUL_MAT": [
+                        {
+                            "inputs": [
+                                {"dtype": "F16", "shape": [max_bound, 1, 1, 1]},
+                                {"dtype": "F16", "shape": [max_bound, 1, 2, 1]},
+                            ],
+                            "destinations": [
+                                {"dtype": "F32", "shape": [1, 1, 2, 1]},
+                            ],
+                        }
+                    ]
+                }
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    output_dir = tmp_path / "route-import"
+    summary = materialize_yaml_route_import(
+        [yaml_path],
+        output_dir=output_dir,
+        routing_dir=ACTUAL_V2_ROUTING_DIR,
+    )
+
+    op_summary = next(row for row in summary["operations"] if row["op"] == "MUL_MAT")
+    assert op_summary["matched_case_count"] == 1
+    route_matches = json.loads((output_dir / "ops" / "MUL_MAT" / "route-matches.json").read_text())
+    assert route_matches["rows"][0]["matched_route_ids"] == ["mul_mat_f16_f16_generic_4d"]
+    config_path = Path(summary["generated_config_paths"][0])
+    config = json.loads(config_path.read_text())
+    assert config["kernel"] == "mul_mat_f16_f16_generic"
+    assert config["route_id"] == "mul_mat_f16_f16_generic_4d"
 
 
 def test_yaml_route_import_matches_unmasked_rank4_soft_max_descriptor(tmp_path: Path) -> None:

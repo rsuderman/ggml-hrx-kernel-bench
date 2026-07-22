@@ -21,6 +21,7 @@ EXPECTED_OPERATION_KEYS = [
 
 def test_expected_import_coverage_fixtures_preserve_canonical_key_order() -> None:
     fixture_paths = [
+        Path("benchmarks/llama-3.3-8b-q8-mul-mat.import-coverage.json"),
         Path("tests/kernels/data/llamacpp.import-coverage.json"),
         Path("tests/models/data/llama-8b-q8.import-coverage.json"),
     ]

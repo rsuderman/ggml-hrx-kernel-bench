@@ -16,7 +16,7 @@ function(add_required_tool_test tool_name)
 endfunction()
 
 function(add_yaml_route_import_target)
-  set(options)
+  set(options NO_ALL)
   set(one_value_args
     NAME
     OUTPUT_DIR
@@ -143,7 +143,12 @@ function(add_yaml_route_import_target)
     COMMENT "Generating descriptor route configs for ${GGML_HRX_YRI_NAME}"
     VERBATIM
   )
-  add_custom_target(${GGML_HRX_YRI_NAME} ALL DEPENDS ${route_import_stamp_path})
+  if(GGML_HRX_YRI_NO_ALL)
+    set(_ggml_hrx_yri_all_arg)
+  else()
+    set(_ggml_hrx_yri_all_arg ALL)
+  endif()
+  add_custom_target(${GGML_HRX_YRI_NAME} ${_ggml_hrx_yri_all_arg} DEPENDS ${route_import_stamp_path})
 
   set(route_selector_check_command
     ${Python3_EXECUTABLE}

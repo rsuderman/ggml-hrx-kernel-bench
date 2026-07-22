@@ -42,6 +42,15 @@ add_subdirectory(native/v2_route_selector)
 add_subdirectory(tools/v2-route-selector)
 add_subdirectory(tools/run-loom-simple)
 
+option(
+  GGML_HRX_ENABLE_BENCHMARKS
+  "Configure Loom benchmark materialization targets"
+  OFF
+)
+if(GGML_HRX_ENABLE_BENCHMARKS)
+  add_subdirectory(benchmarks)
+endif()
+
 if(BUILD_TESTING)
   add_subdirectory(tests)
 endif()
