@@ -147,6 +147,7 @@ COPY_CAST_FAMILIES = {
     "copy_i32_i32",
 }
 MATMUL_FAMILIES = {
+    "mul_mat_f16_f16_scalar_batched",
     "mul_mat_f16_f32_batched",
     "mul_mat_f16_f32_tiled_batched",
     "mul_mat_f32_f32",

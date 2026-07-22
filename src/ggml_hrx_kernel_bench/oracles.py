@@ -1025,10 +1025,22 @@ def _pointwise_src1_values(np: Any, candidate: Candidate, seed: int) -> tuple[An
 
 
 def _matmul_dims(candidate: Candidate) -> tuple[int, int, int]:
-    k = int(candidate.shape.get("k", candidate.shape.get("ncols", candidate.shape.get("cols", 256))))
-    rows = int(candidate.shape.get("rows", candidate.shape.get("nrows", 1)))
-    cols = int(candidate.shape.get("cols", candidate.shape.get("ncols", 1)))
+    k = int(
+        candidate.shape.get(
+            "k",
+            candidate.shape.get("src0_d0", candidate.shape.get("ncols", candidate.shape.get("cols", 256))),
+        )
+    )
+    rows = int(candidate.shape.get("rows", candidate.shape.get("nrows", candidate.shape.get("d0", 1))))
+    cols = int(candidate.shape.get("cols", candidate.shape.get("ncols", candidate.shape.get("d1", 1))))
     return k, rows, cols
+
+
+F16_BATCHED_MUL_MAT_FAMILIES = {
+    "mul_mat_f16_f16_scalar_batched",
+    "mul_mat_f16_f32_batched",
+    "mul_mat_f16_f32_tiled_batched",
+}
 
 
 def _batched_mul_mat_f16_f32_dims(candidate: Candidate) -> tuple[
@@ -1071,7 +1083,7 @@ def _captured_tensor_dims(candidate: Candidate, tensor_name: str) -> tuple[int, 
             if shape_key in candidate.shape:
                 dims.append(int(candidate.shape[shape_key]))
                 continue
-            if tensor_name == "src0" and candidate.family in {"mul_mat_f16_f32_batched", "mul_mat_f16_f32_tiled_batched"} and index >= 2:
+            if tensor_name == "src0" and candidate.family in F16_BATCHED_MUL_MAT_FAMILIES and index >= 2:
                 dims.append(1)
                 continue
             dims.append(anchor_dim)
@@ -2015,7 +2027,11 @@ def _matmul_f32_arrays(np: Any, candidate: Candidate, seed: int) -> dict[str, An
     }
 
 
-def _matmul_f16_f32_arrays(np: Any, candidate: Candidate, seed: int) -> dict[str, Any]:
+def _matmul_f16_rhs_arrays(np: Any, candidate: Candidate, seed: int, *, src1_dtype: str) -> dict[str, Any]:
+    src1_is_f16 = src1_dtype == "f16"
+    src1_pattern = f16_pattern if src1_is_f16 else f32_pattern
+    src1_storage_dtype = np.float16 if src1_is_f16 else np.float32
+
     batched = _batched_mul_mat_f16_f32_dims(candidate)
     if batched is not None:
         (src0_dims, src1_dims, dst_dims, src0_strides, src1_strides, dst_strides) = batched
@@ -2025,7 +2041,7 @@ def _matmul_f16_f32_arrays(np: Any, candidate: Candidate, seed: int) -> dict[str
         src1_len = _buffer_length(src1_dims, src1_strides)
         dst_len = _buffer_length(dst_dims, dst_strides)
         src0 = np.zeros((src0_len,), dtype=np.float16)
-        src1 = np.zeros((src1_len,), dtype=np.float32)
+        src1 = np.zeros((src1_len,), dtype=src1_storage_dtype)
         dst_init = f32_pattern(np, (dst_len,), seed=seed + 2, scale=0.25)
         expected = dst_init.copy()
         lhs_by_slice = {}
@@ -2043,7 +2059,7 @@ def _matmul_f16_f32_arrays(np: Any, candidate: Candidate, seed: int) -> dict[str
                 src0_i2 = i2 // src0_scale2
                 src0_i3 = i3 // src0_scale3
                 lhs = lhs_by_slice[(src0_i2, src0_i3)]
-                rhs = f32_pattern(np, (cols, k), seed=seed + 1 + i2 + dst_dims[2] * i3)
+                rhs = src1_pattern(np, (cols, k), seed=seed + 1 + i2 + dst_dims[2] * i3)
                 dot = np.matmul(lhs.astype(np.float32), rhs.T.astype(np.float32)).T.astype(np.float32)
                 for col in range(cols):
                     src1_col_base = col * src1_strides[1] + i2 * src1_strides[2] + i3 * src1_strides[3]
@@ -2053,7 +2069,7 @@ def _matmul_f16_f32_arrays(np: Any, candidate: Candidate, seed: int) -> dict[str
         return {
             "arrays": {
                 "src0": _f16_bits(np, src0),
-                "src1": src1,
+                "src1": _f16_bits(np, src1) if src1_is_f16 else src1,
                 "dst_init": dst_init,
                 "expected": expected,
             },
@@ -2061,17 +2077,25 @@ def _matmul_f16_f32_arrays(np: Any, candidate: Candidate, seed: int) -> dict[str
         }
     k, rows, cols = _matmul_dims(candidate)
     lhs = f16_pattern(np, (rows, k), seed=seed)
-    rhs = f32_pattern(np, (cols, k), seed=seed + 1)
+    rhs = src1_pattern(np, (cols, k), seed=seed + 1)
     expected = np.matmul(lhs.astype(np.float32), rhs.T.astype(np.float32)).T.astype(np.float32)
     return {
         "arrays": {
             "src0": _f16_bits(np, lhs),
-            "src1": rhs.reshape(cols * k),
+            "src1": _f16_bits(np, rhs.reshape(cols * k)) if src1_is_f16 else rhs.reshape(cols * k),
             "dst_init": f32_pattern(np, (rows * cols,), seed=seed + 2, scale=0.25),
             "expected": expected.reshape(rows * cols),
         },
         "metadata": {"logical_packed_weight_fixture": False},
     }
+
+
+def _matmul_f16_f32_arrays(np: Any, candidate: Candidate, seed: int) -> dict[str, Any]:
+    return _matmul_f16_rhs_arrays(np, candidate, seed, src1_dtype="f32")
+
+
+def _matmul_f16_f16_arrays(np: Any, candidate: Candidate, seed: int) -> dict[str, Any]:
+    return _matmul_f16_rhs_arrays(np, candidate, seed, src1_dtype="f16")
 
 
 def _write_mul_mat_f32_workbench(candidate: Candidate, linked_source: Path, workbench_path: Path, fixture_dir: Path) -> tuple[str, dict[str, Any]]:
@@ -2091,11 +2115,13 @@ def _write_mul_mat_f32_workbench(candidate: Candidate, linked_source: Path, work
     return _emit_case(linked_source, workbench_path, case_name, bench_name, "\n".join(lines))
 
 
-def _write_mul_mat_f16_f32_batched_workbench(
+def _write_mul_mat_f16_rhs_batched_workbench(
     candidate: Candidate,
     linked_source: Path,
     workbench_path: Path,
     fixture_dir: Path,
+    *,
+    src1_dtype: str,
 ) -> tuple[str, dict[str, Any]]:
     batched = _batched_mul_mat_f16_f32_dims(candidate)
     if batched is not None:
@@ -2109,15 +2135,46 @@ def _write_mul_mat_f16_f32_batched_workbench(
         src1_elems = cols * k
         dst_elems = rows * cols
     case_name, bench_name = _case_names(candidate)
+    src1_reader = _read_f16 if src1_dtype == "f16" else _read_f32
     lines = [
         _read_f16(workbench_path, fixture_dir, "src0", src0_elems),
-        _read_f32(workbench_path, fixture_dir, "src1", src1_elems),
+        src1_reader(workbench_path, fixture_dir, "src1", src1_elems),
         _read_f32(workbench_path, fixture_dir, "dst_init", dst_elems).replace("%dst_init", "%dst"),
         _read_f32(workbench_path, fixture_dir, "expected", dst_elems),
-        f"  func.call {candidate.root_symbol}(%src0, %src1, %dst) : (tensor<{src0_elems}xf16>, tensor<{src1_elems}xf32>, tensor<{dst_elems}xf32>)",
+        f"  func.call {candidate.root_symbol}(%src0, %src1, %dst) : (tensor<{src0_elems}xf16>, tensor<{src1_elems}x{src1_dtype}>, tensor<{dst_elems}xf32>)",
         f"  check.expect.close actual(%dst) expected(%expected) atol(0.08) rtol(0.02) nan(same) : tensor<{dst_elems}xf32>",
     ]
     return _emit_case(linked_source, workbench_path, case_name, bench_name, "\n".join(lines))
+
+
+def _write_mul_mat_f16_f32_batched_workbench(
+    candidate: Candidate,
+    linked_source: Path,
+    workbench_path: Path,
+    fixture_dir: Path,
+) -> tuple[str, dict[str, Any]]:
+    return _write_mul_mat_f16_rhs_batched_workbench(
+        candidate,
+        linked_source,
+        workbench_path,
+        fixture_dir,
+        src1_dtype="f32",
+    )
+
+
+def _write_mul_mat_f16_f16_batched_workbench(
+    candidate: Candidate,
+    linked_source: Path,
+    workbench_path: Path,
+    fixture_dir: Path,
+) -> tuple[str, dict[str, Any]]:
+    return _write_mul_mat_f16_rhs_batched_workbench(
+        candidate,
+        linked_source,
+        workbench_path,
+        fixture_dir,
+        src1_dtype="f16",
+    )
 
 
 def _mul_mat_q8_0_arrays(np: Any, candidate: Candidate, seed: int) -> dict[str, Any]:
@@ -3673,6 +3730,11 @@ ORACLE_SPECS: tuple[OracleSpec, ...] = (
         family_ids=("mul_mat_f16_f32_batched", "mul_mat_f16_f32_tiled_batched"),
         generate=_logical_generate(LogicalOracleSpec(("mul_mat_f16_f32_batched", "mul_mat_f16_f32_tiled_batched"), "mul_mat_numpy_logical", {"atol": 0.08, "rtol": 0.02}, _matmul_f16_f32_arrays, exact_kernel_abi=True)),
         write_workbench=_write_mul_mat_f16_f32_batched_workbench,
+    ),
+    OracleSpec(
+        family_ids=("mul_mat_f16_f16_scalar_batched",),
+        generate=_logical_generate(LogicalOracleSpec(("mul_mat_f16_f16_scalar_batched",), "mul_mat_f16_f16_numpy_logical", {"atol": 0.08, "rtol": 0.02}, _matmul_f16_f16_arrays, exact_kernel_abi=True)),
+        write_workbench=_write_mul_mat_f16_f16_batched_workbench,
     ),
     OracleSpec(
         family_ids=("softmax_kqv_f32_f16",),

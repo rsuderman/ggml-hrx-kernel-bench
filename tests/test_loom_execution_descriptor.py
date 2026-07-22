@@ -532,7 +532,7 @@ def _copy_execution_abi(route_id: str, *, src_dtype: str, dst_dtype: str) -> dic
     }
 
 
-def _mul_mat_execution_abi(route_id: str, *, src0_dtype: str) -> dict[str, object]:
+def _mul_mat_execution_abi(route_id: str, *, src0_dtype: str, src1_dtype: str = "f32") -> dict[str, object]:
     return {
         "schema": ROUTE_EXECUTION_ABI_SCHEMA,
         "route_id": route_id,
@@ -548,7 +548,7 @@ def _mul_mat_execution_abi(route_id: str, *, src0_dtype: str) -> dict[str, objec
                 "position": 1,
                 "role": "src1",
                 "kind": "input",
-                "dtype": "f32",
+                "dtype": src1_dtype,
                 "fixture": "src1",
             },
             {
@@ -584,13 +584,14 @@ def _generated_mul_mat_config(
     case_values: list[int],
     *,
     src0_dtype: str,
+    src1_dtype: str = "f32",
 ) -> dict[str, object]:
     return {
         "kernel": family,
         "params": params,
         "cases": [case_values],
         "route_id": route_id,
-        "execution_abi": _mul_mat_execution_abi(route_id, src0_dtype=src0_dtype),
+        "execution_abi": _mul_mat_execution_abi(route_id, src0_dtype=src0_dtype, src1_dtype=src1_dtype),
     }
 
 
@@ -1305,6 +1306,56 @@ def test_descriptor_from_generated_tiled_batched_f16_case_uses_resolved_src0_bat
     assert descriptor["metadata"]["oracle_array_element_counts"]["src0"] == 24576
     src0 = np.load(tmp_path / descriptor["bindings"][0]["path"])
     assert src0.size == 24576
+
+
+def test_descriptor_from_generated_f16_f16_scalar_batched_case_uses_f16_rhs(tmp_path: Path) -> None:
+    assets = materialize_asset_root(tmp_path / "assets", force=True)
+    case_values = [16, 8, 2, 3, 256, 16, 256]
+    result = descriptor_from_generated_case(
+        config_data=_generated_mul_mat_config(
+            "mul_mat_f16_f16_scalar_batched",
+            "mul_mat_f16_f16_scalar_batched_4d",
+            ["d0", "d1", "d2", "d3", "src0_d0", "src0_d1", "src1_d0"],
+            case_values,
+            src0_dtype="f16",
+            src1_dtype="f16",
+        ),
+        case_id="mul-mat-f16-f16-scalar-batched",
+        case_values=case_values,
+        kernel_dir=assets / "kernels" / "v2",
+        routing_dir=assets / "catalog" / "v2",
+        target="gfx1100",
+        max_elements=65536,
+        oracle_fixture_dir=tmp_path / "oracle-fixtures",
+        descriptor_dir=tmp_path,
+    )
+
+    assert result.status == "emitted", result.reason
+    assert result.descriptor is not None
+    descriptor = result.descriptor
+    assert descriptor["root"] == "@hrx2_mul_mat_f16_f16_scalar_batched"
+    assert [binding["dtype"] for binding in descriptor["bindings"]] == ["f16", "f16", "f32"]
+    src0 = np.load(tmp_path / descriptor["bindings"][0]["path"])
+    src1 = np.load(tmp_path / descriptor["bindings"][1]["path"])
+    expected = np.load(tmp_path / descriptor["bindings"][2]["expect"]["path"])
+    assert src0.dtype == np.int16
+    assert src1.dtype == np.int16
+    assert expected.dtype == np.float32
+
+    descriptor_path = _write_descriptor(tmp_path, descriptor)
+    prepared = prepare_execution(
+        descriptor_path=descriptor_path,
+        fixture_dir=tmp_path / "fixtures",
+        output_path=tmp_path / "result.json",
+        runner="runner",
+        loom_link=None,
+        ggml_hrx_run_loom=None,
+        repo_root=tmp_path,
+    )
+    command = prepared.command
+    assert f"0:input:f16:{src0.size}:{tmp_path / descriptor['bindings'][0]['path']}" in command
+    assert f"1:input:f16:{src1.size}:{tmp_path / descriptor['bindings'][1]['path']}" in command
+    assert f"2:output:f32:{expected.size}:{tmp_path / descriptor['bindings'][2]['path']}" in command
 
 
 @pytest.mark.parametrize(
