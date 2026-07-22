@@ -59,6 +59,7 @@ endif()
 
 set(GGML_HRX_LLAMA_CPP_KERNEL_BENCHMARK_DEPENDS
   kernel-benchmark-llama-cpp-v2-materialize
+  ${GGML_HRX_LLAMA_CPP_YAML_ROUTE_IMPORT_DIR_V2}/route-import.stamp
   ${CMAKE_SOURCE_DIR}/tests/infra/materialize_loom_benchmarks.py
   ${CMAKE_SOURCE_DIR}/src/ggml_hrx_kernel_bench/benchmarking/common.py
   ${CMAKE_SOURCE_DIR}/src/ggml_hrx_kernel_bench/benchmarking/discovery.py

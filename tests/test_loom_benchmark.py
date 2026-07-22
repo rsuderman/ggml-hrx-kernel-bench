@@ -529,6 +529,9 @@ def test_generate_scripts_materializes_catalog_tree(tmp_path: Path, monkeypatch)
     assert "while [[ $# -gt 0 ]]" not in case_script
     assert "while [[ $# -gt 0 ]]" not in route_script
     assert "while [[ $# -gt 0 ]]" not in collect_script
+    assert "ggml_hrx_kernel_bench.benchmarking.collect" in collect_script
+    assert "PYTHONPATH=\"$REPO_ROOT/src:$PYTHONPATH\"" in collect_script
+    assert "loom-bench-collect" not in collect_script
     assert "--kernel-source" not in case_script
     assert "--kernel-source" not in route_script
     assert "prepare_case" not in case_script

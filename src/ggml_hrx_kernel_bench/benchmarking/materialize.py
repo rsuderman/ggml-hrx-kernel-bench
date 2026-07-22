@@ -34,6 +34,10 @@ def _script_literal(value: str | Path) -> str:
     return shlex.quote(str(value))
 
 
+def _script_array_literal(values: Sequence[str | Path]) -> str:
+    return "\n".join(f"  {_script_literal(value)}" for value in values)
+
+
 def _case_script_text(
     *,
     benchmark_runner: str,
@@ -107,12 +111,15 @@ exit "$STATUS"
 """
 
 
-def _route_collect_script_text(*, collect_tool: str) -> str:
+def _route_collect_script_text(*, collect_command: Sequence[str | Path], repo_root: Path) -> str:
     return f"""#!/usr/bin/env bash
 set -uo pipefail
 
 ROUTE_DIR="$(cd "$(dirname "${{BASH_SOURCE[0]}}")" && pwd)"
-COLLECT_TOOL={_script_literal(collect_tool)}
+REPO_ROOT={_script_literal(repo_root)}
+COLLECT_COMMAND=(
+{_script_array_literal(collect_command)}
+)
 
 RUN_DIR="${{1:-}}"
 
@@ -121,7 +128,13 @@ if [[ -z "$RUN_DIR" ]]; then
   exit 2
 fi
 
-"$COLLECT_TOOL" \\
+if [[ -n "${{PYTHONPATH:-}}" ]]; then
+  export PYTHONPATH="$REPO_ROOT/src:$PYTHONPATH"
+else
+  export PYTHONPATH="$REPO_ROOT/src"
+fi
+
+"${{COLLECT_COMMAND[@]}}" \\
   --manifest "$ROUTE_DIR/manifest.json" \\
   --run-dir "$RUN_DIR" \\
   --output "$RUN_DIR/summary.json" \\
@@ -312,7 +325,12 @@ def command_generate_scripts(args: argparse.Namespace) -> int:
     benchmark_device = getattr(args, "benchmark_device", None) or "amdgpu"
     benchmark_measure = getattr(args, "benchmark_measure", None) or "dispatch_complete"
     loom_link = args.loom_link or require_tool("loom-link", tool_dir=args.tool_dir)
-    collect_tool = getattr(args, "collect_tool", None) or "loom-bench-collect"
+    collect_tool = getattr(args, "collect_tool", None)
+    collect_command: Sequence[str | Path]
+    if collect_tool:
+        collect_command = shlex.split(collect_tool)
+    else:
+        collect_command = (sys.executable, "-m", "ggml_hrx_kernel_bench.benchmarking.collect")
     kernel_source_override = args.kernel_source.resolve() if args.kernel_source else None
 
     _clean_generated_catalog(catalog_root)
@@ -373,7 +391,7 @@ def command_generate_scripts(args: argparse.Namespace) -> int:
         )
         _write_executable_script(
             route_dir / "collect.sh",
-            _route_collect_script_text(collect_tool=collect_tool),
+            _route_collect_script_text(collect_command=collect_command, repo_root=repo_root),
         )
         generated_routes.append(
             {
