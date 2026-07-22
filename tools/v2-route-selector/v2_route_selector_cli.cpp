@@ -12,6 +12,8 @@
 #include <variant>
 #include <vector>
 
+#include <nlohmann/json.hpp>
+
 namespace ggml_hrx::v2_route_selector_cli {
 namespace {
 
@@ -20,11 +22,12 @@ namespace query_parser = ggml_hrx::routing::v2::query_parser;
 
 constexpr std::string_view kUsage =
     "Usage: ggml-hrx-v2-route-selector --input <file|-> "
-    "[--expect-route <route-id>]\n";
+    "[--batch] [--expect-route <route-id>]\n";
 
 struct Arguments {
   std::string input_path;
   std::optional<std::string> expected_route;
+  bool batch = false;
 };
 
 struct ArgumentParseResult {
@@ -53,6 +56,7 @@ ArgumentParseResult ParseArguments(const std::vector<std::string> &args) {
   Arguments parsed;
   bool has_input = false;
   bool has_expected_route = false;
+  bool has_batch = false;
   for (std::size_t index = 0; index < args.size(); ++index) {
     const std::string &argument = args[index];
     if (argument == "--input") {
@@ -85,6 +89,16 @@ ArgumentParseResult ParseArguments(const std::vector<std::string> &args) {
       has_expected_route = true;
       continue;
     }
+    if (argument == "--batch") {
+      if (has_batch) {
+        ArgumentParseResult result;
+        result.error = "duplicate option --batch";
+        return result;
+      }
+      parsed.batch = true;
+      has_batch = true;
+      continue;
+    }
     ArgumentParseResult result;
     result.error = "unknown option '" + argument + "'";
     return result;
@@ -95,43 +109,63 @@ ArgumentParseResult ParseArguments(const std::vector<std::string> &args) {
     result.error = "missing required --input";
     return result;
   }
+  if (parsed.batch && parsed.expected_route.has_value()) {
+    ArgumentParseResult result;
+    result.error = "--batch cannot be combined with --expect-route";
+    return result;
+  }
   ArgumentParseResult result;
   result.arguments = std::move(parsed);
   return result;
 }
 
-int SelectRoute(const std::string &operation, const selector::Query &query,
-                const std::optional<std::string> &expected_route,
-                std::ostream &output_stream, std::ostream &error_stream) {
+struct SelectionOutcome {
+  selector::SelectionStatus status = selector::SelectionStatus::no_match;
+  std::string route_id;
+  std::string diagnostic;
+};
+
+SelectionOutcome EvaluateRoute(const std::string &operation,
+                               const selector::Query &query) {
   if (selector::supported_route_ids(operation).empty()) {
-    return ReportError(error_stream, 1,
-                       "UNSUPPORTED: operation '" + operation +
-                           "' is not supported");
+    return {selector::SelectionStatus::unsupported, {},
+            "operation '" + operation + "' is not supported"};
   }
 
   const selector::Selection selection = selector::select(operation, query);
   if (selection.status == selector::SelectionStatus::no_match) {
-    return ReportError(error_stream, 1,
-                       "NO_MATCH: no route matched operation '" + operation +
-                           "'");
+    return {selection.status, {},
+            "no route matched operation '" + operation + "'"};
   }
   if (selection.status == selector::SelectionStatus::unsupported) {
-    return ReportError(error_stream, 1,
-                       "UNSUPPORTED: selector cannot evaluate operation '" +
-                           operation + "'");
+    return {selection.status, {},
+            "selector cannot evaluate operation '" + operation + "'"};
   }
-  if (expected_route.has_value() && selection.route_id != *expected_route) {
+  return {selection.status, selection.route_id, {}};
+}
+
+int SelectRoute(const std::string &operation, const selector::Query &query,
+                const std::optional<std::string> &expected_route,
+                std::ostream &output_stream, std::ostream &error_stream) {
+  const SelectionOutcome outcome = EvaluateRoute(operation, query);
+  if (outcome.status != selector::SelectionStatus::match) {
+    return ReportError(error_stream, 1,
+                       std::string(selector::status_name(outcome.status)) +
+                           ": " + outcome.diagnostic);
+  }
+  if (expected_route.has_value() && outcome.route_id != *expected_route) {
     return ReportError(error_stream, 1,
                        "expected route '" + *expected_route +
-                           "' but selected '" + selection.route_id + "'");
+                           "' but selected '" + outcome.route_id + "'");
   }
 
-  output_stream << selection.route_id << '\n';
+  output_stream << outcome.route_id << '\n';
   return 0;
 }
 
-int RunWithInput(const Arguments &arguments, std::istream &input_stream,
-                 std::ostream &output_stream, std::ostream &error_stream) {
+int RunSingleWithInput(const Arguments &arguments, std::istream &input_stream,
+                       std::ostream &output_stream,
+                       std::ostream &error_stream) {
   query_parser::ParseResult parsed = query_parser::parse(input_stream);
   if (const auto *error = std::get_if<query_parser::ParseError>(&parsed)) {
     return ReportError(error_stream, 2, error->diagnostic);
@@ -140,6 +174,85 @@ int RunWithInput(const Arguments &arguments, std::istream &input_stream,
   auto &query = std::get<query_parser::ParsedQuery>(parsed);
   return SelectRoute(query.op, query.query, arguments.expected_route,
                      output_stream, error_stream);
+}
+
+bool IsBlankLine(std::string_view line) {
+  return std::all_of(line.begin(), line.end(), [](const char ch) {
+    return ch == ' ' || ch == '\t' || ch == '\r' || ch == '\n' ||
+           ch == '\v' || ch == '\f';
+  });
+}
+
+std::string JsonString(std::string_view value) {
+  return nlohmann::json(std::string(value)).dump();
+}
+
+bool WriteBatchMatch(std::size_t line_number, std::string_view route_id,
+                     std::ostream &output_stream) {
+  output_stream << "{\"line\":" << line_number
+                << ",\"status\":\"MATCH\",\"route_id\":"
+                << JsonString(route_id) << "}\n";
+  return static_cast<bool>(output_stream);
+}
+
+bool WriteBatchFailure(std::size_t line_number, std::string_view status,
+                       std::string_view diagnostic,
+                       std::ostream &output_stream) {
+  output_stream << "{\"line\":" << line_number
+                << ",\"status\":" << JsonString(status)
+                << ",\"diagnostic\":" << JsonString(diagnostic) << "}\n";
+  return static_cast<bool>(output_stream);
+}
+
+int RunBatchWithInput(std::istream &input_stream, std::ostream &output_stream,
+                      std::ostream &error_stream) {
+  std::size_t line_number = 0;
+  std::string line;
+  while (std::getline(input_stream, line)) {
+    ++line_number;
+    if (IsBlankLine(line)) {
+      continue;
+    }
+
+    query_parser::ParseResult parsed = query_parser::parse(line);
+    if (const auto *error = std::get_if<query_parser::ParseError>(&parsed)) {
+      if (!WriteBatchFailure(line_number, "ERROR", error->diagnostic,
+                             output_stream)) {
+        return ReportError(error_stream, 2, "failed while writing output");
+      }
+      continue;
+    }
+
+    const auto &query = std::get<query_parser::ParsedQuery>(parsed);
+    const SelectionOutcome outcome = EvaluateRoute(query.op, query.query);
+    const bool write_succeeded =
+        outcome.status == selector::SelectionStatus::match
+            ? WriteBatchMatch(line_number, outcome.route_id, output_stream)
+            : WriteBatchFailure(line_number,
+                                selector::status_name(outcome.status),
+                                outcome.diagnostic, output_stream);
+    if (!write_succeeded) {
+      return ReportError(error_stream, 2, "failed while writing output");
+    }
+  }
+
+  if (input_stream.bad() || (input_stream.fail() && !input_stream.eof())) {
+    return ReportError(error_stream, 2, "failed while reading input");
+  }
+  output_stream.flush();
+  if (!output_stream) {
+    return ReportError(error_stream, 2, "failed while writing output");
+  }
+  return 0;
+}
+
+int RunWithInput(const Arguments &arguments, std::istream &input_stream,
+                 std::ostream &output_stream, std::ostream &error_stream) {
+  if (arguments.batch) {
+    return RunBatchWithInput(input_stream, output_stream, error_stream);
+  }
+  return RunSingleWithInput(arguments, input_stream, output_stream,
+                            error_stream);
 }
 
 } // namespace

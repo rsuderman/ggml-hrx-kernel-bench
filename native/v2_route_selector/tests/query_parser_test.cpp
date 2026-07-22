@@ -23,6 +23,10 @@ void Expect(bool condition, const std::string& message) {
 }
 
 parser::ParseResult Parse(const std::string& input) {
+  return parser::parse(std::string_view(input));
+}
+
+parser::ParseResult ParseStream(const std::string& input) {
   std::istringstream stream(input);
   return parser::parse(stream);
 }
@@ -209,6 +213,30 @@ void TestStructuredErrors() {
       "input contains unknown field 'unexpected'", "unknown root field");
 }
 
+void TestStreamParsingRemainsCompatible() {
+  const std::string valid =
+      R"json({"op":"ABS","tensors":{},"allowed_route_ids":[]})json";
+  const auto text_result = Parse(valid);
+  const auto stream_result = ParseStream(valid);
+  const auto* text_query = ExpectParsed(text_result, "text overload");
+  const auto* stream_query = ExpectParsed(stream_result, "stream overload");
+  if (text_query != nullptr && stream_query != nullptr) {
+    Expect(stream_query->op == text_query->op,
+           "stream overload operation matches text overload");
+    Expect(stream_query->query.allowed_route_ids ==
+               text_query->query.allowed_route_ids,
+           "stream overload allowlist matches text overload");
+  }
+
+  const auto malformed_stream = ParseStream(R"json({"op":"ABS")json");
+  ExpectError(malformed_stream, parser::ParseErrorKind::malformed_json,
+              "malformed JSON", "stream malformed JSON compatibility");
+
+  const auto schema_stream = ParseStream(R"json([])json");
+  ExpectError(schema_stream, parser::ParseErrorKind::schema,
+              "input must be an object", "stream schema compatibility");
+}
+
 }  // namespace
 
 int main() {
@@ -217,6 +245,7 @@ int main() {
   TestEmptyAttributesRemainEmpty();
   TestLargeLexicalFloatsRemainFloatingPoint();
   TestStructuredErrors();
+  TestStreamParsingRemainsCompatible();
 
   if (g_failures != 0) {
     std::cerr << g_failures << " test failure(s)\n";

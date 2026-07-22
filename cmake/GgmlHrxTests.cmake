@@ -135,6 +135,25 @@ function(add_yaml_route_import_target)
     VERBATIM
   )
   add_custom_target(${GGML_HRX_YRI_NAME} ALL DEPENDS ${route_import_stamp_path})
+
+  add_test(
+    NAME ${GGML_HRX_YRI_NAME}-route-selector-parity
+    COMMAND
+      ${Python3_EXECUTABLE}
+      ${GGML_HRX_TESTS_ROOT}/infra/check_route_selector_parity.py
+      --route-queries ${route_queries_path}
+      --routing-dir ${GGML_HRX_YRI_ROUTING_DIR}
+      --python-selector ${CMAKE_SOURCE_DIR}/tools/v2-route-selector/python_v2_route_selector.py
+      --native-selector $<TARGET_FILE:ggml-hrx-v2-route-selector>
+  )
+  set_tests_properties(
+    ${GGML_HRX_YRI_NAME}-route-selector-parity
+    PROPERTIES
+      LABELS "routing;parity"
+      # Keep this in sync with PARITY_MISMATCH_SKIP_RETURN_CODE in the checker.
+      SKIP_RETURN_CODE 77
+      TIMEOUT 60
+  )
 endfunction()
 
 function(add_yaml_route_import_descriptor_tests)

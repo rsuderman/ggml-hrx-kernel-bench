@@ -273,11 +273,10 @@ ParsedQuery ParseQuery(const Json& input) {
 
 }  // namespace
 
-ParseResult parse(std::istream& input) {
-  const std::string input_text(std::istreambuf_iterator<char>(input), {});
+ParseResult parse(std::string_view input) {
   Json document;
   try {
-    document = Json::parse(input_text);
+    document = Json::parse(input.begin(), input.end());
   } catch (const Json::out_of_range&) {
     return ParseError{ParseErrorKind::number_out_of_range,
                       "input contains a number outside the supported range"};
@@ -286,7 +285,7 @@ ParseResult parse(std::istream& input) {
   }
 
   LexicalIntegerRangeSax lexical_number_validator;
-  Json::sax_parse(input_text, &lexical_number_validator);
+  Json::sax_parse(input.begin(), input.end(), &lexical_number_validator);
   if (lexical_number_validator.integer_out_of_range) {
     return ParseError{
         ParseErrorKind::schema,
@@ -301,6 +300,11 @@ ParseResult parse(std::istream& input) {
     return ParseError{ParseErrorKind::number_out_of_range,
                       "input contains a number outside the supported range"};
   }
+}
+
+ParseResult parse(std::istream& input) {
+  const std::string input_text(std::istreambuf_iterator<char>(input), {});
+  return parse(input_text);
 }
 
 }  // namespace ggml_hrx::routing::v2::query_parser

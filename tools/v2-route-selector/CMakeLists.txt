@@ -13,6 +13,7 @@ target_link_libraries(ggml_hrx_v2_route_selector_cli_lib
   PRIVATE
     ggml_hrx_v2_route_query_parser
     ggml_hrx_v2_route_selector_core
+    nlohmann_json::nlohmann_json
 )
 
 add_executable(ggml-hrx-v2-route-selector
