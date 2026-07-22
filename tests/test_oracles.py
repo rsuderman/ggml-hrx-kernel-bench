@@ -1086,9 +1086,9 @@ def test_mul_mat_f16_f32_batched_4d_oracle_and_workbench_use_kernel_abi_buffers(
     assert "check.expect.close" in workbench
 
 
-def test_mul_mat_f16_f16_scalar_batched_oracle_and_workbench_use_f16_rhs(tmp_path: Path) -> None:
+def test_mul_mat_f16_f16_generic_oracle_and_workbench_use_f16_rhs(tmp_path: Path) -> None:
     candidate = _candidate(
-        candidate_id="mul_mat_f16_f16_scalar_batched_4d",
+        candidate_id="mul_mat_f16_f16_generic_4d",
         shape={
             "d0": 16,
             "d1": 8,
@@ -1101,12 +1101,12 @@ def test_mul_mat_f16_f16_scalar_batched_oracle_and_workbench_use_f16_rhs(tmp_pat
             "rows": 16,
             "cols": 8,
         },
-        family="mul_mat_f16_f16_scalar_batched",
-        source_id="mul_mat_f16_f16_scalar_batched",
-        root_symbol="@hrx2_mul_mat_f16_f16_scalar_batched",
-        export_name="hrx2_mul_mat_f16_f16_scalar_batched",
+        family="mul_mat_f16_f16_generic",
+        source_id="mul_mat_f16_f16_generic",
+        root_symbol="@hrx2_mul_mat_f16_f16_generic",
+        export_name="hrx2_mul_mat_f16_f16_generic",
         op="MUL_MAT",
-        source_path="kernels/v2/mul_mat/f16_f16_scalar_batched.loom",
+        source_path="kernels/v2/mul_mat/f16_f16_generic.loom",
     )
 
     result = generate_oracle(candidate, tmp_path / "fixtures", force=True)
@@ -1121,7 +1121,7 @@ def test_mul_mat_f16_f16_scalar_batched_oracle_and_workbench_use_f16_rhs(tmp_pat
 
     linked_source = tmp_path / "linked.loom"
     linked_source.write_text(
-        'kernel.def export("hrx2_mul_mat_f16_f16_scalar_batched") @hrx2_mul_mat_f16_f16_scalar_batched() {}\n',
+        'kernel.def export("hrx2_mul_mat_f16_f16_generic") @hrx2_mul_mat_f16_f16_generic() {}\n',
         encoding="utf-8",
     )
     _, metadata = write_workbench(candidate, linked_source, tmp_path / "workbench.loom", tmp_path / "fixtures")
@@ -1132,9 +1132,55 @@ def test_mul_mat_f16_f16_scalar_batched_oracle_and_workbench_use_f16_rhs(tmp_pat
     assert "check.expect.close" in workbench
 
 
-def test_mul_mat_f16_f16_scalar_batched_oracle_infers_rank4_no_batch_dims(tmp_path: Path) -> None:
+def test_mul_mat_f16_f16_contiguous_oracle_uses_full_src0_batch(tmp_path: Path) -> None:
     candidate = _candidate(
-        candidate_id="mul_mat_f16_f16_scalar_batched_4d",
+        candidate_id="mul_mat_f16_f16_contiguous_4d",
+        shape={
+            "d0": 16,
+            "d1": 8,
+            "d2": 2,
+            "d3": 3,
+            "src0_d0": 256,
+            "src0_d1": 16,
+            "src1_d0": 256,
+            "k": 256,
+            "rows": 16,
+            "cols": 8,
+        },
+        family="mul_mat_f16_f16_generic",
+        source_id="mul_mat_f16_f16_contiguous",
+        root_symbol="@hrx2_mul_mat_f16_f16_contiguous",
+        export_name="hrx2_mul_mat_f16_f16_contiguous",
+        op="MUL_MAT",
+        source_path="kernels/v2/mul_mat/f16_f16_contiguous.loom",
+    )
+
+    result = generate_oracle(candidate, tmp_path / "fixtures", force=True)
+
+    assert result.status == "fixtures_ready"
+    assert np.load(tmp_path / "fixtures" / "src0.npy").dtype == np.int16
+    assert np.load(tmp_path / "fixtures" / "src0.npy").shape == (24576,)
+    assert np.load(tmp_path / "fixtures" / "src1.npy").dtype == np.int16
+    assert np.load(tmp_path / "fixtures" / "src1.npy").shape == (12288,)
+    assert np.load(tmp_path / "fixtures" / "dst_init.npy").shape == (768,)
+    assert np.load(tmp_path / "fixtures" / "expected.npy").dtype == np.float32
+
+    linked_source = tmp_path / "linked.loom"
+    linked_source.write_text(
+        'kernel.def export("hrx2_mul_mat_f16_f16_contiguous") @hrx2_mul_mat_f16_f16_contiguous() {}\n',
+        encoding="utf-8",
+    )
+    _, metadata = write_workbench(candidate, linked_source, tmp_path / "workbench.loom", tmp_path / "fixtures")
+
+    assert metadata["status"] == "ok"
+    workbench = (tmp_path / "workbench.loom").read_text(encoding="utf-8")
+    assert "tensor<24576xf16>, tensor<12288xf16>, tensor<768xf32>" in workbench
+    assert "check.expect.close" in workbench
+
+
+def test_mul_mat_f16_f16_generic_oracle_infers_rank4_no_batch_dims(tmp_path: Path) -> None:
+    candidate = _candidate(
+        candidate_id="mul_mat_f16_f16_generic_4d",
         shape={
             "d0": 16,
             "d1": 16,
@@ -1143,12 +1189,12 @@ def test_mul_mat_f16_f16_scalar_batched_oracle_infers_rank4_no_batch_dims(tmp_pa
             "src0_d0": 4,
             "src1_d0": 4,
         },
-        family="mul_mat_f16_f16_scalar_batched",
-        source_id="mul_mat_f16_f16_scalar_batched",
-        root_symbol="@hrx2_mul_mat_f16_f16_scalar_batched",
-        export_name="hrx2_mul_mat_f16_f16_scalar_batched",
+        family="mul_mat_f16_f16_generic",
+        source_id="mul_mat_f16_f16_generic",
+        root_symbol="@hrx2_mul_mat_f16_f16_generic",
+        export_name="hrx2_mul_mat_f16_f16_generic",
         op="MUL_MAT",
-        source_path="kernels/v2/mul_mat/f16_f16_scalar_batched.loom",
+        source_path="kernels/v2/mul_mat/f16_f16_generic.loom",
     )
 
     result = generate_oracle(candidate, tmp_path / "fixtures", force=True)

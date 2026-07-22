@@ -1308,19 +1308,19 @@ def test_descriptor_from_generated_tiled_batched_f16_case_uses_resolved_src0_bat
     assert src0.size == 24576
 
 
-def test_descriptor_from_generated_f16_f16_scalar_batched_case_uses_f16_rhs(tmp_path: Path) -> None:
+def test_descriptor_from_generated_f16_f16_generic_case_uses_f16_rhs(tmp_path: Path) -> None:
     assets = materialize_asset_root(tmp_path / "assets", force=True)
     case_values = [16, 8, 2, 3, 256, 16, 256]
     result = descriptor_from_generated_case(
         config_data=_generated_mul_mat_config(
-            "mul_mat_f16_f16_scalar_batched",
-            "mul_mat_f16_f16_scalar_batched_4d",
+            "mul_mat_f16_f16_generic",
+            "mul_mat_f16_f16_generic_4d",
             ["d0", "d1", "d2", "d3", "src0_d0", "src0_d1", "src1_d0"],
             case_values,
             src0_dtype="f16",
             src1_dtype="f16",
         ),
-        case_id="mul-mat-f16-f16-scalar-batched",
+        case_id="mul-mat-f16-f16-generic",
         case_values=case_values,
         kernel_dir=assets / "kernels" / "v2",
         routing_dir=assets / "catalog" / "v2",
@@ -1333,7 +1333,7 @@ def test_descriptor_from_generated_f16_f16_scalar_batched_case_uses_f16_rhs(tmp_
     assert result.status == "emitted", result.reason
     assert result.descriptor is not None
     descriptor = result.descriptor
-    assert descriptor["root"] == "@hrx2_mul_mat_f16_f16_scalar_batched"
+    assert descriptor["root"] == "@hrx2_mul_mat_f16_f16_generic"
     assert [binding["dtype"] for binding in descriptor["bindings"]] == ["f16", "f16", "f32"]
     src0 = np.load(tmp_path / descriptor["bindings"][0]["path"])
     src1 = np.load(tmp_path / descriptor["bindings"][1]["path"])

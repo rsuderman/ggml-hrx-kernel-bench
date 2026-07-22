@@ -949,7 +949,7 @@ def test_v2_flash_attn_ext_fallback_decode_binds_llama_layout_and_padded_strides
             [8, 2, 1],
         ),
         (
-            "mul_mat_f16_f16_scalar_batched_4d",
+            "mul_mat_f16_f16_generic_4d",
             {"d0": 16, "d1": 8, "d2": 2, "d3": 3, "src0_d0": 256, "src0_d1": 16, "src1_d0": 256},
             [16, 48, 1],
         ),
@@ -1758,7 +1758,7 @@ def test_yaml_route_import_matches_rank4_quantized_mul_mat_descriptor(
     assert shape["cols"] == expected_shape["cols"]
 
 
-def test_yaml_route_import_matches_rank4_f16_f16_mul_mat_descriptor(tmp_path: Path) -> None:
+def test_yaml_route_import_matches_rank4_contiguous_f16_f16_mul_mat_descriptor(tmp_path: Path) -> None:
     yaml_path = tmp_path / "mul_mat_f16_f16.yaml"
     yaml_path.write_text(
         json.dumps(
@@ -1793,17 +1793,60 @@ def test_yaml_route_import_matches_rank4_f16_f16_mul_mat_descriptor(tmp_path: Pa
     op_summary = next(row for row in summary["operations"] if row["op"] == "MUL_MAT")
     assert op_summary["matched_case_count"] == 1
     route_matches = json.loads((output_dir / "ops" / "MUL_MAT" / "route-matches.json").read_text())
-    assert route_matches["rows"][0]["matched_route_ids"] == ["mul_mat_f16_f16_scalar_batched_4d"]
+    assert route_matches["rows"][0]["matched_route_ids"] == ["mul_mat_f16_f16_contiguous_4d"]
     config_path = Path(summary["generated_config_paths"][0])
     config = json.loads(config_path.read_text())
-    assert config["kernel"] == "mul_mat_f16_f16_scalar_batched"
-    assert config["route_id"] == "mul_mat_f16_f16_scalar_batched_4d"
+    assert config["kernel"] == "mul_mat_f16_f16_generic"
+    assert config["route_id"] == "mul_mat_f16_f16_contiguous_4d"
     shape = dict(zip(config["params"], config["cases"][0], strict=True))
     assert shape["src0_d0"] == 256
     assert shape["src0_d1"] == 16
     assert shape["src1_d0"] == 256
     assert shape["d0"] == 16
     assert shape["d1"] == 8
+    assert [entry["dtype"] for entry in config["execution_abi"]["entries"]] == ["f16", "f16", "f32"]
+
+
+def test_yaml_route_import_falls_back_to_generic_rank4_f16_f16_broadcast_mul_mat_descriptor(tmp_path: Path) -> None:
+    yaml_path = tmp_path / "mul_mat_f16_f16_broadcast.yaml"
+    yaml_path.write_text(
+        json.dumps(
+            {
+                "ops": {
+                    "MUL_MAT": [
+                        {
+                            "inputs": [
+                                {"dtype": "F16", "shape": [256, 16, 1, 3]},
+                                {"dtype": "F16", "shape": [256, 8, 2, 3]},
+                            ],
+                            "destinations": [
+                                {"dtype": "F32", "shape": [16, 8, 2, 3]},
+                            ],
+                        }
+                    ]
+                }
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    output_dir = tmp_path / "route-import"
+    summary = materialize_yaml_route_import(
+        [yaml_path],
+        output_dir=output_dir,
+        routing_dir=ACTUAL_V2_ROUTING_DIR,
+    )
+
+    op_summary = next(row for row in summary["operations"] if row["op"] == "MUL_MAT")
+    assert op_summary["matched_case_count"] == 1
+    route_matches = json.loads((output_dir / "ops" / "MUL_MAT" / "route-matches.json").read_text())
+    assert route_matches["rows"][0]["matched_route_ids"] == ["mul_mat_f16_f16_generic_4d"]
+    config_path = Path(summary["generated_config_paths"][0])
+    config = json.loads(config_path.read_text())
+    assert config["kernel"] == "mul_mat_f16_f16_generic"
+    assert config["route_id"] == "mul_mat_f16_f16_generic_4d"
     assert [entry["dtype"] for entry in config["execution_abi"]["entries"]] == ["f16", "f16", "f32"]
 
 

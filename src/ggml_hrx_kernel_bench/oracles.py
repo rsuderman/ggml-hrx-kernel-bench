@@ -1036,10 +1036,13 @@ def _matmul_dims(candidate: Candidate) -> tuple[int, int, int]:
     return k, rows, cols
 
 
-F16_BATCHED_MUL_MAT_FAMILIES = {
-    "mul_mat_f16_f16_scalar_batched",
+F16_MUL_MAT_FAMILIES = {
+    "mul_mat_f16_f16_generic",
     "mul_mat_f16_f32_batched",
     "mul_mat_f16_f32_tiled_batched",
+}
+FULL_SRC0_MUL_MAT_SOURCE_IDS = {
+    "mul_mat_f16_f16_contiguous",
 }
 
 
@@ -1083,7 +1086,12 @@ def _captured_tensor_dims(candidate: Candidate, tensor_name: str) -> tuple[int, 
             if shape_key in candidate.shape:
                 dims.append(int(candidate.shape[shape_key]))
                 continue
-            if tensor_name == "src0" and candidate.family in F16_BATCHED_MUL_MAT_FAMILIES and index >= 2:
+            if (
+                tensor_name == "src0"
+                and candidate.family in F16_MUL_MAT_FAMILIES
+                and candidate.source_id not in FULL_SRC0_MUL_MAT_SOURCE_IDS
+                and index >= 2
+            ):
                 dims.append(1)
                 continue
             dims.append(anchor_dim)
@@ -2162,7 +2170,7 @@ def _write_mul_mat_f16_f32_batched_workbench(
     )
 
 
-def _write_mul_mat_f16_f16_batched_workbench(
+def _write_mul_mat_f16_f16_workbench(
     candidate: Candidate,
     linked_source: Path,
     workbench_path: Path,
@@ -3732,9 +3740,9 @@ ORACLE_SPECS: tuple[OracleSpec, ...] = (
         write_workbench=_write_mul_mat_f16_f32_batched_workbench,
     ),
     OracleSpec(
-        family_ids=("mul_mat_f16_f16_scalar_batched",),
-        generate=_logical_generate(LogicalOracleSpec(("mul_mat_f16_f16_scalar_batched",), "mul_mat_f16_f16_numpy_logical", {"atol": 0.08, "rtol": 0.02}, _matmul_f16_f16_arrays, exact_kernel_abi=True)),
-        write_workbench=_write_mul_mat_f16_f16_batched_workbench,
+        family_ids=("mul_mat_f16_f16_generic",),
+        generate=_logical_generate(LogicalOracleSpec(("mul_mat_f16_f16_generic",), "mul_mat_f16_f16_numpy_logical", {"atol": 0.08, "rtol": 0.02}, _matmul_f16_f16_arrays, exact_kernel_abi=True)),
+        write_workbench=_write_mul_mat_f16_f16_workbench,
     ),
     OracleSpec(
         family_ids=("softmax_kqv_f32_f16",),
