@@ -1,20 +1,20 @@
-config.decl @shape.mul_mat_f16.k : %value: index where [range(%value, 1, 8192)]
-config.decl @shape.mul_mat_f16.rows : %value: index where [range(%value, 1, 8192)]
-config.decl @shape.mul_mat_f16.cols : %value: index where [range(%value, 1, 4096)]
-config.decl @shape.mul_mat_f16.dst_ne2 : %value: index where [range(%value, 1, 4096)]
-config.decl @shape.mul_mat_f16.dst_ne3 : %value: index where [range(%value, 1, 4096)]
-config.decl @shape.mul_mat_f16.src0_ne2 : %value: index where [range(%value, 1, 4096)]
-config.decl @shape.mul_mat_f16.src0_ne3 : %value: index where [range(%value, 1, 4096)]
-config.decl @shape.mul_mat_f16.src0_stride_row : %value: index where [range(%value, 1, 104857600)]
-config.decl @shape.mul_mat_f16.src0_stride_ne2 : %value: index where [range(%value, 1, 104857600)]
-config.decl @shape.mul_mat_f16.src0_stride_ne3 : %value: index where [range(%value, 1, 104857600)]
-config.decl @shape.mul_mat_f16.src1_stride_col : %value: index where [range(%value, 1, 104857600)]
-config.decl @shape.mul_mat_f16.src1_stride_ne2 : %value: index where [range(%value, 1, 104857600)]
-config.decl @shape.mul_mat_f16.src1_stride_ne3 : %value: index where [range(%value, 1, 104857600)]
-config.decl @shape.mul_mat_f16.dst_stride_col : %value: index where [range(%value, 1, 104857600)]
-config.decl @shape.mul_mat_f16.dst_stride_ne2 : %value: index where [range(%value, 1, 104857600)]
-config.decl @shape.mul_mat_f16.dst_stride_ne3 : %value: index where [range(%value, 1, 104857600)]
-config.decl @tuning.mul_mat_f16.workgroup_size : %value: index where [range(%value, 32, 1024), mul(%value, 32)]
+config.decl @shape.mul_mat_f16_f32_generic.k : %value: index where [range(%value, 1, 8192)]
+config.decl @shape.mul_mat_f16_f32_generic.rows : %value: index where [range(%value, 1, 8192)]
+config.decl @shape.mul_mat_f16_f32_generic.cols : %value: index where [range(%value, 1, 4096)]
+config.decl @shape.mul_mat_f16_f32_generic.dst_ne2 : %value: index where [range(%value, 1, 4096)]
+config.decl @shape.mul_mat_f16_f32_generic.dst_ne3 : %value: index where [range(%value, 1, 4096)]
+config.decl @shape.mul_mat_f16_f32_generic.src0_ne2 : %value: index where [range(%value, 1, 4096)]
+config.decl @shape.mul_mat_f16_f32_generic.src0_ne3 : %value: index where [range(%value, 1, 4096)]
+config.decl @shape.mul_mat_f16_f32_generic.src0_stride_row : %value: index where [range(%value, 1, 104857600)]
+config.decl @shape.mul_mat_f16_f32_generic.src0_stride_ne2 : %value: index where [range(%value, 1, 104857600)]
+config.decl @shape.mul_mat_f16_f32_generic.src0_stride_ne3 : %value: index where [range(%value, 1, 104857600)]
+config.decl @shape.mul_mat_f16_f32_generic.src1_stride_col : %value: index where [range(%value, 1, 104857600)]
+config.decl @shape.mul_mat_f16_f32_generic.src1_stride_ne2 : %value: index where [range(%value, 1, 104857600)]
+config.decl @shape.mul_mat_f16_f32_generic.src1_stride_ne3 : %value: index where [range(%value, 1, 104857600)]
+config.decl @shape.mul_mat_f16_f32_generic.dst_stride_col : %value: index where [range(%value, 1, 104857600)]
+config.decl @shape.mul_mat_f16_f32_generic.dst_stride_ne2 : %value: index where [range(%value, 1, 104857600)]
+config.decl @shape.mul_mat_f16_f32_generic.dst_stride_ne3 : %value: index where [range(%value, 1, 104857600)]
+config.decl @tuning.mul_mat_f16_f32_generic.workgroup_size : %value: index where [range(%value, 32, 1024), mul(%value, 32)]
 
 func.def inline @hrx2_mul_mat_f16_f32_dot4(%a_f16: vector<4xf16>, %b: vector<4xf32>) -> (f32) {
   %zero_f32 = scalar.constant 0.0 : f32
@@ -24,14 +24,14 @@ func.def inline @hrx2_mul_mat_f16_f32_dot4(%a_f16: vector<4xf16>, %b: vector<4xf
   func.return %sum : f32
 }
 
-kernel.def export("hrx2_mul_mat_f16_f32_tiled_batched") @hrx2_mul_mat_f16_f32_tiled_batched() {
+kernel.def export("hrx2_mul_mat_f16_f32_generic") @hrx2_mul_mat_f16_f32_generic() {
   %unit = index.constant 1 : index
   %two = index.constant 2 : index
-  %rows = config.get @shape.mul_mat_f16.rows : index
-  %cols = config.get @shape.mul_mat_f16.cols : index
-  %dst_ne2 = config.get @shape.mul_mat_f16.dst_ne2 : index
-  %dst_ne3 = config.get @shape.mul_mat_f16.dst_ne3 : index
-  %workgroup_size = config.get @tuning.mul_mat_f16.workgroup_size : index
+  %rows = config.get @shape.mul_mat_f16_f32_generic.rows : index
+  %cols = config.get @shape.mul_mat_f16_f32_generic.cols : index
+  %dst_ne2 = config.get @shape.mul_mat_f16_f32_generic.dst_ne2 : index
+  %dst_ne3 = config.get @shape.mul_mat_f16_f32_generic.dst_ne3 : index
+  %workgroup_size = config.get @tuning.mul_mat_f16_f32_generic.workgroup_size : index
   %rows_plus1 = index.add %rows, %unit : index
   %row_groups = index.div %rows_plus1, %two : index
   %outer0 = index.mul %cols, %dst_ne2 : index
@@ -45,23 +45,23 @@ kernel.def export("hrx2_mul_mat_f16_f32_tiled_batched") @hrx2_mul_mat_f16_f32_ti
   %two = index.constant 2 : index
   %four = index.constant 4 : index
 
-  %k = config.get @shape.mul_mat_f16.k : index
-  %rows = config.get @shape.mul_mat_f16.rows : index
-  %cols = config.get @shape.mul_mat_f16.cols : index
-  %dst_ne2 = config.get @shape.mul_mat_f16.dst_ne2 : index
-  %dst_ne3 = config.get @shape.mul_mat_f16.dst_ne3 : index
-  %src0_ne2 = config.get @shape.mul_mat_f16.src0_ne2 : index
-  %src0_ne3 = config.get @shape.mul_mat_f16.src0_ne3 : index
-  %src0_stride_row = config.get @shape.mul_mat_f16.src0_stride_row : index
-  %src0_stride_ne2 = config.get @shape.mul_mat_f16.src0_stride_ne2 : index
-  %src0_stride_ne3 = config.get @shape.mul_mat_f16.src0_stride_ne3 : index
-  %src1_stride_col = config.get @shape.mul_mat_f16.src1_stride_col : index
-  %src1_stride_ne2 = config.get @shape.mul_mat_f16.src1_stride_ne2 : index
-  %src1_stride_ne3 = config.get @shape.mul_mat_f16.src1_stride_ne3 : index
-  %dst_stride_col = config.get @shape.mul_mat_f16.dst_stride_col : index
-  %dst_stride_ne2 = config.get @shape.mul_mat_f16.dst_stride_ne2 : index
-  %dst_stride_ne3 = config.get @shape.mul_mat_f16.dst_stride_ne3 : index
-  %workgroup_size = config.get @tuning.mul_mat_f16.workgroup_size : index
+  %k = config.get @shape.mul_mat_f16_f32_generic.k : index
+  %rows = config.get @shape.mul_mat_f16_f32_generic.rows : index
+  %cols = config.get @shape.mul_mat_f16_f32_generic.cols : index
+  %dst_ne2 = config.get @shape.mul_mat_f16_f32_generic.dst_ne2 : index
+  %dst_ne3 = config.get @shape.mul_mat_f16_f32_generic.dst_ne3 : index
+  %src0_ne2 = config.get @shape.mul_mat_f16_f32_generic.src0_ne2 : index
+  %src0_ne3 = config.get @shape.mul_mat_f16_f32_generic.src0_ne3 : index
+  %src0_stride_row = config.get @shape.mul_mat_f16_f32_generic.src0_stride_row : index
+  %src0_stride_ne2 = config.get @shape.mul_mat_f16_f32_generic.src0_stride_ne2 : index
+  %src0_stride_ne3 = config.get @shape.mul_mat_f16_f32_generic.src0_stride_ne3 : index
+  %src1_stride_col = config.get @shape.mul_mat_f16_f32_generic.src1_stride_col : index
+  %src1_stride_ne2 = config.get @shape.mul_mat_f16_f32_generic.src1_stride_ne2 : index
+  %src1_stride_ne3 = config.get @shape.mul_mat_f16_f32_generic.src1_stride_ne3 : index
+  %dst_stride_col = config.get @shape.mul_mat_f16_f32_generic.dst_stride_col : index
+  %dst_stride_ne2 = config.get @shape.mul_mat_f16_f32_generic.dst_stride_ne2 : index
+  %dst_stride_ne3 = config.get @shape.mul_mat_f16_f32_generic.dst_stride_ne3 : index
+  %workgroup_size = config.get @tuning.mul_mat_f16_f32_generic.workgroup_size : index
 
   %row_group0 = kernel.workgroup.id<x> : index
   %row_group = index.assume %row_group0 [range(%row_group0, 0, 4095)] : index

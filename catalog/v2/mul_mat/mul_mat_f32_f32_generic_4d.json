@@ -1,16 +1,16 @@
 {
-  "id": "mul_mat_f16_f32_tiled_batched_rows4_cols16_batch12_4d",
-  "family": "mul_mat_f16_f32_tiled_batched",
+  "id": "mul_mat_f32_f32_generic_4d",
+  "family": "mul_mat_f32_f32",
   "op": "MUL_MAT",
   "kernel": {
-    "source_id": "mul_mat_f16_f32_tiled_batched_rows4",
-    "path": "mul_mat/f16_f32_tiled_batched_rows4.loom",
-    "root_symbol": "@hrx2_mul_mat_f16_f32_tiled_batched_rows4",
-    "export_name": "hrx2_mul_mat_f16_f32_tiled_batched_rows4"
+    "source_id": "mul_mat_f32_f32_generic",
+    "path": "mul_mat/f32_f32_generic.loom",
+    "root_symbol": "@hrx2_mul_mat_f32_f32_generic",
+    "export_name": "hrx2_mul_mat_f32_f32_generic"
   },
   "tensors": {
     "src0": {
-      "dtype": "F16",
+      "dtype": "F32",
       "dimensions": "src0_dimensions",
       "strides": "src0_strides",
       "permutation": "src0_permutation"
@@ -124,18 +124,18 @@
     },
     {
       "name": "dst_rows",
-      "min": 4,
+      "min": 1,
       "max": 8192
     },
     {
-      "name": "dst_batch_product",
-      "min": 12,
-      "max": 12
+      "name": "dst_cols",
+      "min": 1,
+      "max": 4096
     },
     {
-      "name": "dst_cols",
-      "min": 16,
-      "max": 16
+      "name": "dst_batch_product",
+      "min": 1,
+      "max": 16777216
     },
     {
       "name": "src0_strides",
@@ -192,77 +192,77 @@
       1,
       1
     ],
-    "rows_per_workgroup": 4,
+    "rows_per_workgroup": 1,
     "cols_per_workgroup": 1
   },
   "config": {
     "bindings": [
       {
-        "key": "@shape.mul_mat_f16.k",
+        "key": "@shape.mul_mat_f32_f32_generic.k",
         "source": "value.k"
       },
       {
-        "key": "@shape.mul_mat_f16.rows",
+        "key": "@shape.mul_mat_f32_f32_generic.rows",
         "source": "value.dst_rows"
       },
       {
-        "key": "@shape.mul_mat_f16.cols",
+        "key": "@shape.mul_mat_f32_f32_generic.cols",
         "source": "value.dst_cols"
       },
       {
-        "key": "@shape.mul_mat_f16.dst_ne2",
+        "key": "@shape.mul_mat_f32_f32_generic.dst_ne2",
         "source": "tensor.dst.dimensions.d2.size"
       },
       {
-        "key": "@shape.mul_mat_f16.dst_ne3",
+        "key": "@shape.mul_mat_f32_f32_generic.dst_ne3",
         "source": "tensor.dst.dimensions.d3.size"
       },
       {
-        "key": "@shape.mul_mat_f16.src0_ne2",
+        "key": "@shape.mul_mat_f32_f32_generic.src0_ne2",
         "source": "tensor.src0.dimensions.d2.size"
       },
       {
-        "key": "@shape.mul_mat_f16.src0_ne3",
+        "key": "@shape.mul_mat_f32_f32_generic.src0_ne3",
         "source": "tensor.src0.dimensions.d3.size"
       },
       {
-        "key": "@shape.mul_mat_f16.src0_stride_row",
+        "key": "@shape.mul_mat_f32_f32_generic.src0_stride_row",
         "source": "tensor.src0.dimensions.d1.stride"
       },
       {
-        "key": "@shape.mul_mat_f16.src0_stride_ne2",
+        "key": "@shape.mul_mat_f32_f32_generic.src0_stride_ne2",
         "source": "tensor.src0.dimensions.d2.stride"
       },
       {
-        "key": "@shape.mul_mat_f16.src0_stride_ne3",
+        "key": "@shape.mul_mat_f32_f32_generic.src0_stride_ne3",
         "source": "tensor.src0.dimensions.d3.stride"
       },
       {
-        "key": "@shape.mul_mat_f16.src1_stride_col",
+        "key": "@shape.mul_mat_f32_f32_generic.src1_stride_col",
         "source": "tensor.src1.dimensions.d1.stride"
       },
       {
-        "key": "@shape.mul_mat_f16.src1_stride_ne2",
+        "key": "@shape.mul_mat_f32_f32_generic.src1_stride_ne2",
         "source": "tensor.src1.dimensions.d2.stride"
       },
       {
-        "key": "@shape.mul_mat_f16.src1_stride_ne3",
+        "key": "@shape.mul_mat_f32_f32_generic.src1_stride_ne3",
         "source": "tensor.src1.dimensions.d3.stride"
       },
       {
-        "key": "@shape.mul_mat_f16.dst_stride_col",
+        "key": "@shape.mul_mat_f32_f32_generic.dst_stride_col",
         "source": "tensor.dst.dimensions.d1.stride"
       },
       {
-        "key": "@shape.mul_mat_f16.dst_stride_ne2",
+        "key": "@shape.mul_mat_f32_f32_generic.dst_stride_ne2",
         "source": "tensor.dst.dimensions.d2.stride"
       },
       {
-        "key": "@shape.mul_mat_f16.dst_stride_ne3",
+        "key": "@shape.mul_mat_f32_f32_generic.dst_stride_ne3",
         "source": "tensor.dst.dimensions.d3.stride"
       },
       {
-        "key": "@tuning.mul_mat_f16.workgroup_size",
+        "key": "@tuning.mul_mat_f32_f32_generic.workgroup_size",
         "value": "64"
       }
     ]

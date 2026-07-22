@@ -978,14 +978,14 @@ def test_argsort_oracle_and_workbench_use_flattened_rows(tmp_path: Path) -> None
 
 def test_mul_mat_f32_oracle_and_workbench_use_kernel_abi_buffers(tmp_path: Path) -> None:
     candidate = _candidate(
-        candidate_id="mul_mat_f32_f32_contiguous_small_2d",
+        candidate_id="mul_mat_f32_f32_contiguous_2d",
         shape={"k": 256, "rows": 16, "cols": 8},
         family="mul_mat_f32_f32",
-        source_id="mul_mat_f32_f32",
-        root_symbol="@hrx2_mul_mat_f32_f32_static",
-        export_name="hrx2_mul_mat_f32_f32_static",
+        source_id="mul_mat_f32_f32_contiguous",
+        root_symbol="@hrx2_mul_mat_f32_f32_contiguous",
+        export_name="hrx2_mul_mat_f32_f32_contiguous",
         op="MUL_MAT",
-        source_path="kernels/v2/mul_mat/contiguous_f32_f32.loom",
+        source_path="kernels/v2/mul_mat/f32_f32_contiguous.loom",
     )
 
     result = generate_oracle(candidate, tmp_path / "fixtures", force=True)
@@ -998,7 +998,7 @@ def test_mul_mat_f32_oracle_and_workbench_use_kernel_abi_buffers(tmp_path: Path)
 
     linked_source = tmp_path / "linked.loom"
     linked_source.write_text(
-        'kernel.def export("hrx2_mul_mat_f32_f32_static") @hrx2_mul_mat_f32_f32_static() {}\n',
+        'kernel.def export("hrx2_mul_mat_f32_f32_contiguous") @hrx2_mul_mat_f32_f32_contiguous() {}\n',
         encoding="utf-8",
     )
     _, metadata = write_workbench(candidate, linked_source, tmp_path / "workbench.loom", tmp_path / "fixtures")
@@ -1009,16 +1009,16 @@ def test_mul_mat_f32_oracle_and_workbench_use_kernel_abi_buffers(tmp_path: Path)
     assert "check.expect.close" in workbench
 
 
-def test_mul_mat_f16_f32_batched_oracle_and_workbench_use_kernel_abi_buffers(tmp_path: Path) -> None:
+def test_mul_mat_f16_f32_generic_oracle_and_workbench_use_kernel_abi_buffers(tmp_path: Path) -> None:
     candidate = _candidate(
-        candidate_id="mul_mat_f16_f32_batched_logits_cols1_2d",
+        candidate_id="mul_mat_f16_f32_generic_logits_cols1_2d",
         shape={"k": 1056, "rows": 128, "cols": 1},
-        family="mul_mat_f16_f32_batched",
-        source_id="mul_mat_f16_f32_batched",
-        root_symbol="@hrx2_mul_mat_f16_f32_batched",
-        export_name="hrx2_mul_mat_f16_f32_batched",
+        family="mul_mat_f16_f32_generic",
+        source_id="mul_mat_f16_f32_generic",
+        root_symbol="@hrx2_mul_mat_f16_f32_generic",
+        export_name="hrx2_mul_mat_f16_f32_generic",
         op="MUL_MAT",
-        source_path="kernels/v2/mul_mat/f16_f32_batched.loom",
+        source_path="kernels/v2/mul_mat/f16_f32_generic.loom",
     )
 
     result = generate_oracle(candidate, tmp_path / "fixtures", force=True)
@@ -1031,7 +1031,7 @@ def test_mul_mat_f16_f32_batched_oracle_and_workbench_use_kernel_abi_buffers(tmp
 
     linked_source = tmp_path / "linked.loom"
     linked_source.write_text(
-        'kernel.def export("hrx2_mul_mat_f16_f32_batched") @hrx2_mul_mat_f16_f32_batched() {}\n',
+        'kernel.def export("hrx2_mul_mat_f16_f32_generic") @hrx2_mul_mat_f16_f32_generic() {}\n',
         encoding="utf-8",
     )
     _, metadata = write_workbench(candidate, linked_source, tmp_path / "workbench.loom", tmp_path / "fixtures")
@@ -1042,9 +1042,9 @@ def test_mul_mat_f16_f32_batched_oracle_and_workbench_use_kernel_abi_buffers(tmp
     assert "check.expect.close" in workbench
 
 
-def test_mul_mat_f16_f32_batched_4d_oracle_and_workbench_use_kernel_abi_buffers(tmp_path: Path) -> None:
+def test_mul_mat_f16_f32_generic_4d_oracle_and_workbench_use_kernel_abi_buffers(tmp_path: Path) -> None:
     candidate = _candidate(
-        candidate_id="mul_mat_f16_f32_batched_logits_cols1_4d",
+        candidate_id="mul_mat_f16_f32_generic_logits_cols1_4d",
         shape={
             "d0": 128,
             "d1": 1,
@@ -1057,12 +1057,12 @@ def test_mul_mat_f16_f32_batched_4d_oracle_and_workbench_use_kernel_abi_buffers(
             "rows": 128,
             "cols": 1,
         },
-        family="mul_mat_f16_f32_batched",
-        source_id="mul_mat_f16_f32_batched",
-        root_symbol="@hrx2_mul_mat_f16_f32_batched",
-        export_name="hrx2_mul_mat_f16_f32_batched",
+        family="mul_mat_f16_f32_generic",
+        source_id="mul_mat_f16_f32_generic",
+        root_symbol="@hrx2_mul_mat_f16_f32_generic",
+        export_name="hrx2_mul_mat_f16_f32_generic",
         op="MUL_MAT",
-        source_path="kernels/v2/mul_mat/f16_f32_batched.loom",
+        source_path="kernels/v2/mul_mat/f16_f32_generic.loom",
     )
 
     result = generate_oracle(candidate, tmp_path / "fixtures", force=True)
@@ -1075,7 +1075,7 @@ def test_mul_mat_f16_f32_batched_4d_oracle_and_workbench_use_kernel_abi_buffers(
 
     linked_source = tmp_path / "linked.loom"
     linked_source.write_text(
-        'kernel.def export("hrx2_mul_mat_f16_f32_batched") @hrx2_mul_mat_f16_f32_batched() {}\n',
+        'kernel.def export("hrx2_mul_mat_f16_f32_generic") @hrx2_mul_mat_f16_f32_generic() {}\n',
         encoding="utf-8",
     )
     _, metadata = write_workbench(candidate, linked_source, tmp_path / "workbench.loom", tmp_path / "fixtures")
@@ -1208,14 +1208,14 @@ def test_mul_mat_f16_f16_generic_oracle_infers_rank4_no_batch_dims(tmp_path: Pat
 
 def test_mul_mat_q4_k_oracle_and_workbench_use_kernel_abi_buffers(tmp_path: Path) -> None:
     candidate = _candidate(
-        candidate_id="mul_mat_q4_k_f32_direct_contiguous_2d",
+        candidate_id="mul_mat_q4_k_f32_contiguous_2d",
         shape={"k": 256, "rows": 16, "cols": 8},
         family="mul_mat_q4_k_f32",
-        source_id="mul_mat_q4_k_f32",
-        root_symbol="@hrx2_mul_mat_q4_k_f32_static",
-        export_name="hrx2_mul_mat_q4_k_f32_static",
+        source_id="mul_mat_q4_k_f32_contiguous",
+        root_symbol="@hrx2_mul_mat_q4_k_f32_contiguous",
+        export_name="hrx2_mul_mat_q4_k_f32_contiguous",
         op="MUL_MAT",
-        source_path="kernels/v2/mul_mat/q4_k_f32_direct.loom",
+        source_path="kernels/v2/mul_mat/q4_k_f32_contiguous.loom",
     )
 
     result = generate_oracle(candidate, tmp_path / "fixtures", force=True)
@@ -1228,7 +1228,7 @@ def test_mul_mat_q4_k_oracle_and_workbench_use_kernel_abi_buffers(tmp_path: Path
 
     linked_source = tmp_path / "linked.loom"
     linked_source.write_text(
-        'kernel.def export("hrx2_mul_mat_q4_k_f32_static") @hrx2_mul_mat_q4_k_f32_static() {}\n',
+        'kernel.def export("hrx2_mul_mat_q4_k_f32_contiguous") @hrx2_mul_mat_q4_k_f32_contiguous() {}\n',
         encoding="utf-8",
     )
     _, metadata = write_workbench(candidate, linked_source, tmp_path / "workbench.loom", tmp_path / "fixtures")
@@ -1373,14 +1373,14 @@ def test_mul_mat_id_q6_k_oracle_and_workbench_use_kernel_abi_buffers(tmp_path: P
 
 def test_mul_mat_q6_k_oracle_and_workbench_use_packed_kernel_abi_buffers(tmp_path: Path) -> None:
     candidate = _candidate(
-        candidate_id="mul_mat_q6_k_f32_direct_contiguous_2d",
+        candidate_id="mul_mat_q6_k_f32_contiguous_2d",
         shape={"k": 256, "rows": 16, "cols": 8},
         family="mul_mat_q6_k_f32",
-        source_id="mul_mat_q6_k_f32",
-        root_symbol="@hrx2_mul_mat_q6_k_f32_static",
-        export_name="hrx2_mul_mat_q6_k_f32_static",
+        source_id="mul_mat_q6_k_f32_contiguous",
+        root_symbol="@hrx2_mul_mat_q6_k_f32_contiguous",
+        export_name="hrx2_mul_mat_q6_k_f32_contiguous",
         op="MUL_MAT",
-        source_path="kernels/v2/mul_mat/q6_k_f32_direct.loom",
+        source_path="kernels/v2/mul_mat/q6_k_f32_contiguous.loom",
     )
 
     result = generate_oracle(candidate, tmp_path / "fixtures", force=True)
@@ -1393,7 +1393,7 @@ def test_mul_mat_q6_k_oracle_and_workbench_use_packed_kernel_abi_buffers(tmp_pat
 
     linked_source = tmp_path / "linked.loom"
     linked_source.write_text(
-        'kernel.def export("hrx2_mul_mat_q6_k_f32_static") @hrx2_mul_mat_q6_k_f32_static() {}\n',
+        'kernel.def export("hrx2_mul_mat_q6_k_f32_contiguous") @hrx2_mul_mat_q6_k_f32_contiguous() {}\n',
         encoding="utf-8",
     )
     _, metadata = write_workbench(candidate, linked_source, tmp_path / "workbench.loom", tmp_path / "fixtures")
@@ -1491,14 +1491,14 @@ def _emulate_mul_mat_q5_dot16_rows(src0: np.ndarray, src1: np.ndarray) -> np.nda
 
 def test_mul_mat_q5_k_oracle_and_workbench_use_packed_kernel_abi_buffers(tmp_path: Path) -> None:
     candidate = _candidate(
-        candidate_id="mul_mat_q5_k_f32_dot16_contiguous_cols1_2d",
+        candidate_id="mul_mat_q5_k_f32_contiguous_2d",
         shape={"k": 256, "rows": 16, "cols": 1},
         family="mul_mat_q5_k_f32",
-        source_id="mul_mat_q5_k_f32",
-        root_symbol="@hrx2_mul_mat_q5_k_f32_dot16_static",
-        export_name="hrx2_mul_mat_q5_k_f32_dot16_static",
+        source_id="mul_mat_q5_k_f32_contiguous",
+        root_symbol="@hrx2_mul_mat_q5_k_f32_contiguous",
+        export_name="hrx2_mul_mat_q5_k_f32_contiguous",
         op="MUL_MAT",
-        source_path="kernels/v2/mul_mat/q5_k_f32_dot16.loom",
+        source_path="kernels/v2/mul_mat/q5_k_f32_contiguous.loom",
     )
 
     result = generate_oracle(candidate, tmp_path / "fixtures", force=True)
@@ -1515,7 +1515,7 @@ def test_mul_mat_q5_k_oracle_and_workbench_use_packed_kernel_abi_buffers(tmp_pat
 
     linked_source = tmp_path / "linked.loom"
     linked_source.write_text(
-        'kernel.def export("hrx2_mul_mat_q5_k_f32_dot16_static") @hrx2_mul_mat_q5_k_f32_dot16_static() {}\n',
+        'kernel.def export("hrx2_mul_mat_q5_k_f32_contiguous") @hrx2_mul_mat_q5_k_f32_contiguous() {}\n',
         encoding="utf-8",
     )
     _, metadata = write_workbench(candidate, linked_source, tmp_path / "workbench.loom", tmp_path / "fixtures")
@@ -1531,11 +1531,11 @@ def test_mul_mat_q8_0_oracle_and_workbench_use_packed_kernel_abi_buffers(tmp_pat
         candidate_id="mul_mat_q8_0_f32_contiguous_2d",
         shape={"k": 256, "rows": 16, "cols": 8},
         family="mul_mat_q8_0_f32",
-        source_id="mul_mat_q8_0_f32",
-        root_symbol="@hrx2_mul_mat_q8_0_f32_static",
-        export_name="hrx2_mul_mat_q8_0_f32_static",
+        source_id="mul_mat_q8_0_f32_contiguous",
+        root_symbol="@hrx2_mul_mat_q8_0_f32_contiguous",
+        export_name="hrx2_mul_mat_q8_0_f32_contiguous",
         op="MUL_MAT",
-        source_path="kernels/v2/mul_mat/q8_0_f32_static.loom",
+        source_path="kernels/v2/mul_mat/q8_0_f32_contiguous.loom",
     )
 
     result = generate_oracle(candidate, tmp_path / "fixtures", force=True)
@@ -1548,7 +1548,7 @@ def test_mul_mat_q8_0_oracle_and_workbench_use_packed_kernel_abi_buffers(tmp_pat
 
     linked_source = tmp_path / "linked.loom"
     linked_source.write_text(
-        'kernel.def export("hrx2_mul_mat_q8_0_f32_static") @hrx2_mul_mat_q8_0_f32_static() {}\n',
+        'kernel.def export("hrx2_mul_mat_q8_0_f32_contiguous") @hrx2_mul_mat_q8_0_f32_contiguous() {}\n',
         encoding="utf-8",
     )
     _, metadata = write_workbench(candidate, linked_source, tmp_path / "workbench.loom", tmp_path / "fixtures")

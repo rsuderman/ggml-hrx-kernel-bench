@@ -1,16 +1,16 @@
 {
-  "id": "mul_mat_q6_k_f32_direct_contiguous_2d",
-  "family": "mul_mat_q6_k_f32",
+  "id": "mul_mat_f16_f32_contiguous_2d",
+  "family": "mul_mat_f16_f32_generic",
   "op": "MUL_MAT",
   "kernel": {
-    "source_id": "mul_mat_q6_k_f32",
-    "path": "mul_mat/q6_k_f32_direct.loom",
-    "root_symbol": "@hrx2_mul_mat_q6_k_f32_static",
-    "export_name": "hrx2_mul_mat_q6_k_f32_static"
+    "source_id": "mul_mat_f16_f32_contiguous",
+    "path": "mul_mat/f16_f32_contiguous.loom",
+    "root_symbol": "@hrx2_mul_mat_f16_f32_contiguous",
+    "export_name": "hrx2_mul_mat_f16_f32_contiguous"
   },
   "tensors": {
     "src0": {
-      "dtype": "Q6_K",
+      "dtype": "F16",
       "dimensions": "src0_dimensions",
       "strides": "src0_strides"
     },
@@ -97,33 +97,32 @@
     {
       "name": "src0_dimensions",
       "index": 0,
-      "min": 256,
-      "max": 32768,
-      "multiple_of": 256
+      "min": 1,
+      "max": 8192
     },
     {
       "name": "src0_dimensions",
       "index": 1,
       "min": 1,
-      "max": 262144
+      "max": 8192
     },
     {
       "name": "src1_dimensions",
       "index": 1,
       "min": 1,
-      "max": 512
+      "max": 4096
     },
     {
       "name": "dst_dimensions",
       "index": 0,
       "min": 1,
-      "max": 262144
+      "max": 8192
     },
     {
       "name": "dst_dimensions",
       "index": 1,
       "min": 1,
-      "max": 512
+      "max": 4096
     },
     {
       "equals": [
@@ -164,7 +163,7 @@
   ],
   "launch": {
     "workgroup_size": [
-      32,
+      64,
       1,
       1
     ],
@@ -174,20 +173,72 @@
   "config": {
     "bindings": [
       {
-        "key": "@shape.k",
+        "key": "@shape.mul_mat_f16_f32_contiguous.k",
         "source": "shape.k"
       },
       {
-        "key": "@shape.rows",
+        "key": "@shape.mul_mat_f16_f32_contiguous.rows",
         "source": "shape.rows"
       },
       {
-        "key": "@shape.cols",
+        "key": "@shape.mul_mat_f16_f32_contiguous.cols",
         "source": "shape.cols"
       },
       {
-        "key": "@tuning.workgroup_size",
-        "value": "32"
+        "key": "@shape.mul_mat_f16_f32_contiguous.dst_ne2",
+        "value": "1"
+      },
+      {
+        "key": "@shape.mul_mat_f16_f32_contiguous.dst_ne3",
+        "value": "1"
+      },
+      {
+        "key": "@shape.mul_mat_f16_f32_contiguous.src0_ne2",
+        "value": "1"
+      },
+      {
+        "key": "@shape.mul_mat_f16_f32_contiguous.src0_ne3",
+        "value": "1"
+      },
+      {
+        "key": "@shape.mul_mat_f16_f32_contiguous.src0_stride_row",
+        "source": "tensor.src0.dimensions.d1.stride"
+      },
+      {
+        "key": "@shape.mul_mat_f16_f32_contiguous.src0_stride_ne2",
+        "value": "1"
+      },
+      {
+        "key": "@shape.mul_mat_f16_f32_contiguous.src0_stride_ne3",
+        "value": "1"
+      },
+      {
+        "key": "@shape.mul_mat_f16_f32_contiguous.src1_stride_col",
+        "source": "tensor.src1.dimensions.d1.stride"
+      },
+      {
+        "key": "@shape.mul_mat_f16_f32_contiguous.src1_stride_ne2",
+        "value": "1"
+      },
+      {
+        "key": "@shape.mul_mat_f16_f32_contiguous.src1_stride_ne3",
+        "value": "1"
+      },
+      {
+        "key": "@shape.mul_mat_f16_f32_contiguous.dst_stride_col",
+        "source": "tensor.dst.dimensions.d1.stride"
+      },
+      {
+        "key": "@shape.mul_mat_f16_f32_contiguous.dst_stride_ne2",
+        "value": "1"
+      },
+      {
+        "key": "@shape.mul_mat_f16_f32_contiguous.dst_stride_ne3",
+        "value": "1"
+      },
+      {
+        "key": "@tuning.mul_mat_f16_f32_contiguous.workgroup_size",
+        "value": "64"
       }
     ]
   }

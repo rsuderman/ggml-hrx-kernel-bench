@@ -1038,8 +1038,7 @@ def _matmul_dims(candidate: Candidate) -> tuple[int, int, int]:
 
 F16_MUL_MAT_FAMILIES = {
     "mul_mat_f16_f16_generic",
-    "mul_mat_f16_f32_batched",
-    "mul_mat_f16_f32_tiled_batched",
+    "mul_mat_f16_f32_generic",
 }
 FULL_SRC0_MUL_MAT_SOURCE_IDS = {
     "mul_mat_f16_f16_contiguous",
@@ -2019,6 +2018,9 @@ def _set_rows_arrays(np: Any, candidate: Candidate, seed: int) -> dict[str, Any]
 
 
 def _matmul_f32_arrays(np: Any, candidate: Candidate, seed: int) -> dict[str, Any]:
+    kernel_abi = _matmul_f32_kernel_abi_arrays(np, candidate, seed)
+    if kernel_abi is not None:
+        return kernel_abi
     k, rows, cols = _matmul_dims(candidate)
     lhs = f32_pattern(np, (rows, k), seed=seed)
     rhs = f32_pattern(np, (cols, k), seed=seed + 1)
@@ -2032,6 +2034,60 @@ def _matmul_f32_arrays(np: Any, candidate: Candidate, seed: int) -> dict[str, An
             "expected": expected.reshape(rows * cols),
         },
         "metadata": {"logical_packed_weight_fixture": False},
+    }
+
+
+def _matmul_f32_kernel_abi_arrays(np: Any, candidate: Candidate, seed: int) -> dict[str, Any] | None:
+    if candidate.source_id != "mul_mat_f32_f32_generic":
+        return None
+    src0_dims = _captured_tensor_dims(candidate, "src0")
+    src1_dims = _captured_tensor_dims(candidate, "src1")
+    dst_dims = _captured_tensor_dims(candidate, "dst")
+    if src0_dims is None or src1_dims is None or dst_dims is None:
+        return None
+    src0_strides = _copy_tensor_strides(candidate, "src0", src0_dims)
+    src1_strides = _copy_tensor_strides(candidate, "src1", src1_dims)
+    dst_strides = _copy_tensor_strides(candidate, "dst", dst_dims)
+    k, rows = src0_dims[:2]
+    cols = dst_dims[1]
+    src0_len = _buffer_length(src0_dims, src0_strides)
+    src1_len = _buffer_length(src1_dims, src1_strides)
+    dst_len = _buffer_length(dst_dims, dst_strides)
+    src0 = np.zeros((src0_len,), dtype=np.float32)
+    src1 = np.zeros((src1_len,), dtype=np.float32)
+    dst_init = f32_pattern(np, (dst_len,), seed=seed + 2, scale=0.25)
+    expected = dst_init.copy()
+    lhs_by_slice = {}
+    for i03 in range(src0_dims[3]):
+        for i02 in range(src0_dims[2]):
+            lhs = f32_pattern(np, (rows, k), seed=seed + i02 + src0_dims[2] * i03)
+            lhs_by_slice[(i02, i03)] = lhs
+            for row in range(rows):
+                src0_row_base = row * src0_strides[1] + i02 * src0_strides[2] + i03 * src0_strides[3]
+                src0[src0_row_base : src0_row_base + k] = lhs[row]
+    src0_scale2 = dst_dims[2] // src0_dims[2]
+    src0_scale3 = dst_dims[3] // src0_dims[3]
+    for i3 in range(dst_dims[3]):
+        for i2 in range(dst_dims[2]):
+            src0_i2 = i2 // src0_scale2
+            src0_i3 = i3 // src0_scale3
+            lhs = lhs_by_slice[(src0_i2, src0_i3)]
+            rhs = f32_pattern(np, (cols, k), seed=seed + 1 + i2 + dst_dims[2] * i3)
+            dot = np.matmul(lhs.astype(np.float32), rhs.T.astype(np.float32)).T.astype(np.float32)
+            for col in range(cols):
+                src1_col_base = col * src1_strides[1] + i2 * src1_strides[2] + i3 * src1_strides[3]
+                src1[src1_col_base : src1_col_base + k] = rhs[col]
+                dst_col_base = col * dst_strides[1] + i2 * dst_strides[2] + i3 * dst_strides[3]
+                expected[dst_col_base : dst_col_base + rows] = dot[col]
+    return {
+        "arrays": {
+            "src0": src0,
+            "src0_logical_f32": src0,
+            "src1": src1,
+            "dst_init": dst_init,
+            "expected": expected,
+        },
+        "metadata": {"logical_packed_weight_fixture": False, "kernel_abi_fixture": True},
     }
 
 
@@ -2107,13 +2163,23 @@ def _matmul_f16_f16_arrays(np: Any, candidate: Candidate, seed: int) -> dict[str
 
 
 def _write_mul_mat_f32_workbench(candidate: Candidate, linked_source: Path, workbench_path: Path, fixture_dir: Path) -> tuple[str, dict[str, Any]]:
-    k, rows, cols = _matmul_dims(candidate)
-    src0_elems = rows * k
-    src1_elems = cols * k
-    dst_elems = rows * cols
+    kernel_abi = candidate.source_id == "mul_mat_f32_f32_generic"
+    src0_name = "src0" if kernel_abi else "src0_logical_f32"
+    src0_dims = _captured_tensor_dims(candidate, "src0") if kernel_abi else None
+    src1_dims = _captured_tensor_dims(candidate, "src1") if kernel_abi else None
+    dst_dims = _captured_tensor_dims(candidate, "dst") if kernel_abi else None
+    if kernel_abi and src0_dims is not None and src1_dims is not None and dst_dims is not None:
+        src0_elems = _buffer_length(src0_dims, _copy_tensor_strides(candidate, "src0", src0_dims))
+        src1_elems = _buffer_length(src1_dims, _copy_tensor_strides(candidate, "src1", src1_dims))
+        dst_elems = _buffer_length(dst_dims, _copy_tensor_strides(candidate, "dst", dst_dims))
+    else:
+        k, rows, cols = _matmul_dims(candidate)
+        src0_elems = rows * k
+        src1_elems = cols * k
+        dst_elems = rows * cols
     case_name, bench_name = _case_names(candidate)
     lines = [
-        _read_f32(workbench_path, fixture_dir, "src0_logical_f32", src0_elems).replace("%src0_logical_f32", "%src0"),
+        _read_f32(workbench_path, fixture_dir, src0_name, src0_elems).replace(f"%{src0_name}", "%src0"),
         _read_f32(workbench_path, fixture_dir, "src1", src1_elems),
         _read_f32(workbench_path, fixture_dir, "dst_init", dst_elems).replace("%dst_init", "%dst"),
         _read_f32(workbench_path, fixture_dir, "expected", dst_elems),
@@ -2155,7 +2221,7 @@ def _write_mul_mat_f16_rhs_batched_workbench(
     return _emit_case(linked_source, workbench_path, case_name, bench_name, "\n".join(lines))
 
 
-def _write_mul_mat_f16_f32_batched_workbench(
+def _write_mul_mat_f16_f32_generic_workbench(
     candidate: Candidate,
     linked_source: Path,
     workbench_path: Path,
@@ -2725,7 +2791,7 @@ LOGICAL_ORACLE_SPECS: tuple[LogicalOracleSpec, ...] = (
     LogicalOracleSpec(("argsort_f32_i32",), "argsort_f32_i32_numpy_desc", {"atol": 0.0, "rtol": 0.0}, _argsort_arrays),
     LogicalOracleSpec(("get_rows_f32", "get_rows_q4_k_f32", "get_rows_q5_k_f32", "get_rows_q6_k_f32", "get_rows_q8_0_f32"), "get_rows_numpy_logical", {"atol": 1e-5, "rtol": 1e-5}, _get_rows_arrays),
     LogicalOracleSpec(("get_rows_moe_weights_f32",), "get_rows_moe_weights_numpy_logical", {"atol": 1e-5, "rtol": 1e-5}, _get_rows_arrays),
-    LogicalOracleSpec(("mul_mat_f16_f32_batched", "mul_mat_f16_f32_batched_cont"), "mul_mat_numpy_logical", {"atol": 0.08, "rtol": 0.02}, _matmul_f32_arrays),
+    LogicalOracleSpec(("mul_mat_f16_f32_generic",), "mul_mat_numpy_logical", {"atol": 0.08, "rtol": 0.02}, _matmul_f32_arrays),
     LogicalOracleSpec(("mul_mat_q5_k_f32", "mul_mat_q6_k_f32", "mul_mat_q8_0_f32", "mul_mat_q4_k_swiglu_f32"), "quantized_mul_mat_numpy_logical", {"atol": 0.12, "rtol": 0.04}, _quantized_matmul_arrays),
     LogicalOracleSpec(("quantize_q8_1_f32",), "quantize_q8_1_numpy", {"atol": 0.0, "rtol": 0.0}, _quantize_q8_1_arrays),
     LogicalOracleSpec(("rope_f32", "rope_neox_f32", "rope_f16", "rope_neox_f16", "rope_scale_f32", "rope_set_rows_f32"), "rope_numpy_structural_placeholder", {"atol": 1e-5, "rtol": 1e-5}, _rope_arrays),
@@ -3735,9 +3801,9 @@ ORACLE_SPECS: tuple[OracleSpec, ...] = (
         write_workbench=_write_mul_mat_f32_workbench,
     ),
     OracleSpec(
-        family_ids=("mul_mat_f16_f32_batched", "mul_mat_f16_f32_tiled_batched"),
-        generate=_logical_generate(LogicalOracleSpec(("mul_mat_f16_f32_batched", "mul_mat_f16_f32_tiled_batched"), "mul_mat_numpy_logical", {"atol": 0.08, "rtol": 0.02}, _matmul_f16_f32_arrays, exact_kernel_abi=True)),
-        write_workbench=_write_mul_mat_f16_f32_batched_workbench,
+        family_ids=("mul_mat_f16_f32_generic",),
+        generate=_logical_generate(LogicalOracleSpec(("mul_mat_f16_f32_generic",), "mul_mat_numpy_logical", {"atol": 0.08, "rtol": 0.02}, _matmul_f16_f32_arrays, exact_kernel_abi=True)),
+        write_workbench=_write_mul_mat_f16_f32_generic_workbench,
     ),
     OracleSpec(
         family_ids=("mul_mat_f16_f16_generic",),

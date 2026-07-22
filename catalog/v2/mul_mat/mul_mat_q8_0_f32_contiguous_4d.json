@@ -3,10 +3,10 @@
   "family": "mul_mat_q8_0_f32",
   "op": "MUL_MAT",
   "kernel": {
-    "source_id": "mul_mat_q8_0_f32",
-    "path": "mul_mat/q8_0_f32_static.loom",
-    "root_symbol": "@hrx2_mul_mat_q8_0_f32_static",
-    "export_name": "hrx2_mul_mat_q8_0_f32_static"
+    "source_id": "mul_mat_q8_0_f32_contiguous",
+    "path": "mul_mat/q8_0_f32_contiguous.loom",
+    "root_symbol": "@hrx2_mul_mat_q8_0_f32_contiguous",
+    "export_name": "hrx2_mul_mat_q8_0_f32_contiguous"
   },
   "tensors": {
     "src0": {
@@ -219,19 +219,19 @@
   "config": {
     "bindings": [
       {
-        "key": "@shape.k",
+        "key": "@shape.mul_mat_q8_0_f32_contiguous.k",
         "source": "shape.k"
       },
       {
-        "key": "@shape.rows",
+        "key": "@shape.mul_mat_q8_0_f32_contiguous.rows",
         "source": "shape.rows"
       },
       {
-        "key": "@shape.cols",
+        "key": "@shape.mul_mat_q8_0_f32_contiguous.cols",
         "source": "shape.cols"
       },
       {
-        "key": "@tuning.workgroup_size",
+        "key": "@tuning.mul_mat_q8_0_f32_contiguous.workgroup_size",
         "value": "256"
       }
     ]

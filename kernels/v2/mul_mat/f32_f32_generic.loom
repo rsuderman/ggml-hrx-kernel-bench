@@ -1,0 +1,137 @@
+config.decl @shape.mul_mat_f32_f32_generic.k : %value: index where [range(%value, 1, 8192)]
+config.decl @shape.mul_mat_f32_f32_generic.rows : %value: index where [range(%value, 1, 8192)]
+config.decl @shape.mul_mat_f32_f32_generic.cols : %value: index where [range(%value, 1, 4096)]
+config.decl @shape.mul_mat_f32_f32_generic.dst_ne2 : %value: index where [range(%value, 1, 4096)]
+config.decl @shape.mul_mat_f32_f32_generic.dst_ne3 : %value: index where [range(%value, 1, 4096)]
+config.decl @shape.mul_mat_f32_f32_generic.src0_ne2 : %value: index where [range(%value, 1, 4096)]
+config.decl @shape.mul_mat_f32_f32_generic.src0_ne3 : %value: index where [range(%value, 1, 4096)]
+config.decl @shape.mul_mat_f32_f32_generic.src0_stride_row : %value: index where [range(%value, 1, 104857600)]
+config.decl @shape.mul_mat_f32_f32_generic.src0_stride_ne2 : %value: index where [range(%value, 1, 104857600)]
+config.decl @shape.mul_mat_f32_f32_generic.src0_stride_ne3 : %value: index where [range(%value, 1, 104857600)]
+config.decl @shape.mul_mat_f32_f32_generic.src1_stride_col : %value: index where [range(%value, 1, 104857600)]
+config.decl @shape.mul_mat_f32_f32_generic.src1_stride_ne2 : %value: index where [range(%value, 1, 104857600)]
+config.decl @shape.mul_mat_f32_f32_generic.src1_stride_ne3 : %value: index where [range(%value, 1, 104857600)]
+config.decl @shape.mul_mat_f32_f32_generic.dst_stride_col : %value: index where [range(%value, 1, 104857600)]
+config.decl @shape.mul_mat_f32_f32_generic.dst_stride_ne2 : %value: index where [range(%value, 1, 104857600)]
+config.decl @shape.mul_mat_f32_f32_generic.dst_stride_ne3 : %value: index where [range(%value, 1, 104857600)]
+config.decl @tuning.mul_mat_f32_f32_generic.workgroup_size : %value: index where [range(%value, 32, 1024), mul(%value, 32)]
+
+kernel.def export("hrx2_mul_mat_f32_f32_generic") @hrx2_mul_mat_f32_f32_generic() {
+  %unit = index.constant 1 : index
+  %rows = config.get @shape.mul_mat_f32_f32_generic.rows : index
+  %cols = config.get @shape.mul_mat_f32_f32_generic.cols : index
+  %dst_ne2 = config.get @shape.mul_mat_f32_f32_generic.dst_ne2 : index
+  %dst_ne3 = config.get @shape.mul_mat_f32_f32_generic.dst_ne3 : index
+  %workgroup_size = config.get @tuning.mul_mat_f32_f32_generic.workgroup_size : index
+  %outer0 = index.mul %cols, %dst_ne2 : index
+  %outer = index.mul %outer0, %dst_ne3 : index
+  kernel.launch.config workgroups(%rows, %outer, %unit) workgroup_size(%workgroup_size, %unit, %unit) : index
+} launch(%src0: buffer, %src1: buffer, %dst: buffer) {
+  %base = index.constant 0 : offset
+  %zero_index = index.constant 0 : index
+  %unit = index.constant 1 : index
+  %zero_f32 = scalar.constant 0.0 : f32
+
+  %k = config.get @shape.mul_mat_f32_f32_generic.k : index
+  %rows = config.get @shape.mul_mat_f32_f32_generic.rows : index
+  %cols = config.get @shape.mul_mat_f32_f32_generic.cols : index
+  %dst_ne2 = config.get @shape.mul_mat_f32_f32_generic.dst_ne2 : index
+  %dst_ne3 = config.get @shape.mul_mat_f32_f32_generic.dst_ne3 : index
+  %src0_ne2 = config.get @shape.mul_mat_f32_f32_generic.src0_ne2 : index
+  %src0_ne3 = config.get @shape.mul_mat_f32_f32_generic.src0_ne3 : index
+  %src0_stride_row = config.get @shape.mul_mat_f32_f32_generic.src0_stride_row : index
+  %src0_stride_ne2 = config.get @shape.mul_mat_f32_f32_generic.src0_stride_ne2 : index
+  %src0_stride_ne3 = config.get @shape.mul_mat_f32_f32_generic.src0_stride_ne3 : index
+  %src1_stride_col = config.get @shape.mul_mat_f32_f32_generic.src1_stride_col : index
+  %src1_stride_ne2 = config.get @shape.mul_mat_f32_f32_generic.src1_stride_ne2 : index
+  %src1_stride_ne3 = config.get @shape.mul_mat_f32_f32_generic.src1_stride_ne3 : index
+  %dst_stride_col = config.get @shape.mul_mat_f32_f32_generic.dst_stride_col : index
+  %dst_stride_ne2 = config.get @shape.mul_mat_f32_f32_generic.dst_stride_ne2 : index
+  %dst_stride_ne3 = config.get @shape.mul_mat_f32_f32_generic.dst_stride_ne3 : index
+  %workgroup_size = config.get @tuning.mul_mat_f32_f32_generic.workgroup_size : index
+
+  %row = kernel.workgroup.id<x> : index
+  %outer = kernel.workgroup.id<y> : index
+  %lane = kernel.workitem.id<x> : index
+
+  %col = index.rem %outer, %cols : index
+  %batch_linear = index.div %outer, %cols : index
+  %i2 = index.rem %batch_linear, %dst_ne2 : index
+  %i3 = index.div %batch_linear, %dst_ne2 : index
+
+  %src0_scale2 = index.div %dst_ne2, %src0_ne2 : index
+  %src0_i2 = index.div %i2, %src0_scale2 : index
+  %src0_scale3 = index.div %dst_ne3, %src0_ne3 : index
+  %src0_i3 = index.div %i3, %src0_scale3 : index
+
+  %last_row = index.sub %rows, %unit : index
+  %src0_last_row_off = index.mul %last_row, %src0_stride_row : index
+  %src0_last_i2 = index.sub %src0_ne2, %unit : index
+  %src0_last_i2_off = index.mul %src0_last_i2, %src0_stride_ne2 : index
+  %src0_last_i3 = index.sub %src0_ne3, %unit : index
+  %src0_last_i3_off = index.mul %src0_last_i3, %src0_stride_ne3 : index
+  %src0_last_0 = index.add %src0_last_row_off, %src0_last_i2_off : index
+  %src0_last = index.add %src0_last_0, %src0_last_i3_off : index
+  %src0_count = index.add %src0_last, %k : index
+
+  %last_col = index.sub %cols, %unit : index
+  %src1_last_col_off = index.mul %last_col, %src1_stride_col : index
+  %last_i2 = index.sub %dst_ne2, %unit : index
+  %src1_last_i2_off = index.mul %last_i2, %src1_stride_ne2 : index
+  %last_i3 = index.sub %dst_ne3, %unit : index
+  %src1_last_i3_off = index.mul %last_i3, %src1_stride_ne3 : index
+  %src1_last_0 = index.add %src1_last_col_off, %src1_last_i2_off : index
+  %src1_last = index.add %src1_last_0, %src1_last_i3_off : index
+  %src1_count = index.add %src1_last, %k : index
+
+  %dst_last_col_off = index.mul %last_col, %dst_stride_col : index
+  %dst_last_i2_off = index.mul %last_i2, %dst_stride_ne2 : index
+  %dst_last_i3_off = index.mul %last_i3, %dst_stride_ne3 : index
+  %dst_last_0 = index.add %last_row, %dst_last_col_off : index
+  %dst_last_1 = index.add %dst_last_0, %dst_last_i2_off : index
+  %dst_last = index.add %dst_last_1, %dst_last_i3_off : index
+  %dst_count = index.add %dst_last, %unit : index
+
+  %src0_global = buffer.assume.memory_space<global> %src0 : buffer
+  %src1_global = buffer.assume.memory_space<global> %src1 : buffer
+  %dst_global = buffer.assume.memory_space<global> %dst : buffer
+  %src0_restrict, %src1_restrict, %dst_restrict = buffer.assume.noalias %src0_global, %src1_global, %dst_global : buffer, buffer, buffer
+  %src0_view = buffer.view %src0_restrict[%base] : buffer -> view<[%src0_count]xf32, #dense>
+  %src1_view = buffer.view %src1_restrict[%base] : buffer -> view<[%src1_count]xf32, #dense>
+  %dst_view = buffer.view %dst_restrict[%base] : buffer -> view<[%dst_count]xf32, #dense>
+
+  %src0_row_off = index.mul %row, %src0_stride_row : index
+  %src0_i2_off = index.mul %src0_i2, %src0_stride_ne2 : index
+  %src0_i3_off = index.mul %src0_i3, %src0_stride_ne3 : index
+  %src0_base0 = index.add %src0_row_off, %src0_i2_off : index
+  %src0_base = index.add %src0_base0, %src0_i3_off : index
+
+  %src1_col_off = index.mul %col, %src1_stride_col : index
+  %src1_i2_off = index.mul %i2, %src1_stride_ne2 : index
+  %src1_i3_off = index.mul %i3, %src1_stride_ne3 : index
+  %src1_base0 = index.add %src1_col_off, %src1_i2_off : index
+  %src1_base = index.add %src1_base0, %src1_i3_off : index
+
+  %is_leader = index.cmp eq, %lane, %zero_index : index
+  %lane_sum = scf.for %ki = [%lane to %k step %workgroup_size](%acc = %zero_f32 : f32) -> (f32) {
+    %src0_index = index.add %src0_base, %ki : index
+    %src1_index = index.add %src1_base, %ki : index
+    %a = view.load %src0_view[%src0_index] : view<[%src0_count]xf32, #dense> -> f32
+    %b = view.load %src1_view[%src1_index] : view<[%src1_count]xf32, #dense> -> f32
+    %product = scalar.mulf<reassoc|nnan|ninf|nsz|contract> %a, %b : f32
+    %next = scalar.addf<reassoc|nnan|ninf|nsz> %acc, %product : f32
+    scf.yield %next : f32
+  }
+
+  %dot = kernel.workgroup.reduce<addf> %lane_sum : f32
+  scf.if %is_leader {
+    %dst_col_off = index.mul %col, %dst_stride_col : index
+    %dst_i2_off = index.mul %i2, %dst_stride_ne2 : index
+    %dst_i3_off = index.mul %i3, %dst_stride_ne3 : index
+    %dst_index0 = index.add %row, %dst_col_off : index
+    %dst_index1 = index.add %dst_index0, %dst_i2_off : index
+    %dst_index = index.add %dst_index1, %dst_i3_off : index
+    view.store %dot, %dst_view[%dst_index] : f32, view<[%dst_count]xf32, #dense>
+  }
+  kernel.return
+}

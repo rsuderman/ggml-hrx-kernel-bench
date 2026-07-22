@@ -944,9 +944,9 @@ def test_v2_flash_attn_ext_fallback_decode_binds_llama_layout_and_padded_strides
             [1, 64, 1],
         ),
         (
-            "mul_mat_f16_f32_tiled_batched_4d",
-            {"d0": 16, "d1": 1, "d2": 1, "d3": 2, "src0_d0": 256, "src0_d1": 16, "src0_d3": 1, "src1_d0": 256},
-            [8, 2, 1],
+            "mul_mat_f16_f32_contiguous_4d",
+            {"d0": 16, "d1": 1, "d2": 1, "d3": 1, "src0_d0": 256, "src0_d1": 16, "src1_d0": 256},
+            [16, 1, 1],
         ),
         (
             "mul_mat_f16_f16_generic_4d",
@@ -1667,7 +1667,7 @@ def test_v2_router_rejects_explicit_route_constraint_before_running_candidate(
             [256, 16, 1, 1],
             [256, 8, 1, 1],
             [16, 8, 1, 1],
-            "mul_mat_q4_k_f32_direct_contiguous_4d",
+            "mul_mat_q4_k_f32_contiguous_4d",
             {"k": 256, "rows": 16, "cols": 8},
         ),
         (
@@ -1675,7 +1675,7 @@ def test_v2_router_rejects_explicit_route_constraint_before_running_candidate(
             [256, 16, 1, 1],
             [256, 1, 1, 1],
             [16, 1, 1, 1],
-            "mul_mat_q5_k_f32_dot16_contiguous_cols1_4d",
+            "mul_mat_q5_k_f32_contiguous_4d",
             {"k": 256, "rows": 16, "cols": 1},
         ),
         (
@@ -1683,7 +1683,7 @@ def test_v2_router_rejects_explicit_route_constraint_before_running_candidate(
             [256, 16, 1, 1],
             [256, 8, 1, 1],
             [16, 8, 1, 1],
-            "mul_mat_q6_k_f32_direct_contiguous_4d",
+            "mul_mat_q6_k_f32_contiguous_4d",
             {"k": 256, "rows": 16, "cols": 8},
         ),
         (
@@ -1699,7 +1699,7 @@ def test_v2_router_rejects_explicit_route_constraint_before_running_candidate(
             [256, 16, 1, 1],
             [256, 8, 1, 1],
             [16, 8, 1, 1],
-            "mul_mat_f16_f32_batched_contiguous_4d",
+            "mul_mat_f16_f32_contiguous_4d",
             {"k": 256, "rows": 16, "cols": 8},
         ),
     ),

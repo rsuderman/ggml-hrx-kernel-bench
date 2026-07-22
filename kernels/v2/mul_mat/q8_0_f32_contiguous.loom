@@ -1,7 +1,7 @@
-config.decl @shape.k : %value: index where [range(%value, 32, 32768), mul(%value, 32)]
-config.decl @shape.rows : %value: index where [range(%value, 1, 262144)]
-config.decl @shape.cols : %value: index where [range(%value, 1, 4096)]
-config.decl @tuning.workgroup_size : %value: index where [range(%value, 32, 256), mul(%value, 32)]
+config.decl @shape.mul_mat_q8_0_f32_contiguous.k : %value: index where [range(%value, 32, 32768), mul(%value, 32)]
+config.decl @shape.mul_mat_q8_0_f32_contiguous.rows : %value: index where [range(%value, 1, 262144)]
+config.decl @shape.mul_mat_q8_0_f32_contiguous.cols : %value: index where [range(%value, 1, 4096)]
+config.decl @tuning.mul_mat_q8_0_f32_contiguous.workgroup_size : %value: index where [range(%value, 32, 256), mul(%value, 32)]
 
 func.template<hrx2.q8_0_f32.product> priority(1) @q8_0_f32_product_fallback(%q: i8, %d_f16: f16, %rhs: f32) -> (f32) {
   %q_f32 = scalar.sitofp %q : i8 to f32
@@ -11,12 +11,12 @@ func.template<hrx2.q8_0_f32.product> priority(1) @q8_0_f32_product_fallback(%q: 
   func.return %product : f32
 }
 
-kernel.def export("hrx2_mul_mat_q8_0_f32_static") @hrx2_mul_mat_q8_0_f32_static() {
+kernel.def export("hrx2_mul_mat_q8_0_f32_contiguous") @hrx2_mul_mat_q8_0_f32_contiguous() {
   %unit = index.constant 1 : index
-  %k = config.get @shape.k : index
-  %rows = config.get @shape.rows : index
-  %cols = config.get @shape.cols : index
-  %workgroup_size = config.get @tuning.workgroup_size : index
+  %k = config.get @shape.mul_mat_q8_0_f32_contiguous.k : index
+  %rows = config.get @shape.mul_mat_q8_0_f32_contiguous.rows : index
+  %cols = config.get @shape.mul_mat_q8_0_f32_contiguous.cols : index
+  %workgroup_size = config.get @tuning.mul_mat_q8_0_f32_contiguous.workgroup_size : index
   kernel.launch.config workgroups(%rows, %cols, %unit) workgroup_size(%workgroup_size, %unit, %unit) : index
 } launch(%src0: buffer, %src1: buffer, %dst: buffer) {
   %base = index.constant 0 : offset
@@ -24,10 +24,10 @@ kernel.def export("hrx2_mul_mat_q8_0_f32_static") @hrx2_mul_mat_q8_0_f32_static(
   %block_bytes = index.constant 34 : index
   %block_f16s = index.constant 17 : index
   %qs_offset = index.constant 2 : index
-  %k = config.get @shape.k : index
-  %rows = config.get @shape.rows : index
-  %cols = config.get @shape.cols : index
-  %workgroup_size = config.get @tuning.workgroup_size : index
+  %k = config.get @shape.mul_mat_q8_0_f32_contiguous.k : index
+  %rows = config.get @shape.mul_mat_q8_0_f32_contiguous.rows : index
+  %cols = config.get @shape.mul_mat_q8_0_f32_contiguous.cols : index
+  %workgroup_size = config.get @tuning.mul_mat_q8_0_f32_contiguous.workgroup_size : index
   %k_bounded = index.assume %k [range(%k, 32, 32768)] : index
   %rows_bounded = index.assume %rows [range(%rows, 1, 262144)] : index
   %cols_bounded = index.assume %cols [range(%cols, 1, 4096)] : index

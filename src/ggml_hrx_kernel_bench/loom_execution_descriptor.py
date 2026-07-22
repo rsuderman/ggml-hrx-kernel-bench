@@ -148,8 +148,7 @@ COPY_CAST_FAMILIES = {
 }
 MATMUL_FAMILIES = {
     "mul_mat_f16_f16_generic",
-    "mul_mat_f16_f32_batched",
-    "mul_mat_f16_f32_tiled_batched",
+    "mul_mat_f16_f32_generic",
     "mul_mat_f32_f32",
     "mul_mat_q4_k_f32",
     "mul_mat_q5_k_f32",

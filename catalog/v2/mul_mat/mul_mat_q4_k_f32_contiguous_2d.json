@@ -1,16 +1,16 @@
 {
-  "id": "mul_mat_f32_f32_contiguous_small_2d",
-  "family": "mul_mat_f32_f32",
+  "id": "mul_mat_q4_k_f32_contiguous_2d",
+  "family": "mul_mat_q4_k_f32",
   "op": "MUL_MAT",
   "kernel": {
-    "source_id": "mul_mat_f32_f32",
-    "path": "mul_mat/contiguous_f32_f32.loom",
-    "root_symbol": "@hrx2_mul_mat_f32_f32_static",
-    "export_name": "hrx2_mul_mat_f32_f32_static"
+    "source_id": "mul_mat_q4_k_f32_contiguous",
+    "path": "mul_mat/q4_k_f32_contiguous.loom",
+    "root_symbol": "@hrx2_mul_mat_q4_k_f32_contiguous",
+    "export_name": "hrx2_mul_mat_q4_k_f32_contiguous"
   },
   "tensors": {
     "src0": {
-      "dtype": "F32",
+      "dtype": "Q4_K",
       "dimensions": "src0_dimensions",
       "strides": "src0_strides"
     },
@@ -97,32 +97,33 @@
     {
       "name": "src0_dimensions",
       "index": 0,
-      "min": 4,
-      "max": 256
+      "min": 256,
+      "max": 32768,
+      "multiple_of": 256
     },
     {
       "name": "src0_dimensions",
       "index": 1,
       "min": 1,
-      "max": 16
+      "max": 32768
     },
     {
       "name": "src1_dimensions",
       "index": 1,
       "min": 1,
-      "max": 64
+      "max": 512
     },
     {
       "name": "dst_dimensions",
       "index": 0,
       "min": 1,
-      "max": 16
+      "max": 32768
     },
     {
       "name": "dst_dimensions",
       "index": 1,
       "min": 1,
-      "max": 64
+      "max": 512
     },
     {
       "equals": [
@@ -173,19 +174,19 @@
   "config": {
     "bindings": [
       {
-        "key": "@shape.k",
+        "key": "@shape.mul_mat_q4_k_f32_contiguous.k",
         "source": "shape.k"
       },
       {
-        "key": "@shape.rows",
+        "key": "@shape.mul_mat_q4_k_f32_contiguous.rows",
         "source": "shape.rows"
       },
       {
-        "key": "@shape.cols",
+        "key": "@shape.mul_mat_q4_k_f32_contiguous.cols",
         "source": "shape.cols"
       },
       {
-        "key": "@tuning.workgroup_size",
+        "key": "@tuning.mul_mat_q4_k_f32_contiguous.workgroup_size",
         "value": "256"
       }
     ]

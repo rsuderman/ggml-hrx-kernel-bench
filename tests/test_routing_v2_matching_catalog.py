@@ -21,7 +21,7 @@ REPRESENTATIVE_ROUTE_IDS = frozenset(
         "copy_f32_f32_non_contiguous_4d",
         "get_rows_q8_0_f32_embedding_rows_descriptor_4d",
         "mul_mat_q8_0_f32_contiguous_4d",
-        "mul_mat_f16_f32_tiled_batched_4d",
+        "mul_mat_f16_f32_generic_4d",
         "argsort_f32_i32_n128_r1_desc_wg128",
     }
 )
@@ -419,7 +419,7 @@ POSITIVE_CASES = (
         id="mul-mat-q8-scalar-k-max",
     ),
     pytest.param(
-        "mul_mat_f16_f32_tiled_batched_4d",
+        "mul_mat_f16_f32_generic_4d",
         "transposed batched MUL_MAT[33] layout",
         MUL_MAT_F16_YAML_CASE_33,
         id="mul-mat-f16-yaml-case-33",

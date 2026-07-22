@@ -1190,11 +1190,35 @@ def test_descriptor_from_generated_copy_case_uses_cast_storage_dtypes(
             [16, 16, 1, 1, 4, 4, 4, 16, 16],
             "f32",
             np.float32,
-            "@hrx2_mul_mat_f32_f32_static",
+            "@hrx2_mul_mat_f32_f32_contiguous",
         ),
         (
-            "mul_mat_f16_f32_batched",
-            "mul_mat_f16_f32_batched_contiguous_4d",
+            "mul_mat_f16_f32_generic",
+            "mul_mat_f16_f32_generic_4d",
+            [
+                "d0",
+                "d1",
+                "d2",
+                "d3",
+                "src0_d0",
+                "src0_d1",
+                "src1_d0",
+                "k",
+                "rows",
+                "cols",
+                "src1_d2_stride",
+                "src1_d3_stride",
+                "dst_d2_stride",
+                "dst_d3_stride",
+            ],
+            [16, 1, 2, 1, 4, 16, 4, 4, 16, 1, 4, 4, 16, 16],
+            "f16",
+            np.int16,
+            "@hrx2_mul_mat_f16_f32_generic",
+        ),
+        (
+            "mul_mat_f16_f32_generic",
+            "mul_mat_f16_f32_contiguous_4d",
             [
                 "d0",
                 "d1",
@@ -1214,16 +1238,7 @@ def test_descriptor_from_generated_copy_case_uses_cast_storage_dtypes(
             [16, 1, 1, 1, 4, 16, 4, 4, 16, 1, 4, 4, 16, 16],
             "f16",
             np.int16,
-            "@hrx2_mul_mat_f16_f32_batched",
-        ),
-        (
-            "mul_mat_f16_f32_tiled_batched",
-            "mul_mat_f16_f32_tiled_batched_4d",
-            ["d0", "d1", "d2", "d3", "src0_d0", "src0_d1", "src0_d3", "src1_d0"],
-            [16, 1, 1, 2, 4, 16, 1, 4],
-            "f16",
-            np.int16,
-            "@hrx2_mul_mat_f16_f32_tiled_batched",
+            "@hrx2_mul_mat_f16_f32_contiguous",
         ),
     ],
 )
@@ -1278,13 +1293,13 @@ def test_descriptor_from_generated_mul_mat_float_case_uses_kernel_abi(
     assert f"2:output:f32:{expected.size}:{tmp_path / descriptor['bindings'][2]['path']}" in command
 
 
-def test_descriptor_from_generated_tiled_batched_f16_case_uses_resolved_src0_batch_dims(tmp_path: Path) -> None:
+def test_descriptor_from_generated_generic_f16_case_uses_resolved_src0_batch_dims(tmp_path: Path) -> None:
     assets = materialize_asset_root(tmp_path / "assets", force=True)
     case_values = [16, 1, 3, 4, 256, 16, 2, 256]
     result = descriptor_from_generated_case(
         config_data=_generated_mul_mat_config(
-            "mul_mat_f16_f32_tiled_batched",
-            "mul_mat_f16_f32_tiled_batched_4d",
+            "mul_mat_f16_f32_generic",
+            "mul_mat_f16_f32_generic_4d",
             ["d0", "d1", "d2", "d3", "src0_d0", "src0_d1", "src0_d3", "src1_d0"],
             case_values,
             src0_dtype="f16",
@@ -1363,27 +1378,27 @@ def test_descriptor_from_generated_f16_f16_generic_case_uses_f16_rhs(tmp_path: P
     [
         (
             "mul_mat_q4_k_f32",
-            "mul_mat_q4_k_f32_direct_contiguous_4d",
+            "mul_mat_q4_k_f32_contiguous_4d",
             ["d0", "d1", "d2", "d3", "src0_d0", "src1_d0", "k", "rows", "cols"],
             [16, 16, 1, 1, 256, 256, 256, 16, 16],
             "q4_k",
-            "@hrx2_mul_mat_q4_k_f32_static",
+            "@hrx2_mul_mat_q4_k_f32_contiguous",
         ),
         (
             "mul_mat_q5_k_f32",
-            "mul_mat_q5_k_f32_dot16_contiguous_cols1_4d",
+            "mul_mat_q5_k_f32_contiguous_4d",
             ["d0", "d1", "d2", "d3", "src0_d0", "src0_d1", "src1_d0", "k", "rows", "cols"],
             [16, 1, 1, 1, 256, 16, 256, 256, 16, 1],
             "q5_k",
-            "@hrx2_mul_mat_q5_k_f32_dot16_static",
+            "@hrx2_mul_mat_q5_k_f32_contiguous",
         ),
         (
             "mul_mat_q6_k_f32",
-            "mul_mat_q6_k_f32_direct_contiguous_4d",
+            "mul_mat_q6_k_f32_contiguous_4d",
             ["d0", "d1", "d2", "d3", "src0_d0", "src0_d1", "src1_d0", "k", "rows", "cols"],
             [16, 1, 1, 1, 256, 16, 256, 256, 16, 1],
             "q6_k",
-            "@hrx2_mul_mat_q6_k_f32_static",
+            "@hrx2_mul_mat_q6_k_f32_contiguous",
         ),
         (
             "mul_mat_q8_0_f32",
@@ -1391,7 +1406,7 @@ def test_descriptor_from_generated_f16_f16_generic_case_uses_f16_rhs(tmp_path: P
             ["d0", "d1", "d2", "d3", "src0_d0", "src1_d0", "k", "rows", "cols"],
             [16, 16, 1, 1, 256, 256, 256, 16, 16],
             "q8_0",
-            "@hrx2_mul_mat_q8_0_f32_static",
+            "@hrx2_mul_mat_q8_0_f32_contiguous",
         ),
     ],
 )

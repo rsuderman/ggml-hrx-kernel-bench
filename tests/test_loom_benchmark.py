@@ -177,7 +177,7 @@ def test_bucket_dedupes_equal_descriptor_execution_digest(tmp_path: Path) -> Non
 
 def test_estimates_mul_mat_flops_from_descriptor_configs(tmp_path: Path) -> None:
     kernel = tmp_path / "mul_mat.loom"
-    descriptor = _descriptor(kernel=kernel, route_id="mul_mat_f16_f32_tiled_batched_4d")
+    descriptor = _descriptor(kernel=kernel, route_id="mul_mat_f16_f32_contiguous_4d")
     descriptor["configs"] = {
         "@shape.mul_mat_f16.rows": "16",
         "@shape.mul_mat_f16.cols": "16",
@@ -312,7 +312,7 @@ def _write_wrapper_result(
                     "candidate_name": candidate_name,
                     "case_id": case_id,
                     "op": "MUL_MAT",
-                    "route_id": "mul_mat_f16_f32_tiled_batched_4d",
+                    "route_id": "mul_mat_f16_f32_contiguous_4d",
                     "status": status,
                     "estimated_flops": 1_000,
                     "shape_bucket": {
@@ -612,7 +612,7 @@ def test_collect_generated_route_run_writes_results_and_summary(tmp_path: Path, 
     prepare_root, repo_root, asset_root = _write_prepared_case(
         tmp_path,
         op="MUL_MAT",
-        route_id="mul_mat_f16_f32_tiled_batched_4d",
+        route_id="mul_mat_f16_f32_contiguous_4d",
         case_id="mul_mat_small",
     )
     descriptor_path = prepare_root.parent / "descriptors" / "MUL_MAT" / "case.json"
@@ -667,7 +667,7 @@ def test_collect_generated_route_run_writes_results_and_summary(tmp_path: Path, 
         == 0
     )
 
-    route_dir = output_root / "catalog" / "v2" / "MUL_MAT" / "mul_mat_f16_f32_tiled_batched_4d"
+    route_dir = output_root / "catalog" / "v2" / "MUL_MAT" / "mul_mat_f16_f32_contiguous_4d"
     route_manifest = json.loads((route_dir / "manifest.json").read_text(encoding="utf-8"))
     case_entry = route_manifest["cases"][0]
     run_dir = route_dir / "runs" / "manual"
