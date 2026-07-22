@@ -24,16 +24,17 @@ func.def inline @hrx2_mul_mat_f16_f32_dot4(%a_f16: vector<4xf16>, %b: vector<4xf
   func.return %sum : f32
 }
 
-kernel.def export("hrx2_mul_mat_f16_f32_tiled_batched") @hrx2_mul_mat_f16_f32_tiled_batched() {
+kernel.def export("hrx2_mul_mat_f16_f32_tiled_batched_rows4") @hrx2_mul_mat_f16_f32_tiled_batched_rows4() {
   %unit = index.constant 1 : index
-  %two = index.constant 2 : index
+  %three = index.constant 3 : index
+  %four = index.constant 4 : index
   %rows = config.get @shape.mul_mat_f16.rows : index
   %cols = config.get @shape.mul_mat_f16.cols : index
   %dst_ne2 = config.get @shape.mul_mat_f16.dst_ne2 : index
   %dst_ne3 = config.get @shape.mul_mat_f16.dst_ne3 : index
   %workgroup_size = config.get @tuning.mul_mat_f16.workgroup_size : index
-  %rows_plus1 = index.add %rows, %unit : index
-  %row_groups = index.div %rows_plus1, %two : index
+  %rows_plus3 = index.add %rows, %three : index
+  %row_groups = index.div %rows_plus3, %four : index
   %outer0 = index.mul %cols, %dst_ne2 : index
   %outer = index.mul %outer0, %dst_ne3 : index
   kernel.launch.config workgroups(%row_groups, %outer, %unit) workgroup_size(%workgroup_size, %unit, %unit) : index
@@ -43,6 +44,7 @@ kernel.def export("hrx2_mul_mat_f16_f32_tiled_batched") @hrx2_mul_mat_f16_f32_ti
   %zero_i32 = scalar.constant 0 : i32
   %unit = index.constant 1 : index
   %two = index.constant 2 : index
+  %three = index.constant 3 : index
   %four = index.constant 4 : index
 
   %k = config.get @shape.mul_mat_f16.k : index
@@ -64,11 +66,15 @@ kernel.def export("hrx2_mul_mat_f16_f32_tiled_batched") @hrx2_mul_mat_f16_f32_ti
   %workgroup_size = config.get @tuning.mul_mat_f16.workgroup_size : index
 
   %row_group0 = kernel.workgroup.id<x> : index
-  %row_group = index.assume %row_group0 [range(%row_group0, 0, 4095)] : index
-  %row0_raw = index.mul %row_group, %two : index
+  %row_group = index.assume %row_group0 [range(%row_group0, 0, 2047)] : index
+  %row0_raw = index.mul %row_group, %four : index
   %row0 = index.assume %row0_raw [range(%row0_raw, 0, 8191)] : index
   %row1_raw = index.add %row0, %unit : index
   %row1 = index.assume %row1_raw [range(%row1_raw, 1, 8192)] : index
+  %row2_raw = index.add %row0, %two : index
+  %row2 = index.assume %row2_raw [range(%row2_raw, 2, 8193)] : index
+  %row3_raw = index.add %row0, %three : index
+  %row3 = index.assume %row3_raw [range(%row3_raw, 3, 8194)] : index
   %outer0 = kernel.workgroup.id<y> : index
   %outer = index.assume %outer0 [range(%outer0, 0, 1048575)] : index
   %lane0 = kernel.workitem.id<x> : index
@@ -126,12 +132,18 @@ kernel.def export("hrx2_mul_mat_f16_f32_tiled_batched") @hrx2_mul_mat_f16_f32_ti
 
   %src0_row0_off = index.mul %row0, %src0_stride_row : index
   %src0_row1_off = index.mul %row1, %src0_stride_row : index
+  %src0_row2_off = index.mul %row2, %src0_stride_row : index
+  %src0_row3_off = index.mul %row3, %src0_stride_row : index
   %src0_i02_off = index.mul %src0_i02, %src0_stride_ne2 : index
   %src0_i03_off = index.mul %src0_i03, %src0_stride_ne3 : index
   %src0_row0_elem0 = index.add %src0_row0_off, %src0_i02_off : index
   %src0_row0_elem = index.add %src0_row0_elem0, %src0_i03_off : index
   %src0_row1_elem0 = index.add %src0_row1_off, %src0_i02_off : index
   %src0_row1_elem = index.add %src0_row1_elem0, %src0_i03_off : index
+  %src0_row2_elem0 = index.add %src0_row2_off, %src0_i02_off : index
+  %src0_row2_elem = index.add %src0_row2_elem0, %src0_i03_off : index
+  %src0_row3_elem0 = index.add %src0_row3_off, %src0_i02_off : index
+  %src0_row3_elem = index.add %src0_row3_elem0, %src0_i03_off : index
 
   %src1_col0 = index.mul %i11, %src1_stride_col : index
   %src1_i12_off = index.mul %i12, %src1_stride_ne2 : index
@@ -140,9 +152,11 @@ kernel.def export("hrx2_mul_mat_f16_f32_tiled_batched") @hrx2_mul_mat_f16_f32_ti
   %src1_col_elem = index.add %src1_col1, %src1_i13_off : index
 
   %row1_in_bounds = index.cmp ult, %row1, %rows : index
+  %row2_in_bounds = index.cmp ult, %row2, %rows : index
+  %row3_in_bounds = index.cmp ult, %row3, %rows : index
   %logical_k = index.div %k, %four : index
   %tail_start = index.mul %logical_k, %four : index
-  %sum_vec0, %sum_vec1 = scf.for %vi = [%lane to %logical_k step %workgroup_size](%acc0 = %zero_f32 : f32, %acc1 = %zero_f32 : f32) -> (f32, f32) {
+  %sum_vec0, %sum_vec1, %sum_vec2, %sum_vec3 = scf.for %vi = [%lane to %logical_k step %workgroup_size](%acc0 = %zero_f32 : f32, %acc1 = %zero_f32 : f32, %acc2 = %zero_f32 : f32, %acc3 = %zero_f32 : f32) -> (f32, f32, f32, f32) {
     %i0 = index.mul %vi, %four : index
     %src1_index = index.add %src1_col_elem, %i0 : index
     %b = vector.load %src1_view[%src1_index] : view<[%src1_count]xf32, #dense> -> vector<4xf32>
@@ -161,10 +175,30 @@ kernel.def export("hrx2_mul_mat_f16_f32_tiled_batched") @hrx2_mul_mat_f16_f32_ti
     } else {
       scf.yield %acc1 : f32
     }
-    scf.yield %next0, %next1 : f32, f32
+
+    %next2 = scf.if %row2_in_bounds -> (f32) {
+      %src0_index2 = index.add %src0_row2_elem, %i0 : index
+      %a2_f16 = vector.load %src0_view[%src0_index2] : view<[%src0_count]xf16, #dense> -> vector<4xf16>
+      %partial2 = func.call @hrx2_mul_mat_f16_f32_dot4(%a2_f16, %b) : (vector<4xf16>, vector<4xf32>) -> (f32)
+      %acc_next2 = scalar.addf<reassoc|nnan|ninf|nsz> %acc2, %partial2 : f32
+      scf.yield %acc_next2 : f32
+    } else {
+      scf.yield %acc2 : f32
+    }
+
+    %next3 = scf.if %row3_in_bounds -> (f32) {
+      %src0_index3 = index.add %src0_row3_elem, %i0 : index
+      %a3_f16 = vector.load %src0_view[%src0_index3] : view<[%src0_count]xf16, #dense> -> vector<4xf16>
+      %partial3 = func.call @hrx2_mul_mat_f16_f32_dot4(%a3_f16, %b) : (vector<4xf16>, vector<4xf32>) -> (f32)
+      %acc_next3 = scalar.addf<reassoc|nnan|ninf|nsz> %acc3, %partial3 : f32
+      scf.yield %acc_next3 : f32
+    } else {
+      scf.yield %acc3 : f32
+    }
+    scf.yield %next0, %next1, %next2, %next3 : f32, f32, f32, f32
   }
   %tail_lane0 = index.add %tail_start, %lane : index
-  %sum0, %sum1 = scf.for %i = [%tail_lane0 to %k step %workgroup_size](%acc0 = %sum_vec0 : f32, %acc1 = %sum_vec1 : f32) -> (f32, f32) {
+  %sum0, %sum1, %sum2, %sum3 = scf.for %i = [%tail_lane0 to %k step %workgroup_size](%acc0 = %sum_vec0 : f32, %acc1 = %sum_vec1 : f32, %acc2 = %sum_vec2 : f32, %acc3 = %sum_vec3 : f32) -> (f32, f32, f32, f32) {
     %src1_index = index.add %src1_col_elem, %i : index
     %b = view.load %src1_view[%src1_index] : view<[%src1_count]xf32, #dense> -> f32
 
@@ -184,10 +218,34 @@ kernel.def export("hrx2_mul_mat_f16_f32_tiled_batched") @hrx2_mul_mat_f16_f32_ti
     } else {
       scf.yield %acc1 : f32
     }
-    scf.yield %next0, %next1 : f32, f32
+
+    %next2 = scf.if %row2_in_bounds -> (f32) {
+      %src0_index2 = index.add %src0_row2_elem, %i : index
+      %a2_f16 = view.load %src0_view[%src0_index2] : view<[%src0_count]xf16, #dense> -> f16
+      %a2 = scalar.extf %a2_f16 : f16 to f32
+      %product2 = scalar.mulf<reassoc|nnan|ninf|nsz> %a2, %b : f32
+      %acc_next2 = scalar.addf<reassoc|nnan|ninf|nsz> %acc2, %product2 : f32
+      scf.yield %acc_next2 : f32
+    } else {
+      scf.yield %acc2 : f32
+    }
+
+    %next3 = scf.if %row3_in_bounds -> (f32) {
+      %src0_index3 = index.add %src0_row3_elem, %i : index
+      %a3_f16 = view.load %src0_view[%src0_index3] : view<[%src0_count]xf16, #dense> -> f16
+      %a3 = scalar.extf %a3_f16 : f16 to f32
+      %product3 = scalar.mulf<reassoc|nnan|ninf|nsz> %a3, %b : f32
+      %acc_next3 = scalar.addf<reassoc|nnan|ninf|nsz> %acc3, %product3 : f32
+      scf.yield %acc_next3 : f32
+    } else {
+      scf.yield %acc3 : f32
+    }
+    scf.yield %next0, %next1, %next2, %next3 : f32, f32, f32, f32
   }
   %dot0 = kernel.workgroup.reduce<addf> %sum0 : f32
   %dot1 = kernel.workgroup.reduce<addf> %sum1 : f32
+  %dot2 = kernel.workgroup.reduce<addf> %sum2 : f32
+  %dot3 = kernel.workgroup.reduce<addf> %sum3 : f32
 
   %dst_col_off = index.mul %i11, %dst_stride_col : index
   %dst_i12_off = index.mul %i12, %dst_stride_ne2 : index
@@ -198,12 +256,24 @@ kernel.def export("hrx2_mul_mat_f16_f32_tiled_batched") @hrx2_mul_mat_f16_f32_ti
   %dst_index10 = index.add %row1, %dst_col_off : index
   %dst_index11 = index.add %dst_index10, %dst_i12_off : index
   %dst_index1 = index.add %dst_index11, %dst_i13_off : index
+  %dst_index20 = index.add %row2, %dst_col_off : index
+  %dst_index21 = index.add %dst_index20, %dst_i12_off : index
+  %dst_index2 = index.add %dst_index21, %dst_i13_off : index
+  %dst_index30 = index.add %row3, %dst_col_off : index
+  %dst_index31 = index.add %dst_index30, %dst_i12_off : index
+  %dst_index3 = index.add %dst_index31, %dst_i13_off : index
   %lane_i32 = index.cast %lane : index to i32
   %is_lane0 = scalar.cmpi eq, %lane_i32, %zero_i32 : i32
   scf.if %is_lane0 {
     view.store %dot0, %dst_view[%dst_index0] : f32, view<[%dst_count]xf32, #dense>
     scf.if %row1_in_bounds {
       view.store %dot1, %dst_view[%dst_index1] : f32, view<[%dst_count]xf32, #dense>
+    }
+    scf.if %row2_in_bounds {
+      view.store %dot2, %dst_view[%dst_index2] : f32, view<[%dst_count]xf32, #dense>
+    }
+    scf.if %row3_in_bounds {
+      view.store %dot3, %dst_view[%dst_index3] : f32, view<[%dst_count]xf32, #dense>
     }
   }
   kernel.return

@@ -16,6 +16,14 @@ config.decl @shape.mul_mat_f16.dst_stride_ne2 : %value: index where [range(%valu
 config.decl @shape.mul_mat_f16.dst_stride_ne3 : %value: index where [range(%value, 1, 104857600)]
 config.decl @tuning.mul_mat_f16.workgroup_size : %value: index where [range(%value, 32, 1024), mul(%value, 32)]
 
+func.def inline @hrx2_mul_mat_f16_f32_dot4(%a_f16: vector<4xf16>, %b: vector<4xf32>) -> (f32) {
+  %zero_f32 = scalar.constant 0.0 : f32
+  %a = vector.extf %a_f16 : vector<4xf16> to vector<4xf32>
+  %product = vector.mulf<reassoc|nnan|ninf|nsz> %a, %b : vector<4xf32>
+  %sum = vector.reduce<addf, reassoc|nnan|ninf|nsz> %product, %zero_f32 : vector<4xf32>, f32
+  func.return %sum : f32
+}
+
 kernel.def export("hrx2_mul_mat_f16_f32_batched") @hrx2_mul_mat_f16_f32_batched() {
   %unit = index.constant 1 : index
   %rows = config.get @shape.mul_mat_f16.rows : index
@@ -31,6 +39,7 @@ kernel.def export("hrx2_mul_mat_f16_f32_batched") @hrx2_mul_mat_f16_f32_batched(
   %zero_f32 = scalar.constant 0.0 : f32
   %zero_i32 = scalar.constant 0 : i32
   %unit = index.constant 1 : index
+  %four = index.constant 4 : index
 
   %k = config.get @shape.mul_mat_f16.k : index
   %rows = config.get @shape.mul_mat_f16.rows : index
@@ -119,7 +128,20 @@ kernel.def export("hrx2_mul_mat_f16_f32_batched") @hrx2_mul_mat_f16_f32_batched(
   %src1_col1 = index.add %src1_col0, %src1_i12_off : index
   %src1_col_elem = index.add %src1_col1, %src1_i13_off : index
 
-  %sum = scf.for %i = [%lane to %k step %workgroup_size](%acc = %zero_f32 : f32) -> (f32) {
+  %logical_k = index.div %k, %four : index
+  %tail_start = index.mul %logical_k, %four : index
+  %sum_vec = scf.for %vi = [%lane to %logical_k step %workgroup_size](%acc = %zero_f32 : f32) -> (f32) {
+    %i0 = index.mul %vi, %four : index
+    %src0_index0 = index.add %src0_row_elem, %i0 : index
+    %src1_index0 = index.add %src1_col_elem, %i0 : index
+    %a_f16 = vector.load %src0_view[%src0_index0] : view<[%src0_count]xf16, #dense> -> vector<4xf16>
+    %b = vector.load %src1_view[%src1_index0] : view<[%src1_count]xf32, #dense> -> vector<4xf32>
+    %partial = func.call @hrx2_mul_mat_f16_f32_dot4(%a_f16, %b) : (vector<4xf16>, vector<4xf32>) -> (f32)
+    %next = scalar.addf<reassoc|nnan|ninf|nsz> %acc, %partial : f32
+    scf.yield %next : f32
+  }
+  %tail_lane0 = index.add %tail_start, %lane : index
+  %sum = scf.for %i = [%tail_lane0 to %k step %workgroup_size](%acc = %sum_vec : f32) -> (f32) {
     %src0_index = index.add %src0_row_elem, %i : index
     %src1_index = index.add %src1_col_elem, %i : index
     %a_f16 = view.load %src0_view[%src0_index] : view<[%src0_count]xf16, #dense> -> f16

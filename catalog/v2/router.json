@@ -48,6 +48,7 @@
       "mul_mat/mul_mat_f16_f32_batched_logits_cols1_4d.json",
       "mul_mat/mul_mat_f16_f32_batched_contiguous_4d.json",
       "mul_mat/mul_mat_f16_f32_batched_logits_cols1_2d.json",
+      "mul_mat/mul_mat_f16_f32_tiled_batched_rows4_cols16_batch12_4d.json",
       "mul_mat/mul_mat_f16_f32_tiled_batched_4d.json"
     ],
     "MUL_MAT_ID": [
