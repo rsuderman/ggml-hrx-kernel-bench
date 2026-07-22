@@ -117,25 +117,24 @@ def normalized_f32_rows(np: Any, shape: tuple[int, int], *, seed: int, l2_norm: 
 
 
 def pack_q4_k_scales(np: Any, scales: Any, minimums: Any):
-    packed = np.zeros((12,), dtype=np.uint8)
+    packed = np.zeros(scales.shape[:-1] + (12,), dtype=np.uint8)
     scales_u32 = scales.astype(np.uint32)
     minimums_u32 = minimums.astype(np.uint32)
-    for group in range(4):
-        packed[group] = np.uint8((scales_u32[group] & 0x3F) | ((scales_u32[group + 4] >> 4) << 6))
-        packed[group + 4] = np.uint8((minimums_u32[group] & 0x3F) | ((minimums_u32[group + 4] >> 4) << 6))
-        packed[group + 8] = np.uint8((scales_u32[group + 4] & 0x0F) | ((minimums_u32[group + 4] & 0x0F) << 4))
+    packed[..., 0:4] = ((scales_u32[..., 0:4] & 0x3F) | ((scales_u32[..., 4:8] >> 4) << 6)).astype(np.uint8)
+    packed[..., 4:8] = ((minimums_u32[..., 0:4] & 0x3F) | ((minimums_u32[..., 4:8] >> 4) << 6)).astype(np.uint8)
+    packed[..., 8:12] = ((scales_u32[..., 4:8] & 0x0F) | ((minimums_u32[..., 4:8] & 0x0F) << 4)).astype(np.uint8)
     return packed
 
 
 def pack_q5_k_high_bits(np: Any, quants: Any):
-    packed = np.zeros((32,), dtype=np.uint8)
-    for pos in range(32):
-        value = 0
-        for group in range(8):
-            if int(quants[group, pos]) & 0x10:
-                value |= 1 << group
-        packed[pos] = np.uint8(value)
-    return packed
+    high = ((quants.astype(np.uint8) & np.uint8(0x10)) >> np.uint8(4)).astype(np.uint8)
+    weights = (np.uint8(1) << np.arange(8, dtype=np.uint8)).reshape((1,) * (high.ndim - 2) + (8, 1))
+    return np.sum(high * weights, axis=-2, dtype=np.uint8).astype(np.uint8)
+
+
+def _permuted_rows(np: Any, rng: Any, base: Any, shape: tuple[int, ...]) -> Any:
+    order = np.argsort(rng.random(shape + (base.size,)), axis=-1)
+    return base[order].astype(base.dtype)
 
 
 def q4_k_pattern(np: Any, k: int, rows: int, *, seed: int, target_rms: float = 0.5):
@@ -143,37 +142,30 @@ def q4_k_pattern(np: Any, k: int, rows: int, *, seed: int, target_rms: float = 0
     data = np.zeros((blocks, Q4_K_BLOCK_BYTES), dtype=np.uint8)
     rng = np.random.default_rng(seed)
     q_base = np.tile(np.arange(16, dtype=np.uint8), 2)
-    for block_index in range(blocks):
-        # Use valid Q4_K scale/min metadata with balanced nibble coverage. The
-        # minimum is chosen near scale * mean(q), so each 32-value quant group is
-        # roughly centered after dequantization instead of producing huge
-        # one-sided sums that swamp f16acc checks.
-        scales = rng.integers(2, 7, size=(8,), dtype=np.uint8)
-        minimums = np.floor(scales.astype(np.float32) * np.float32(7.5) + np.float32(0.5)).astype(np.uint8)
-        qs = np.zeros((128,), dtype=np.uint8)
-        logical = np.empty((QK_K,), dtype=np.float32)
-        for group in range(8):
-            q_values = rng.permutation(q_base).astype(np.uint8)
-            byte_base = (group // 2) * 32
-            if group % 2:
-                qs[byte_base : byte_base + 32] |= q_values << np.uint8(4)
-            else:
-                qs[byte_base : byte_base + 32] |= q_values
-            offset = group * 32
-            logical[offset : offset + 32] = (
-                np.float32(scales[group]) * q_values.astype(np.float32) - np.float32(minimums[group])
-            )
-        # Normalize per block after constructing the exact packed q/scales/mins.
-        # The Loom assertion is still a plain close check, so the fixture has to
-        # keep outputs in a range where the existing absolute tolerance is a
-        # useful f16acc guard instead of a high-dynamic-range stress test.
-        rms = np.float32(np.sqrt(np.mean(logical * logical, dtype=np.float32)))
-        d_value = np.float16(np.float32(target_rms) / rms) if rms > np.float32(0.0) else np.float16(1.0)
-        d_bytes = np.array([d_value], dtype=np.float16).view(np.uint8)
-        data[block_index, 0:2] = d_bytes
-        data[block_index, 2:4] = d_bytes
-        data[block_index, 4:16] = pack_q4_k_scales(np, scales, minimums)
-        data[block_index, 16:144] = qs
+    # Use valid Q4_K scale/min metadata with balanced nibble coverage. The
+    # minimum is chosen near scale * mean(q), so each 32-value quant group is
+    # roughly centered after dequantization instead of producing huge
+    # one-sided sums that swamp f16acc checks.
+    scales = rng.integers(2, 7, size=(blocks, 8), dtype=np.uint8)
+    minimums = np.floor(scales.astype(np.float32) * np.float32(7.5) + np.float32(0.5)).astype(np.uint8)
+    q_values = _permuted_rows(np, rng, q_base, (blocks, 8))
+    logical = scales.astype(np.float32)[..., None] * q_values.astype(np.float32) - minimums.astype(np.float32)[..., None]
+    # Normalize per block after constructing the exact packed q/scales/mins.
+    # The Loom assertion is still a plain close check, so the fixture has to
+    # keep outputs in a range where the existing absolute tolerance is a
+    # useful f16acc guard instead of a high-dynamic-range stress test.
+    rms = np.sqrt(np.mean(logical.reshape(blocks, QK_K) ** np.float32(2.0), axis=1, dtype=np.float32)).astype(np.float32)
+    d_value = np.where(rms > np.float32(0.0), np.float32(target_rms) / rms, np.float32(1.0)).astype(np.float16)
+    qs = np.zeros((blocks, 128), dtype=np.uint8)
+    qs[:, 0:32] = q_values[:, 0] | (q_values[:, 1] << np.uint8(4))
+    qs[:, 32:64] = q_values[:, 2] | (q_values[:, 3] << np.uint8(4))
+    qs[:, 64:96] = q_values[:, 4] | (q_values[:, 5] << np.uint8(4))
+    qs[:, 96:128] = q_values[:, 6] | (q_values[:, 7] << np.uint8(4))
+    d_bytes = d_value.reshape(blocks, 1).view(np.uint8)
+    data[:, 0:2] = d_bytes
+    data[:, 2:4] = d_bytes
+    data[:, 4:16] = pack_q4_k_scales(np, scales, minimums)
+    data[:, 16:144] = qs
     return data.reshape(-1)
 
 
@@ -182,32 +174,24 @@ def q5_k_pattern(np: Any, k: int, rows: int, *, seed: int, target_rms: float = 0
     data = np.zeros((blocks, Q5_K_BLOCK_BYTES), dtype=np.uint8)
     rng = np.random.default_rng(seed)
     q_base = np.arange(32, dtype=np.uint8)
-    for block_index in range(blocks):
-        scales = rng.integers(2, 5, size=(8,), dtype=np.uint8)
-        minimums = np.floor(scales.astype(np.float32) * np.float32(15.5) + np.float32(0.5)).astype(np.uint8)
-        quants = np.zeros((8, 32), dtype=np.uint8)
-        qs = np.zeros((128,), dtype=np.uint8)
-        logical = np.empty((QK_K,), dtype=np.float32)
-        for group in range(8):
-            q_values = rng.permutation(q_base).astype(np.uint8)
-            quants[group] = q_values
-            byte_base = (group // 2) * 32
-            if group % 2:
-                qs[byte_base : byte_base + 32] |= q_values.astype(np.uint8) << np.uint8(4)
-            else:
-                qs[byte_base : byte_base + 32] |= q_values & np.uint8(0x0F)
-            offset = group * 32
-            logical[offset : offset + 32] = (
-                np.float32(scales[group]) * q_values.astype(np.float32) - np.float32(minimums[group])
-            )
-        rms = np.float32(np.sqrt(np.mean(logical * logical, dtype=np.float32)))
-        d_value = np.float16(np.float32(target_rms) / rms) if rms > np.float32(0.0) else np.float16(1.0)
-        d_bytes = np.array([d_value], dtype=np.float16).view(np.uint8)
-        data[block_index, 0:2] = d_bytes
-        data[block_index, 2:4] = d_bytes
-        data[block_index, 4:16] = pack_q4_k_scales(np, scales, minimums)
-        data[block_index, 16:48] = pack_q5_k_high_bits(np, quants)
-        data[block_index, 48:176] = qs
+    scales = rng.integers(2, 5, size=(blocks, 8), dtype=np.uint8)
+    minimums = np.floor(scales.astype(np.float32) * np.float32(15.5) + np.float32(0.5)).astype(np.uint8)
+    q_values = _permuted_rows(np, rng, q_base, (blocks, 8))
+    logical = scales.astype(np.float32)[..., None] * q_values.astype(np.float32) - minimums.astype(np.float32)[..., None]
+    rms = np.sqrt(np.mean(logical.reshape(blocks, QK_K) ** np.float32(2.0), axis=1, dtype=np.float32)).astype(np.float32)
+    d_value = np.where(rms > np.float32(0.0), np.float32(target_rms) / rms, np.float32(1.0)).astype(np.float16)
+    q_low = q_values & np.uint8(0x0F)
+    qs = np.zeros((blocks, 128), dtype=np.uint8)
+    qs[:, 0:32] = q_low[:, 0] | (q_low[:, 1] << np.uint8(4))
+    qs[:, 32:64] = q_low[:, 2] | (q_low[:, 3] << np.uint8(4))
+    qs[:, 64:96] = q_low[:, 4] | (q_low[:, 5] << np.uint8(4))
+    qs[:, 96:128] = q_low[:, 6] | (q_low[:, 7] << np.uint8(4))
+    d_bytes = d_value.reshape(blocks, 1).view(np.uint8)
+    data[:, 0:2] = d_bytes
+    data[:, 2:4] = d_bytes
+    data[:, 4:16] = pack_q4_k_scales(np, scales, minimums)
+    data[:, 16:48] = pack_q5_k_high_bits(np, q_values)
+    data[:, 48:176] = qs
     return data.reshape(-1)
 
 
@@ -215,128 +199,105 @@ def q6_k_pattern(np: Any, k: int, rows: int, *, seed: int, target_rms: float = 0
     blocks = rows * (k // QK_K)
     data = np.zeros((blocks, Q6_K_BLOCK_BYTES), dtype=np.uint8)
     rng = np.random.default_rng(seed)
-    for block_index in range(blocks):
-        ql = np.zeros((128,), dtype=np.uint8)
-        qh = np.zeros((64,), dtype=np.uint8)
-        scales = rng.integers(1, 5, size=(16,), dtype=np.int8)
-        logical = np.empty((QK_K,), dtype=np.float32)
-        for half in range(2):
-            for segment in range(4):
-                group = half * 4 + segment
-                q_signed = rng.integers(-32, 32, size=(32,), dtype=np.int16)
-                for pos in range(32):
-                    q_u = int(q_signed[pos]) + 32
-                    ql_index = half * 64 + (segment % 2) * 32 + pos
-                    if segment < 2:
-                        ql[ql_index] |= np.uint8(q_u & 0x0F)
-                    else:
-                        ql[ql_index] |= np.uint8((q_u & 0x0F) << 4)
-                    qh_index = half * 32 + pos
-                    qh[qh_index] |= np.uint8(((q_u >> 4) & 0x03) << (2 * segment))
-                    scale_index = half * 8 + segment * 2 + (1 if pos >= 16 else 0)
-                    logical[group * 32 + pos] = np.float32(int(scales[scale_index])) * np.float32(int(q_signed[pos]))
-        rms = np.float32(np.sqrt(np.mean(logical * logical, dtype=np.float32)))
-        d_value = np.float16(np.float32(target_rms) / rms) if rms > np.float32(0.0) else np.float16(1.0)
-        data[block_index, 0:128] = ql
-        data[block_index, 128:192] = qh
-        data[block_index, 192:208] = scales.view(np.uint8)
-        data[block_index, 208:210] = np.array([d_value], dtype=np.float16).view(np.uint8)
+    ql = np.zeros((blocks, 128), dtype=np.uint8)
+    qh = np.zeros((blocks, 64), dtype=np.uint8)
+    scales = rng.integers(1, 5, size=(blocks, 16), dtype=np.int8)
+    q_signed = rng.integers(-32, 32, size=(blocks, 2, 4, 32), dtype=np.int16)
+    q_u = (q_signed + np.int16(32)).astype(np.uint8)
+    positions = np.arange(32)
+    scale_offsets = (positions >= 16).astype(np.intp)
+    logical = np.empty((blocks, 2, 4, 32), dtype=np.float32)
+    for half in range(2):
+        for segment in range(4):
+            ql_index = half * 64 + (segment % 2) * 32
+            low = q_u[:, half, segment] & np.uint8(0x0F)
+            if segment < 2:
+                ql[:, ql_index : ql_index + 32] |= low
+            else:
+                ql[:, ql_index : ql_index + 32] |= low << np.uint8(4)
+            qh[:, half * 32 : half * 32 + 32] |= ((q_u[:, half, segment] >> np.uint8(4)) & np.uint8(0x03)) << np.uint8(2 * segment)
+            scale_index = half * 8 + segment * 2 + scale_offsets
+            logical[:, half, segment] = scales[:, scale_index].astype(np.float32) * q_signed[:, half, segment].astype(np.float32)
+    rms = np.sqrt(np.mean(logical.reshape(blocks, QK_K) ** np.float32(2.0), axis=1, dtype=np.float32)).astype(np.float32)
+    d_value = np.where(rms > np.float32(0.0), np.float32(target_rms) / rms, np.float32(1.0)).astype(np.float16)
+    data[:, 0:128] = ql
+    data[:, 128:192] = qh
+    data[:, 192:208] = scales.view(np.uint8)
+    data[:, 208:210] = d_value.reshape(blocks, 1).view(np.uint8)
     return data.reshape(-1)
 
 
 def dequant_q4_k(np: Any, packed: Any, k: int, rows: int):
     blocks_per_row = k // QK_K
-    blocks = packed.reshape(rows * blocks_per_row, Q4_K_BLOCK_BYTES)
-    out = np.empty((rows, k), dtype=np.float32)
-    for row in range(rows):
-        for block_in_row in range(blocks_per_row):
-            block = blocks[row * blocks_per_row + block_in_row]
-            d = block[0:2].copy().view(np.float16).astype(np.float32)[0]
-            dmin = block[2:4].copy().view(np.float16).astype(np.float32)[0]
-            scales = block[4:16].astype(np.uint32)
-            qs = block[16:144].astype(np.uint32)
-            for group in range(8):
-                if group < 4:
-                    scale_i = scales[group] & 0x3F
-                    min_i = scales[group + 4] & 0x3F
-                else:
-                    low = scales[group - 4]
-                    mid = scales[group]
-                    high = scales[group + 4]
-                    scale_i = (high & 0x0F) | ((low >> 6) << 4)
-                    min_i = (high >> 4) | ((mid >> 6) << 4)
-                scale = np.float32(d * np.float32(scale_i))
-                minimum = np.float32(dmin * np.float32(min_i))
-                byte_base = (group // 2) * 32
-                group_values = np.empty((32,), dtype=np.float32)
-                for j in range(32):
-                    q_byte = qs[byte_base + j]
-                    q = (q_byte >> 4) if group % 2 else (q_byte & 0x0F)
-                    group_values[j] = np.float32(scale * np.float32(q) - minimum)
-                offset = block_in_row * QK_K + group * 32
-                out[row, offset : offset + 32] = group_values
-    return out
+    blocks = packed.view(np.uint8).reshape(rows, blocks_per_row, Q4_K_BLOCK_BYTES)
+    d = blocks[..., 0:2].copy().view(np.float16).astype(np.float32).reshape(rows, blocks_per_row)
+    dmin = blocks[..., 2:4].copy().view(np.float16).astype(np.float32).reshape(rows, blocks_per_row)
+    packed_scales = blocks[..., 4:16].astype(np.uint32)
+    scale_i = np.empty((rows, blocks_per_row, 8), dtype=np.float32)
+    min_i = np.empty((rows, blocks_per_row, 8), dtype=np.float32)
+    low = packed_scales[..., 0:4]
+    mid = packed_scales[..., 4:8]
+    high = packed_scales[..., 8:12]
+    scale_i[..., 0:4] = (low & 0x3F).astype(np.float32)
+    min_i[..., 0:4] = (mid & 0x3F).astype(np.float32)
+    scale_i[..., 4:8] = ((high & 0x0F) | ((low >> 6) << 4)).astype(np.float32)
+    min_i[..., 4:8] = ((high >> 4) | ((mid >> 6) << 4)).astype(np.float32)
+    qs = blocks[..., 16:144].astype(np.uint32).reshape(rows, blocks_per_row, 4, 32)
+    q = np.empty((rows, blocks_per_row, 8, 32), dtype=np.float32)
+    q[..., 0::2, :] = (qs & 0x0F).astype(np.float32)
+    q[..., 1::2, :] = (qs >> 4).astype(np.float32)
+    values = d[..., None, None] * scale_i[..., None] * q - dmin[..., None, None] * min_i[..., None]
+    return values.astype(np.float32).reshape(rows, k)
 
 
 def dequant_q5_k(np: Any, packed: Any, k: int, rows: int):
     blocks_per_row = k // QK_K
-    blocks = packed.view(np.uint8).reshape(rows * blocks_per_row, Q5_K_BLOCK_BYTES)
-    out = np.empty((rows, k), dtype=np.float32)
-    for row in range(rows):
-        for block_in_row in range(blocks_per_row):
-            block = blocks[row * blocks_per_row + block_in_row]
-            d = block[0:2].copy().view(np.float16).astype(np.float32)[0]
-            dmin = block[2:4].copy().view(np.float16).astype(np.float32)[0]
-            packed_scales = block[4:16].astype(np.uint32)
-            qh = block[16:48].astype(np.uint32)
-            qs = block[48:176].astype(np.uint32)
-            for group in range(8):
-                if group < 4:
-                    scale_i = packed_scales[group] & 0x3F
-                    min_i = packed_scales[group + 4] & 0x3F
-                else:
-                    low = packed_scales[group - 4]
-                    mid = packed_scales[group]
-                    high = packed_scales[group + 4]
-                    scale_i = (high & 0x0F) | ((low >> 6) << 4)
-                    min_i = (high >> 4) | ((mid >> 6) << 4)
-                scale = np.float32(d * np.float32(scale_i))
-                minimum = np.float32(dmin * np.float32(min_i))
-                byte_base = (group // 2) * 32
-                offset = block_in_row * QK_K + group * 32
-                for j in range(32):
-                    q_byte = qs[byte_base + j]
-                    low_nibble = (q_byte >> 4) if group % 2 else (q_byte & 0x0F)
-                    q = low_nibble | (((qh[j] >> group) & 0x01) << 4)
-                    out[row, offset + j] = np.float32(scale * np.float32(q) - minimum)
-    return out
+    blocks = packed.view(np.uint8).reshape(rows, blocks_per_row, Q5_K_BLOCK_BYTES)
+    d = blocks[..., 0:2].copy().view(np.float16).astype(np.float32).reshape(rows, blocks_per_row)
+    dmin = blocks[..., 2:4].copy().view(np.float16).astype(np.float32).reshape(rows, blocks_per_row)
+    packed_scales = blocks[..., 4:16].astype(np.uint32)
+    scale_i = np.empty((rows, blocks_per_row, 8), dtype=np.float32)
+    min_i = np.empty((rows, blocks_per_row, 8), dtype=np.float32)
+    low = packed_scales[..., 0:4]
+    mid = packed_scales[..., 4:8]
+    high = packed_scales[..., 8:12]
+    scale_i[..., 0:4] = (low & 0x3F).astype(np.float32)
+    min_i[..., 0:4] = (mid & 0x3F).astype(np.float32)
+    scale_i[..., 4:8] = ((high & 0x0F) | ((low >> 6) << 4)).astype(np.float32)
+    min_i[..., 4:8] = ((high >> 4) | ((mid >> 6) << 4)).astype(np.float32)
+    qs = blocks[..., 48:176].astype(np.uint32).reshape(rows, blocks_per_row, 4, 32)
+    q_low = np.empty((rows, blocks_per_row, 8, 32), dtype=np.uint32)
+    q_low[..., 0::2, :] = qs & 0x0F
+    q_low[..., 1::2, :] = qs >> 4
+    qh = blocks[..., 16:48].astype(np.uint32)
+    groups = np.arange(8, dtype=np.uint32).reshape(1, 1, 8, 1)
+    q_high = (((qh[..., None, :] >> groups) & 0x01) << 4).astype(np.uint32)
+    q = (q_low | q_high).astype(np.float32)
+    values = d[..., None, None] * scale_i[..., None] * q - dmin[..., None, None] * min_i[..., None]
+    return values.astype(np.float32).reshape(rows, k)
 
 
 def dequant_q6_k(np: Any, packed: Any, k: int, rows: int):
     blocks_per_row = k // QK_K
-    blocks = packed.view(np.uint8).reshape(rows * blocks_per_row, Q6_K_BLOCK_BYTES)
-    out = np.empty((rows, k), dtype=np.float32)
-    for row in range(rows):
-        for block_in_row in range(blocks_per_row):
-            block = blocks[row * blocks_per_row + block_in_row]
-            ql = block[0:128].astype(np.uint32)
-            qh = block[128:192].astype(np.uint32)
-            scales = block[192:208].copy().view(np.int8).astype(np.float32)
-            d = block[208:210].copy().view(np.float16).astype(np.float32)[0]
-            block_base = block_in_row * QK_K
-            for half in range(2):
-                for segment in range(4):
-                    group = half * 4 + segment
-                    group_offset = block_base + group * 32
-                    for pos in range(32):
-                        ql_index = half * 64 + (segment % 2) * 32 + pos
-                        ql_nibble = (ql[ql_index] & 0x0F) if segment < 2 else ((ql[ql_index] >> 4) & 0x0F)
-                        qh_index = half * 32 + pos
-                        high = (qh[qh_index] >> (2 * segment)) & 0x03
-                        q_signed = int((high << 4) | ql_nibble) - 32
-                        scale_index = half * 8 + segment * 2 + (1 if pos >= 16 else 0)
-                        out[row, group_offset + pos] = np.float32(d * scales[scale_index] * np.float32(q_signed))
-    return out
+    blocks = packed.view(np.uint8).reshape(rows, blocks_per_row, Q6_K_BLOCK_BYTES)
+    ql = blocks[..., 0:128].astype(np.uint32).reshape(rows, blocks_per_row, 2, 2, 32)
+    qh = blocks[..., 128:192].astype(np.uint32).reshape(rows, blocks_per_row, 2, 32)
+    scales = blocks[..., 192:208].copy().view(np.int8).astype(np.float32).reshape(rows, blocks_per_row, 16)
+    d = blocks[..., 208:210].copy().view(np.float16).astype(np.float32).reshape(rows, blocks_per_row)
+    positions = np.arange(32)
+    scale_offsets = (positions >= 16).astype(np.intp)
+    values = np.empty((rows, blocks_per_row, 2, 4, 32), dtype=np.float32)
+    for half in range(2):
+        for segment in range(4):
+            low_source = ql[..., half, segment % 2, :]
+            ql_nibble = (low_source & 0x0F) if segment < 2 else ((low_source >> 4) & 0x0F)
+            high = (qh[..., half, :] >> (2 * segment)) & 0x03
+            q_signed = ((high << 4) | ql_nibble).astype(np.int32) - 32
+            scale_index = half * 8 + segment * 2 + scale_offsets
+            values[..., half, segment, :] = (
+                d[..., None] * scales[..., scale_index] * q_signed.astype(np.float32)
+            ).astype(np.float32)
+    return values.reshape(rows, k)
 
 
 def quantize_q8_0(np: Any, values: Any) -> Any:
@@ -344,31 +305,25 @@ def quantize_q8_0(np: Any, values: Any) -> Any:
     if k % 32 != 0:
         raise ValueError(f"k must be a multiple of 32: {k}")
     blocks_per_row = k // 32
-    packed = np.zeros((rows * blocks_per_row, Q8_0_BLOCK_BYTES), dtype=np.uint8)
-    for row in range(rows):
-        for block in range(blocks_per_row):
-            chunk = values[row, block * 32 : (block + 1) * 32].astype(np.float32)
-            amax = np.max(np.abs(chunk))
-            d = np.float32(amax / 127.0) if amax != 0 else np.float32(0.0)
-            qs = np.rint(chunk / d).astype(np.int32) if d != 0 else np.zeros((32,), dtype=np.int32)
-            qs = np.clip(qs, -128, 127).astype(np.int8)
-            linear = row * blocks_per_row + block
-            packed[linear, 0:2] = np.array([d], dtype=np.float16).view(np.uint8)
-            packed[linear, 2:34] = qs.view(np.uint8)
+    chunks = values.astype(np.float32).reshape(rows, blocks_per_row, 32)
+    amax = np.max(np.abs(chunks), axis=2).astype(np.float32)
+    d = np.where(amax != np.float32(0.0), amax / np.float32(127.0), np.float32(0.0)).astype(np.float32)
+    safe_d = np.where(d != np.float32(0.0), d, np.float32(1.0)).astype(np.float32)
+    scaled = chunks / safe_d[..., None]
+    qs = np.where(d[..., None] != np.float32(0.0), np.rint(scaled), np.float32(0.0))
+    qs = np.clip(qs, -128, 127).astype(np.int8)
+    packed = np.zeros((rows, blocks_per_row, Q8_0_BLOCK_BYTES), dtype=np.uint8)
+    packed[..., 0:2] = d.astype(np.float16).reshape(rows, blocks_per_row, 1).view(np.uint8)
+    packed[..., 2:34] = qs.view(np.uint8)
     return packed.reshape(-1).view(np.int8)
 
 
 def dequant_q8_0(np: Any, packed: Any, k: int, rows: int) -> Any:
     blocks_per_row = k // 32
-    blocks = packed.view(np.uint8).reshape(rows * blocks_per_row, Q8_0_BLOCK_BYTES)
-    out = np.empty((rows, k), dtype=np.float32)
-    for row in range(rows):
-        for block in range(blocks_per_row):
-            raw = blocks[row * blocks_per_row + block]
-            d = raw[0:2].copy().view(np.float16).astype(np.float32)[0]
-            qs = raw[2:34].copy().view(np.int8).astype(np.float32)
-            out[row, block * 32 : (block + 1) * 32] = qs * d
-    return out
+    blocks = packed.view(np.uint8).reshape(rows, blocks_per_row, Q8_0_BLOCK_BYTES)
+    d = blocks[..., 0:2].copy().view(np.float16).astype(np.float32).reshape(rows, blocks_per_row)
+    qs = blocks[..., 2:34].copy().view(np.int8).astype(np.float32)
+    return (qs * d[..., None]).astype(np.float32).reshape(rows, k)
 
 
 def candidate_seed(candidate: Candidate) -> int:
@@ -687,25 +642,27 @@ def _pack_q8_1_x4_rows(np: Any, values: Any) -> Any:
     block_count = (ncols + 31) // 32
     outer_count = (block_count + 3) // 4
     expected = np.zeros((nrows, outer_count, 144), dtype=np.uint8)
-    for row in range(nrows):
-        for block in range(block_count):
-            outer = block // 4
-            inner = block % 4
-            start = block * 32
-            block_values = np.zeros((32,), dtype=np.float32)
-            chunk = values[row, start : min(start + 32, ncols)]
-            block_values[: chunk.size] = chunk
-            absmax = np.max(np.abs(block_values))
-            d = np.float32(absmax / 127.0) if absmax != 0 else np.float32(0.0)
-            if d != 0:
-                qs = np.rint(block_values / d).astype(np.int32)
-            else:
-                qs = np.zeros((32,), dtype=np.int32)
-            qs = np.clip(qs, -128, 127).astype(np.int8)
-            s = np.float32(np.sum(qs.astype(np.float32)) * d)
-            expected[row, outer, inner * 4 : inner * 4 + 2] = np.array([d], dtype=np.float16).view(np.uint8)
-            expected[row, outer, inner * 4 + 2 : inner * 4 + 4] = np.array([s], dtype=np.float16).view(np.uint8)
-            expected[row, outer, 16 + inner * 32 : 16 + inner * 32 + 32] = qs.view(np.uint8)
+    padded = np.zeros((nrows, block_count * 32), dtype=np.float32)
+    padded[:, :ncols] = values.astype(np.float32)
+    block_values = padded.reshape(nrows, block_count, 32)
+    absmax = np.max(np.abs(block_values), axis=2).astype(np.float32)
+    d = np.where(absmax != np.float32(0.0), absmax / np.float32(127.0), np.float32(0.0)).astype(np.float32)
+    safe_d = np.where(d != np.float32(0.0), d, np.float32(1.0)).astype(np.float32)
+    qs = np.where(d[..., None] != np.float32(0.0), np.rint(block_values / safe_d[..., None]), np.float32(0.0))
+    qs = np.clip(qs, -128, 127).astype(np.int8)
+    s = (np.sum(qs.astype(np.float32), axis=2, dtype=np.float32) * d).astype(np.float32)
+    d_bytes = d.astype(np.float16).view(np.uint8).reshape(nrows, block_count, 2)
+    s_bytes = s.astype(np.float16).view(np.uint8).reshape(nrows, block_count, 2)
+    block_indices = np.arange(block_count)
+    outers = block_indices // 4
+    inners = block_indices % 4
+    expected[:, outers, inners * 4] = d_bytes[..., 0]
+    expected[:, outers, inners * 4 + 1] = d_bytes[..., 1]
+    expected[:, outers, inners * 4 + 2] = s_bytes[..., 0]
+    expected[:, outers, inners * 4 + 3] = s_bytes[..., 1]
+    for inner in range(4):
+        mask = inners == inner
+        expected[:, outers[mask], 16 + inner * 32 : 16 + inner * 32 + 32] = qs[:, mask].view(np.uint8)
     return expected.reshape(nrows * outer_count * 144).view(np.int8)
 
 
@@ -2328,49 +2285,26 @@ def _quantize_q8_1_arrays(np: Any, candidate: Candidate, seed: int) -> dict[str,
     block_count = (ncols + 31) // 32
     if "x4" in candidate.root_symbol:
         outer_count = (block_count + 3) // 4
-        expected = np.zeros((nrows, outer_count, 144), dtype=np.uint8)
-        for row in range(nrows):
-            for block in range(block_count):
-                outer = block // 4
-                inner = block % 4
-                start = block * 32
-                values = np.zeros((32,), dtype=np.float32)
-                chunk = src[row, start : min(start + 32, ncols)]
-                values[: chunk.size] = chunk
-                absmax = np.max(np.abs(values))
-                d = np.float32(absmax / 127.0) if absmax != 0 else np.float32(0.0)
-                if d != 0:
-                    qs = np.rint(values / d).astype(np.int32)
-                else:
-                    qs = np.zeros((32,), dtype=np.int32)
-                qs = np.clip(qs, -128, 127).astype(np.int8)
-                s = np.float32(np.sum(qs.astype(np.float32)) * d)
-                expected[row, outer, inner * 4 : inner * 4 + 2] = np.array([d], dtype=np.float16).view(np.uint8)
-                expected[row, outer, inner * 4 + 2 : inner * 4 + 4] = np.array([s], dtype=np.float16).view(np.uint8)
-                expected[row, outer, 16 + inner * 32 : 16 + inner * 32 + 32] = qs.view(np.uint8)
         return {
             "arrays": {
                 "src0": src.reshape(elems),
-                "expected": expected.reshape(nrows * outer_count * 144).view(np.int8),
+                "expected": _pack_q8_1_x4_rows(np, src),
             },
             "metadata": {"q8_1_x4_block_bytes": 144, "block_count": block_count, "outer_count": outer_count},
         }
+    padded = np.zeros((nrows, block_count * 32), dtype=np.float32)
+    padded[:, :ncols] = src
+    values = padded.reshape(nrows, block_count, 32)
+    absmax = np.max(np.abs(values), axis=2).astype(np.float32)
+    d = np.where(absmax != np.float32(0.0), absmax / np.float32(127.0), np.float32(1.0)).astype(np.float32)
+    scaled = values / d[..., None]
+    qs = np.where(scaled < np.float32(0.0), np.ceil(scaled - np.float32(0.5)), np.floor(scaled + np.float32(0.5)))
+    qs = np.clip(qs, -128, 127).astype(np.int8)
+    s = np.sum(qs.astype(np.float32) * d[..., None], axis=2, dtype=np.float32).astype(np.float32)
     expected = np.zeros((nrows, block_count, Q8_1_BLOCK_BYTES), dtype=np.uint8)
-    for row in range(nrows):
-        for block in range(block_count):
-            start = block * 32
-            values = np.zeros((32,), dtype=np.float32)
-            chunk = src[row, start : min(start + 32, ncols)]
-            values[: chunk.size] = chunk
-            absmax = np.max(np.abs(values))
-            d = np.float32(absmax / 127.0) if absmax != 0 else np.float32(1.0)
-            scaled = values / d if d != 0 else np.zeros((32,), dtype=np.float32)
-            qs = np.where(scaled < 0, np.ceil(scaled - np.float32(0.5)), np.floor(scaled + np.float32(0.5)))
-            qs = np.clip(qs, -128, 127).astype(np.int8)
-            s = np.float32(np.sum(qs.astype(np.float32) * d))
-            expected[row, block, 0:2] = np.array([d], dtype=np.float16).view(np.uint8)
-            expected[row, block, 2:4] = np.array([s], dtype=np.float16).view(np.uint8)
-            expected[row, block, 4:36] = qs.view(np.uint8)
+    expected[..., 0:2] = d.astype(np.float16).reshape(nrows, block_count, 1).view(np.uint8)
+    expected[..., 2:4] = s.astype(np.float16).reshape(nrows, block_count, 1).view(np.uint8)
+    expected[..., 4:36] = qs.view(np.uint8)
     return {
         "arrays": {
             "src0": src.reshape(elems),
