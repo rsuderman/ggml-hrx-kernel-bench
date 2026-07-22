@@ -154,10 +154,10 @@ Build-time command:
 
 ```bash
 cmake -S . -B build -DGGML_HRX_ENABLE_BENCHMARKS=ON
-cmake --build build --target kernel-benchmark-llama-3-3-8b-q8-mul-mat-v2-scripts
+cmake --build build --target kernel-benchmark-llama-3-3-8b-mul-mat-v2-scripts
 ```
 
-That target imports the root `benchmarks/llama-3.3-8b-q8-mul-mat.v2.yaml`
+That target imports the root `benchmarks/llama-3.3-8b-mul-mat.v2.yaml`
 fixture, prepares descriptors, and invokes
 `tests/infra/materialize_loom_benchmarks.py`, which calls
 `loom-bench-materialize` logic without inline CMake Python snippets. The
@@ -169,7 +169,7 @@ Materialize a candidate benchmark tree:
 
 ```bash
 loom-bench-materialize \
-  --prepare-root build/benchmarks/artifacts/kernel-prepare-llama-3.3-8b-q8-mul-mat-v2 \
+  --prepare-root build/benchmarks/artifacts/kernel-prepare-llama-3.3-8b-mul-mat-v2 \
   --repo-root . \
   --asset-root build/generated/assets \
   --op MUL_MAT \

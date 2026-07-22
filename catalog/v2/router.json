@@ -49,6 +49,8 @@
       "mul_mat/mul_mat_f16_f32_contiguous_4d.json",
       "mul_mat/mul_mat_f16_f32_generic_2d.json",
       "mul_mat/mul_mat_f16_f32_generic_4d.json",
+      "mul_mat/mul_mat_f16_f16_contiguous_m64n64_gfx1100_4d.json",
+      "mul_mat/mul_mat_f16_f16_contiguous_c1_gfx1100_4d.json",
       "mul_mat/mul_mat_f16_f16_contiguous_4d.json",
       "mul_mat/mul_mat_f16_f16_generic_4d.json"
     ],

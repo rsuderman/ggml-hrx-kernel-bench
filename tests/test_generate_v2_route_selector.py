@@ -104,7 +104,7 @@ def test_generator_preserves_every_materialized_operation_and_route_order(
     }
     generated = _generated_route_ids(output.read_text(encoding="utf-8"))
     assert len(expected) == 52
-    assert sum(len(route_ids) for route_ids in expected.values()) == 214
+    assert sum(len(route_ids) for route_ids in expected.values()) == 218
     assert list(generated) == sorted(expected)
     assert generated == expected
 
@@ -138,6 +138,29 @@ def test_generator_preserves_exact_materialized_abs_route_order(
     assert contents.count("/* .tensors = */") == 4
     assert contents.count("/* .values = */") == 4
     assert contents.count("/* .constraints = */") == 4
+
+
+def test_generator_preserves_generalized_mul_mat_f16_f16_route_order(
+    materialized_routing_dir: Path,
+    tmp_path: Path,
+) -> None:
+    output = tmp_path / "generated" / "ggml_hrx_v2_routes.inc.cpp"
+
+    result = _run_generator(
+        routing_dir=materialized_routing_dir,
+        output=output,
+        operations=("MUL_MAT",),
+    )
+
+    assert result.returncode == 0, result.stderr
+    generated = _generated_route_ids(output.read_text(encoding="utf-8"))
+    route_ids = generated["MUL_MAT"]
+    m64n64_gfx1100_index = route_ids.index("mul_mat_f16_f16_contiguous_m64n64_gfx1100_4d")
+    c1_gfx1100_index = route_ids.index("mul_mat_f16_f16_contiguous_c1_gfx1100_4d")
+    contiguous_index = route_ids.index("mul_mat_f16_f16_contiguous_4d")
+    generic_index = route_ids.index("mul_mat_f16_f16_generic_4d")
+
+    assert m64n64_gfx1100_index < c1_gfx1100_index < contiguous_index < generic_index
 
 
 def test_generator_output_is_deterministic_across_requested_op_order(

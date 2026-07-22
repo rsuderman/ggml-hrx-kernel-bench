@@ -64,3 +64,11 @@ ops:
       destinations:
         - dtype: f32
           shape: [4096, 512, 1, 1]
+
+# Disabled while rerunning the f16/f16 Llama 8B MUL_MAT suite:
+# - f16/f32/f32 cases
+# - f32/f32/f32 cases
+# - q4_k/f32/f32 cases
+# - q5_k/f32/f32 cases
+# - q6_k/f32/f32 cases
+# - q8_0/f32/f32 cases

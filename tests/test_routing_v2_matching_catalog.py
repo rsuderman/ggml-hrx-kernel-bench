@@ -12,7 +12,7 @@ from ggml_hrx_kernel_bench.routing.v2.models import (
     ConcreteTensorDimension,
     V2Route,
 )
-from ggml_hrx_kernel_bench.routing.v2.query import RouteCatalog, load_route_catalog
+from ggml_hrx_kernel_bench.routing.v2.query import RouteCatalog, load_route_catalog, routes_for_op
 
 
 REPRESENTATIVE_ROUTE_IDS = frozenset(
@@ -104,6 +104,42 @@ def _replace_tensor(
     tensor: ConcreteTensor,
 ) -> dict[str, ConcreteTensor]:
     return {**tensors, name: tensor}
+
+
+def _first_matching_route_id(
+    catalog: RouteCatalog,
+    operation: str,
+    tensors: Mapping[str, ConcreteTensor],
+) -> str:
+    for route in routes_for_op(catalog, operation):
+        if route_accepts_tensors(route, tensors):
+            return route.id
+    raise AssertionError(f"no route matched tensors for operation {operation}")
+
+
+def _mul_mat_f16_f16_contiguous(
+    *,
+    rows: int,
+    cols: int,
+    k: int,
+) -> dict[str, ConcreteTensor]:
+    return {
+        "src0": _tensor(
+            dtype="F16",
+            sizes=(k, rows, 1, 1),
+            strides=(1, k, k * rows, k * rows),
+        ),
+        "src1": _tensor(
+            dtype="F16",
+            sizes=(k, cols, 1, 1),
+            strides=(1, k, k * cols, k * cols),
+        ),
+        "dst": _tensor(
+            dtype="F32",
+            sizes=(rows, cols, 1, 1),
+            strides=(1, rows, rows * cols, rows * cols),
+        ),
+    }
 
 
 def _active_dataclass_fields(value: object) -> set[str]:
@@ -356,6 +392,47 @@ MUL_MAT_F16_YAML_CASE_33 = {
         strides=(1, 1056, 1056, 1056),
     ),
 }
+
+MUL_MAT_F16_F16_R4096_C512_K14336 = _mul_mat_f16_f16_contiguous(
+    rows=4096,
+    cols=512,
+    k=14336,
+)
+MUL_MAT_F16_F16_R4096_C1_K14336 = _mul_mat_f16_f16_contiguous(
+    rows=4096,
+    cols=1,
+    k=14336,
+)
+MUL_MAT_F16_F16_R4096_C2_K14336 = _mul_mat_f16_f16_contiguous(
+    rows=4096,
+    cols=2,
+    k=14336,
+)
+MUL_MAT_F16_F16_R4095_C1_K14336 = _mul_mat_f16_f16_contiguous(
+    rows=4095,
+    cols=1,
+    k=14336,
+)
+
+MUL_MAT_F16_F16_N512_LLAMA_CASES = (
+    _mul_mat_f16_f16_contiguous(rows=1024, cols=512, k=4096),
+    _mul_mat_f16_f16_contiguous(rows=14336, cols=512, k=4096),
+    _mul_mat_f16_f16_contiguous(rows=4096, cols=512, k=14336),
+    _mul_mat_f16_f16_contiguous(rows=4096, cols=512, k=4096),
+)
+
+MUL_MAT_F16_F16_N1_LLAMA_CASES = (
+    _mul_mat_f16_f16_contiguous(rows=1024, cols=1, k=4096),
+    _mul_mat_f16_f16_contiguous(rows=14336, cols=1, k=4096),
+    _mul_mat_f16_f16_contiguous(rows=4096, cols=1, k=14336),
+    _mul_mat_f16_f16_contiguous(rows=4096, cols=1, k=4096),
+)
+
+MUL_MAT_F16_F16_R4096_C448_K14336 = _mul_mat_f16_f16_contiguous(
+    rows=4096,
+    cols=448,
+    k=14336,
+)
 
 ARGSORT_WILDCARD_DST = {
     "src0": _tensor(dtype="F32", sizes=(128, 1), strides=(1, 128)),
@@ -727,4 +804,66 @@ def test_real_catalog_route_rejects_invalid_tensor_metadata(
     route = real_v2_catalog.routes_by_id[route_id]
     assert not route_accepts_tensors(route, tensors), (
         f"route {route_id!r} accepted invalid tensor metadata for {property_name}"
+    )
+
+
+def test_mul_mat_f16_f16_exact_gfx1100_specializations_precede_broad_contiguous_route(
+    real_v2_catalog: RouteCatalog,
+) -> None:
+    route_ids = [route.id for route in routes_for_op(real_v2_catalog, "MUL_MAT")]
+
+    m64n64_gfx1100_index = route_ids.index("mul_mat_f16_f16_contiguous_m64n64_gfx1100_4d")
+    c1_gfx1100_index = route_ids.index("mul_mat_f16_f16_contiguous_c1_gfx1100_4d")
+    contiguous_index = route_ids.index("mul_mat_f16_f16_contiguous_4d")
+    generic_index = route_ids.index("mul_mat_f16_f16_generic_4d")
+
+    assert m64n64_gfx1100_index < c1_gfx1100_index < contiguous_index < generic_index
+
+    for tensors in MUL_MAT_F16_F16_N512_LLAMA_CASES:
+        assert (
+            _first_matching_route_id(real_v2_catalog, "MUL_MAT", tensors)
+            == "mul_mat_f16_f16_contiguous_m64n64_gfx1100_4d"
+        )
+
+    for tensors in MUL_MAT_F16_F16_N1_LLAMA_CASES:
+        assert (
+            _first_matching_route_id(real_v2_catalog, "MUL_MAT", tensors)
+            == "mul_mat_f16_f16_contiguous_c1_gfx1100_4d"
+        )
+
+    assert not route_accepts_tensors(
+        real_v2_catalog.routes_by_id["mul_mat_f16_f16_contiguous_c1_gfx1100_4d"],
+        MUL_MAT_F16_F16_R4096_C512_K14336,
+    )
+    assert not route_accepts_tensors(
+        real_v2_catalog.routes_by_id["mul_mat_f16_f16_contiguous_m64n64_gfx1100_4d"],
+        MUL_MAT_F16_F16_R4096_C1_K14336,
+    )
+    assert not route_accepts_tensors(
+        real_v2_catalog.routes_by_id["mul_mat_f16_f16_contiguous_c1_gfx1100_4d"],
+        MUL_MAT_F16_F16_R4096_C2_K14336,
+    )
+    assert (
+        _first_matching_route_id(
+            real_v2_catalog,
+            "MUL_MAT",
+            MUL_MAT_F16_F16_R4096_C2_K14336,
+        )
+        == "mul_mat_f16_f16_contiguous_4d"
+    )
+    assert (
+        _first_matching_route_id(
+            real_v2_catalog,
+            "MUL_MAT",
+            MUL_MAT_F16_F16_R4096_C448_K14336,
+        )
+        == "mul_mat_f16_f16_contiguous_4d"
+    )
+    assert (
+        _first_matching_route_id(
+            real_v2_catalog,
+            "MUL_MAT",
+            MUL_MAT_F16_F16_R4095_C1_K14336,
+        )
+        == "mul_mat_f16_f16_contiguous_4d"
     )
