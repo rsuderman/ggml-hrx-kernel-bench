@@ -17,7 +17,13 @@ endfunction()
 
 function(add_yaml_route_import_target)
   set(options)
-  set(one_value_args NAME OUTPUT_DIR ROUTING_DIR EXPECTED_COVERAGE)
+  set(one_value_args
+    NAME
+    OUTPUT_DIR
+    ROUTING_DIR
+    EXPECTED_COVERAGE
+    EXPECTED_NATIVE_ROUTE_COUNT
+  )
   set(multi_value_args YAML_PATHS DEPENDS)
   cmake_parse_arguments(GGML_HRX_YRI "${options}" "${one_value_args}" "${multi_value_args}" ${ARGN})
 
@@ -32,6 +38,9 @@ function(add_yaml_route_import_target)
   endif()
   if(NOT GGML_HRX_YRI_EXPECTED_COVERAGE)
     message(FATAL_ERROR "add_yaml_route_import_target requires EXPECTED_COVERAGE")
+  endif()
+  if(NOT GGML_HRX_YRI_EXPECTED_NATIVE_ROUTE_COUNT)
+    message(FATAL_ERROR "add_yaml_route_import_target requires EXPECTED_NATIVE_ROUTE_COUNT")
   endif()
   if(NOT GGML_HRX_YRI_YAML_PATHS)
     message(FATAL_ERROR "add_yaml_route_import_target requires YAML_PATHS")
@@ -136,15 +145,24 @@ function(add_yaml_route_import_target)
   )
   add_custom_target(${GGML_HRX_YRI_NAME} ALL DEPENDS ${route_import_stamp_path})
 
+  set(route_selector_check_command
+    ${Python3_EXECUTABLE}
+    ${GGML_HRX_TESTS_ROOT}/infra/check_route_selector_parity.py
+    --route-queries ${route_queries_path}
+    --routing-dir ${GGML_HRX_YRI_ROUTING_DIR}
+    --python-selector ${CMAKE_SOURCE_DIR}/tools/v2-route-selector/python_v2_route_selector.py
+    --native-selector $<TARGET_FILE:ggml-hrx-v2-route-selector>
+  )
   add_test(
     NAME ${GGML_HRX_YRI_NAME}-route-selector-parity
+    COMMAND ${route_selector_check_command} --mode parity
+  )
+  add_test(
+    NAME ${GGML_HRX_YRI_NAME}-native-route-count
     COMMAND
-      ${Python3_EXECUTABLE}
-      ${GGML_HRX_TESTS_ROOT}/infra/check_route_selector_parity.py
-      --route-queries ${route_queries_path}
-      --routing-dir ${GGML_HRX_YRI_ROUTING_DIR}
-      --python-selector ${CMAKE_SOURCE_DIR}/tools/v2-route-selector/python_v2_route_selector.py
-      --native-selector $<TARGET_FILE:ggml-hrx-v2-route-selector>
+      ${route_selector_check_command}
+      --mode native-route-count
+      --expected-native-route-count ${GGML_HRX_YRI_EXPECTED_NATIVE_ROUTE_COUNT}
   )
   set_tests_properties(
     ${GGML_HRX_YRI_NAME}-route-selector-parity
@@ -152,6 +170,12 @@ function(add_yaml_route_import_target)
       LABELS "routing;parity"
       # Keep this in sync with PARITY_MISMATCH_SKIP_RETURN_CODE in the checker.
       SKIP_RETURN_CODE 77
+      TIMEOUT 60
+  )
+  set_tests_properties(
+    ${GGML_HRX_YRI_NAME}-native-route-count
+    PROPERTIES
+      LABELS "routing;native-route-count"
       TIMEOUT 60
   )
 endfunction()
