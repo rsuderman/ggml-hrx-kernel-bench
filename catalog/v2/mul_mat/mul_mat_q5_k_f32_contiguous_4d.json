@@ -132,7 +132,7 @@
     {
       "name": "cols",
       "min": 1,
-      "max": 1
+      "max": 512
     },
     {
       "name": "src0_dimensions",
@@ -142,30 +142,6 @@
     },
     {
       "name": "src0_dimensions",
-      "index": 3,
-      "min": 1,
-      "max": 1
-    },
-    {
-      "name": "src1_dimensions",
-      "index": 2,
-      "min": 1,
-      "max": 1
-    },
-    {
-      "name": "src1_dimensions",
-      "index": 3,
-      "min": 1,
-      "max": 1
-    },
-    {
-      "name": "dst_dimensions",
-      "index": 2,
-      "min": 1,
-      "max": 1
-    },
-    {
-      "name": "dst_dimensions",
       "index": 3,
       "min": 1,
       "max": 1

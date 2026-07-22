@@ -373,6 +373,60 @@ MUL_MAT_Q8_K_MAX = {
     ),
 }
 
+MUL_MAT_Q5_COLS_8 = {
+    "src0": _tensor(
+        dtype="Q5_K",
+        sizes=(256, 16, 1, 1),
+        strides=(1, 256, 4096, 4096),
+    ),
+    "src1": _tensor(
+        dtype="F32",
+        sizes=(256, 8, 1, 1),
+        strides=(1, 256, 2048, 2048),
+    ),
+    "dst": _tensor(
+        dtype="F32",
+        sizes=(16, 8, 1, 1),
+        strides=(1, 16, 128, 128),
+    ),
+}
+
+MUL_MAT_Q8_FLATTENED_RHS_TAIL = {
+    "src0": _tensor(
+        dtype="Q8_0",
+        sizes=(256, 16, 1, 1),
+        strides=(1, 256, 4096, 4096),
+    ),
+    "src1": _tensor(
+        dtype="F32",
+        sizes=(256, 16, 2, 1),
+        strides=(1, 256, 4096, 8192),
+    ),
+    "dst": _tensor(
+        dtype="F32",
+        sizes=(16, 16, 2, 1),
+        strides=(1, 16, 256, 512),
+    ),
+}
+
+MUL_MAT_Q8_BATCHED_SRC0 = {
+    "src0": _tensor(
+        dtype="Q8_0",
+        sizes=(256, 16, 2, 1),
+        strides=(1, 256, 4096, 8192),
+    ),
+    "src1": _tensor(
+        dtype="F32",
+        sizes=(256, 16, 2, 1),
+        strides=(1, 256, 4096, 8192),
+    ),
+    "dst": _tensor(
+        dtype="F32",
+        sizes=(16, 16, 2, 1),
+        strides=(1, 16, 256, 512),
+    ),
+}
+
 MUL_MAT_F16_YAML_CASE_33 = {
     "src0": _tensor(
         dtype="F16",
@@ -494,6 +548,18 @@ POSITIVE_CASES = (
         "inclusive scalar K and multiple upper boundary",
         MUL_MAT_Q8_K_MAX,
         id="mul-mat-q8-scalar-k-max",
+    ),
+    pytest.param(
+        "mul_mat_q5_k_f32_contiguous_4d",
+        "multi-column Q5_K F32 RHS",
+        MUL_MAT_Q5_COLS_8,
+        id="mul-mat-q5-multi-column",
+    ),
+    pytest.param(
+        "mul_mat_q8_0_f32_contiguous_4d",
+        "unbatched Q8_0 with flattened RHS tail columns",
+        MUL_MAT_Q8_FLATTENED_RHS_TAIL,
+        id="mul-mat-q8-flattened-rhs-tail",
     ),
     pytest.param(
         "mul_mat_f16_f32_generic_4d",
@@ -707,6 +773,12 @@ NEGATIVE_CASES = (
             ),
         ),
         id="mul-mat-q8-derived-k-mismatch",
+    ),
+    pytest.param(
+        "mul_mat_q8_0_f32_contiguous_4d",
+        "batched quantized lhs requires a different kernel indexing model",
+        MUL_MAT_Q8_BATCHED_SRC0,
+        id="mul-mat-q8-batched-src0",
     ),
     pytest.param(
         "copy_f32_f32_non_contiguous_4d",

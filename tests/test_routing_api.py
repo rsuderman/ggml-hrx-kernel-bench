@@ -1673,10 +1673,10 @@ def test_v2_router_rejects_explicit_route_constraint_before_running_candidate(
         (
             "Q5_K",
             [256, 16, 1, 1],
-            [256, 1, 1, 1],
-            [16, 1, 1, 1],
+            [256, 8, 1, 1],
+            [16, 8, 1, 1],
             "mul_mat_q5_k_f32_contiguous_4d",
-            {"k": 256, "rows": 16, "cols": 1},
+            {"k": 256, "rows": 16, "cols": 8},
         ),
         (
             "Q6_K",
@@ -1756,6 +1756,61 @@ def test_yaml_route_import_matches_rank4_quantized_mul_mat_descriptor(
     assert shape["k"] == expected_shape["k"]
     assert shape["rows"] == expected_shape["rows"]
     assert shape["cols"] == expected_shape["cols"]
+
+
+@pytest.mark.parametrize(
+    ("src0_dtype", "expected_route_id"),
+    (
+        ("Q4_K", "mul_mat_q4_k_f32_contiguous_4d"),
+        ("Q8_0", "mul_mat_q8_0_f32_contiguous_4d"),
+    ),
+)
+def test_yaml_route_import_matches_quantized_mul_mat_flattened_rhs_tail_descriptor(
+    tmp_path: Path,
+    src0_dtype: str,
+    expected_route_id: str,
+) -> None:
+    yaml_path = tmp_path / "mul_mat_flattened_rhs_tail.yaml"
+    yaml_path.write_text(
+        json.dumps(
+            {
+                "ops": {
+                    "MUL_MAT": [
+                        {
+                            "inputs": [
+                                {"dtype": src0_dtype, "shape": [256, 16, 1, 1]},
+                                {"dtype": "F32", "shape": [256, 16, 2, 1]},
+                            ],
+                            "destinations": [
+                                {"dtype": "F32", "shape": [16, 16, 2, 1]},
+                            ],
+                        }
+                    ]
+                }
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    output_dir = tmp_path / "route-import"
+    summary = materialize_yaml_route_import(
+        [yaml_path],
+        output_dir=output_dir,
+        routing_dir=ACTUAL_V2_ROUTING_DIR,
+    )
+
+    op_summary = next(row for row in summary["operations"] if row["op"] == "MUL_MAT")
+    assert op_summary["matched_case_count"] == 1
+    route_matches = json.loads((output_dir / "ops" / "MUL_MAT" / "route-matches.json").read_text())
+    assert route_matches["rows"][0]["matched_route_ids"] == [expected_route_id]
+    config_path = Path(summary["generated_config_paths"][0])
+    config = json.loads(config_path.read_text())
+    shape = dict(zip(config["params"], config["cases"][0], strict=True))
+    assert shape["k"] == 256
+    assert shape["rows"] == 16
+    assert shape["cols"] == 32
 
 
 def test_yaml_route_import_matches_rank4_contiguous_f16_f16_mul_mat_descriptor(tmp_path: Path) -> None:

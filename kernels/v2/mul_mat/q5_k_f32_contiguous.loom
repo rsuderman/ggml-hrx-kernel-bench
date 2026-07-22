@@ -1,6 +1,6 @@
 config.decl @shape.mul_mat_q5_k_f32_contiguous.k : %value: index where [range(%value, 256, 32768), mul(%value, 256)]
 config.decl @shape.mul_mat_q5_k_f32_contiguous.rows : %value: index where [range(%value, 1, 262144)]
-config.decl @shape.mul_mat_q5_k_f32_contiguous.cols : %value: index where [range(%value, 1, 1)]
+config.decl @shape.mul_mat_q5_k_f32_contiguous.cols : %value: index where [range(%value, 1, 512)]
 config.decl @tuning.mul_mat_q5_k_f32_contiguous.workgroup_size : %value: index where [range(%value, 32, 256), mul(%value, 32)]
 
 kernel.def export("hrx2_mul_mat_q5_k_f32_contiguous") @hrx2_mul_mat_q5_k_f32_contiguous() {
@@ -54,11 +54,11 @@ kernel.def export("hrx2_mul_mat_q5_k_f32_contiguous") @hrx2_mul_mat_q5_k_f32_con
   %workgroup_size = config.get @tuning.mul_mat_q5_k_f32_contiguous.workgroup_size : index
   %k_bounded = index.assume %k [range(%k, 256, 32768)] : index
   %rows_bounded = index.assume %rows [range(%rows, 1, 262144)] : index
-  %cols_bounded = index.assume %cols [range(%cols, 1, 1)] : index
+  %cols_bounded = index.assume %cols [range(%cols, 1, 512)] : index
   %row0 = kernel.workgroup.id<x> : index
   %row = index.assume %row0 [range(%row0, 0, 262143)] : index
   %col0 = kernel.workgroup.id<y> : index
-  %col = index.assume %col0 [range(%col0, 0, 0)] : index
+  %col = index.assume %col0 [range(%col0, 0, 511)] : index
   %lane0 = kernel.workitem.id<x> : index
   %lane = index.assume %lane0 [range(%lane0, 0, 255)] : index
 
