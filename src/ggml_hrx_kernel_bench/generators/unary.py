@@ -38,8 +38,12 @@ class UnaryOp:
     # must include its own trailing newline; "" emits nothing.
     preamble: str = ""
     dtypes: tuple[tuple[str, str], ...] = DTYPES
-    # Optional exact YAML attributes required for this route family.
-    attributes: dict[str, object] | None = None
+    # Optional attribute parameters this route family requires: name ->
+    # (declared type, exact value). The value mirrors the compile-time
+    # constant baked into the kernel preamble, so the route is rendered with
+    # a typed attribute declaration plus an exact-value constraint pinning
+    # the parameter to the value the kernel implements.
+    attributes: dict[str, tuple[str, object]] | None = None
 
 
 UNARY_OPS: dict[str, UnaryOp] = {
@@ -173,7 +177,7 @@ UNARY_OPS: dict[str, UnaryOp] = {
             "  %zero = scalar.constant 0.0 : f32\n"
             "  %negative_slope = scalar.constant 0.1 : f32\n"
         ),
-        attributes={"negative_slope": 0.1},
+        attributes={"negative_slope": ("f32", 0.1)},
     ),
     "log": UnaryOp(
         "\n".join(
@@ -236,7 +240,7 @@ UNARY_OPS: dict[str, UnaryOp] = {
         (CONTIGUOUS,),
         preamble="  %softcap = scalar.constant 50.0 : f32\n",
         dtypes=(("f32", "F32"),),
-        attributes={"softcap": 50.0},
+        attributes={"softcap": ("f32", 50.0)},
     ),
     "softplus": UnaryOp("    %result = scalar.softplusf<afn> %value : f32", (CONTIGUOUS, NON_CONTIGUOUS)),
     "sqr": UnaryOp(
@@ -334,7 +338,14 @@ def render_catalog_artifacts() -> dict[Path, str]:
                     )
                 )
                 if spec.attributes is not None:
-                    rendered["attributes"] = spec.attributes
+                    rendered["attributes"] = {
+                        name: {"type": declared_type}
+                        for name, (declared_type, _value) in spec.attributes.items()
+                    }
+                    rendered["constraints"].extend(
+                        {"name": f"attribute.{name}", "value": value}
+                        for name, (_declared_type, value) in spec.attributes.items()
+                    )
                 out[Path(_route_relpath(op, dt, variant))] = json.dumps(
                     rendered,
                     indent=2,

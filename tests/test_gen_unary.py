@@ -30,6 +30,37 @@ def test_generated_unary_routes_omit_lowering_metadata() -> None:
         assert "lowering" not in json.loads(contents)
 
 
+def test_generated_attribute_requirements_are_typed_declarations_with_pins() -> None:
+    artifacts = {
+        str(path): json.loads(contents)
+        for path, contents in unary.render_catalog_artifacts().items()
+    }
+    leaky_relu = artifacts["leaky_relu/leaky_relu_f32.json"]
+
+    assert leaky_relu["attributes"] == {"negative_slope": {"type": "f32"}}
+    assert {"name": "attribute.negative_slope", "value": 0.1} in leaky_relu["constraints"]
+
+    softcap = artifacts["softcap/softcap_f32.json"]
+    assert softcap["attributes"] == {"softcap": {"type": "f32"}}
+    assert {"name": "attribute.softcap", "value": 50.0} in softcap["constraints"]
+
+    for path, route in artifacts.items():
+        for requirement in (route.get("attributes") or {}).values():
+            assert isinstance(requirement, dict) and set(requirement) == {"type"}, path
+
+
+def test_route_catalog_rejects_literal_attribute_requirements(tmp_path: Path) -> None:
+    asset_root = materialize_asset_root(tmp_path / "assets", force=True)
+    catalog_dir = asset_root / "catalog" / "v2"
+    route_path = catalog_dir / "leaky_relu" / "leaky_relu_f32.json"
+    route = json.loads(route_path.read_text(encoding="utf-8"))
+    route["attributes"]["negative_slope"] = 0.1
+    route_path.write_text(json.dumps(route, indent=2) + "\n", encoding="utf-8")
+
+    with pytest.raises(RuntimeError, match="must be a typed declaration"):
+        load_route_catalog(catalog_dir)
+
+
 def test_materialized_v2_routes_include_matching_operation(tmp_path: Path) -> None:
     asset_root = materialize_asset_root(tmp_path / "assets", force=True)
     catalog_dir = asset_root / "catalog" / "v2"
