@@ -1,0 +1,13 @@
+{
+  "schema": "ggml_hrx_kernel_bench.import_test_coverage.v1",
+  "operation_count": 1,
+  "total_pass_case_count": 10,
+  "total_fail_case_count": 0,
+  "operations": [
+    {
+      "op": "MUL_MAT",
+      "pass_case_count": 10,
+      "fail_case_count": 0
+    }
+  ]
+}

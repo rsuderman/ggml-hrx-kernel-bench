@@ -1,0 +1,227 @@
+{
+  "id": "mul_mat_q8_0_f32_contiguous_c1_4d",
+  "family": "mul_mat_q8_0_f32",
+  "op": "MUL_MAT",
+  "kernel": {
+    "source_id": "mul_mat_q8_0_f32_contiguous_c1",
+    "path": "mul_mat/q8_0_f32_contiguous_c1.loom",
+    "root_symbol": "@hrx2_mul_mat_q8_0_f32_contiguous_c1",
+    "export_name": "hrx2_mul_mat_q8_0_f32_contiguous_c1"
+  },
+  "tensors": {
+    "src0": {
+      "dtype": "Q8_0",
+      "dimensions": "src0_dimensions",
+      "strides": "src0_strides"
+    },
+    "src1": {
+      "dtype": "F32",
+      "dimensions": "src1_dimensions",
+      "strides": "src1_strides"
+    },
+    "dst": {
+      "dtype": "F32",
+      "dimensions": "dst_dimensions",
+      "strides": "dst_strides"
+    }
+  },
+  "values": [
+    {
+      "name": "src0_contiguous_strides",
+      "contiguous_strides": "src0_dimensions"
+    },
+    {
+      "name": "src1_contiguous_strides",
+      "contiguous_strides": "src1_dimensions"
+    },
+    {
+      "name": "dst_contiguous_strides",
+      "contiguous_strides": "dst_dimensions"
+    },
+    {
+      "name": "k",
+      "element": {
+        "source": "src0_dimensions",
+        "index": 0
+      }
+    },
+    {
+      "name": "src1_k",
+      "element": {
+        "source": "src1_dimensions",
+        "index": 0
+      }
+    },
+    {
+      "name": "src0_rows",
+      "element": {
+        "source": "src0_dimensions",
+        "index": 1
+      }
+    },
+    {
+      "name": "rows",
+      "element": {
+        "source": "dst_dimensions",
+        "index": 0
+      }
+    },
+    {
+      "name": "src1_cols",
+      "element": {
+        "source": "src1_dimensions",
+        "index": 1
+      }
+    },
+    {
+      "name": "cols",
+      "element": {
+        "source": "dst_dimensions",
+        "index": 1
+      }
+    },
+    {
+      "name": "src0_batch_dims",
+      "tail": {
+        "source": "src0_dimensions",
+        "drop": 2
+      }
+    },
+    {
+      "name": "src1_batch_dims",
+      "tail": {
+        "source": "src1_dimensions",
+        "drop": 2
+      }
+    },
+    {
+      "name": "dst_batch_dims",
+      "tail": {
+        "source": "dst_dimensions",
+        "drop": 2
+      }
+    },
+    {
+      "name": "dst_batch_product",
+      "product": "dst_batch_dims"
+    }
+  ],
+  "constraints": [
+    {
+      "name": "src0_dimensions",
+      "length": 4
+    },
+    {
+      "name": "src1_dimensions",
+      "length": 4
+    },
+    {
+      "name": "dst_dimensions",
+      "length": 4
+    },
+    {
+      "name": "k",
+      "min": 32,
+      "max": 32768,
+      "multiple_of": 32
+    },
+    {
+      "name": "src1_k",
+      "min": 32,
+      "max": 32768,
+      "multiple_of": 32
+    },
+    {
+      "name": "rows",
+      "min": 1,
+      "max": 262144
+    },
+    {
+      "name": "cols",
+      "min": 1,
+      "max": 1
+    },
+    {
+      "name": "dst_batch_product",
+      "min": 1,
+      "max": 1
+    },
+    {
+      "equals": [
+        "k",
+        "src1_k"
+      ]
+    },
+    {
+      "equals": [
+        "src0_rows",
+        "rows"
+      ]
+    },
+    {
+      "equals": [
+        "src1_cols",
+        "cols"
+      ]
+    },
+    {
+      "equals": [
+        "src0_batch_dims",
+        "dst_batch_dims"
+      ]
+    },
+    {
+      "equals": [
+        "src1_batch_dims",
+        "dst_batch_dims"
+      ]
+    },
+    {
+      "equals": [
+        "src0_contiguous_strides",
+        "src0_strides"
+      ]
+    },
+    {
+      "equals": [
+        "src1_contiguous_strides",
+        "src1_strides"
+      ]
+    },
+    {
+      "equals": [
+        "dst_contiguous_strides",
+        "dst_strides"
+      ]
+    }
+  ],
+  "launch": {
+    "workgroup_size": [
+      64,
+      1,
+      1
+    ],
+    "rows_per_workgroup": 1,
+    "cols_per_workgroup": 1
+  },
+  "config": {
+    "bindings": [
+      {
+        "key": "@shape.mul_mat_q8_0_f32_contiguous_c1.k",
+        "source": "value.k"
+      },
+      {
+        "key": "@shape.mul_mat_q8_0_f32_contiguous_c1.rows",
+        "source": "value.rows"
+      },
+      {
+        "key": "@shape.mul_mat_q8_0_f32_contiguous_c1.cols",
+        "source": "value.cols"
+      },
+      {
+        "key": "@tuning.mul_mat_q8_0_f32_contiguous_c1.workgroup_size",
+        "value": "64"
+      }
+    ]
+  }
+}

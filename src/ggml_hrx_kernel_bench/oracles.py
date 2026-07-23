@@ -982,14 +982,31 @@ def _pointwise_src1_values(np: Any, candidate: Candidate, seed: int) -> tuple[An
 
 
 def _matmul_dims(candidate: Candidate) -> tuple[int, int, int]:
+    values = candidate.values
     k = int(
         candidate.shape.get(
             "k",
-            candidate.shape.get("src0_d0", candidate.shape.get("ncols", candidate.shape.get("cols", 256))),
+            candidate.shape.get(
+                "src0_d0",
+                candidate.shape.get(
+                    "ncols",
+                    values.get("value.k", values.get("shape.k", candidate.shape.get("cols", 256))),
+                ),
+            ),
         )
     )
-    rows = int(candidate.shape.get("rows", candidate.shape.get("nrows", candidate.shape.get("d0", 1))))
-    cols = int(candidate.shape.get("cols", candidate.shape.get("ncols", candidate.shape.get("d1", 1))))
+    rows = int(
+        candidate.shape.get(
+            "rows",
+            candidate.shape.get("nrows", values.get("value.rows", values.get("shape.rows", candidate.shape.get("d0", 1)))),
+        )
+    )
+    cols = int(
+        candidate.shape.get(
+            "cols",
+            candidate.shape.get("ncols", values.get("value.cols", values.get("shape.cols", candidate.shape.get("d1", 1)))),
+        )
+    )
     return k, rows, cols
 
 

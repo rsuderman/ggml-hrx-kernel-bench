@@ -39,9 +39,6 @@ function(add_yaml_route_import_target)
   if(NOT GGML_HRX_YRI_EXPECTED_COVERAGE)
     message(FATAL_ERROR "add_yaml_route_import_target requires EXPECTED_COVERAGE")
   endif()
-  if(NOT GGML_HRX_YRI_EXPECTED_NATIVE_ROUTE_COUNT)
-    message(FATAL_ERROR "add_yaml_route_import_target requires EXPECTED_NATIVE_ROUTE_COUNT")
-  endif()
   if(NOT GGML_HRX_YRI_YAML_PATHS)
     message(FATAL_ERROR "add_yaml_route_import_target requires YAML_PATHS")
   endif()
@@ -162,13 +159,15 @@ function(add_yaml_route_import_target)
     NAME ${GGML_HRX_YRI_NAME}-route-selector-parity
     COMMAND ${route_selector_check_command} --mode parity
   )
-  add_test(
-    NAME ${GGML_HRX_YRI_NAME}-native-route-count
-    COMMAND
-      ${route_selector_check_command}
-      --mode native-route-count
-      --expected-native-route-count ${GGML_HRX_YRI_EXPECTED_NATIVE_ROUTE_COUNT}
-  )
+  if(GGML_HRX_YRI_EXPECTED_NATIVE_ROUTE_COUNT)
+    add_test(
+      NAME ${GGML_HRX_YRI_NAME}-native-route-count
+      COMMAND
+        ${route_selector_check_command}
+        --mode native-route-count
+        --expected-native-route-count ${GGML_HRX_YRI_EXPECTED_NATIVE_ROUTE_COUNT}
+    )
+  endif()
   set_tests_properties(
     ${GGML_HRX_YRI_NAME}-route-selector-parity
     PROPERTIES
@@ -177,12 +176,14 @@ function(add_yaml_route_import_target)
       SKIP_RETURN_CODE 77
       TIMEOUT 60
   )
-  set_tests_properties(
-    ${GGML_HRX_YRI_NAME}-native-route-count
-    PROPERTIES
-      LABELS "routing;native-route-count"
-      TIMEOUT 60
-  )
+  if(GGML_HRX_YRI_EXPECTED_NATIVE_ROUTE_COUNT)
+    set_tests_properties(
+      ${GGML_HRX_YRI_NAME}-native-route-count
+      PROPERTIES
+        LABELS "routing;native-route-count"
+        TIMEOUT 60
+    )
+  endif()
 endfunction()
 
 function(add_yaml_route_import_descriptor_tests)
@@ -306,4 +307,219 @@ function(add_yaml_route_import_descriptor_tests)
     COMMAND_ERROR_IS_FATAL ANY
   )
   include(${generated_tests_include})
+endfunction()
+
+function(add_yaml_route_import_descriptor_suite)
+  set(options NO_ALL ENABLE_HSA_EXECUTION ENABLE_CONFIGURED_HSA_EXECUTION)
+  set(one_value_args
+    NAME
+    ROUTE_IMPORT_TARGET
+    GROUPED_YAML
+    GENERATED_IMPORT_DIR
+    ROUTING_DIR
+    KERNEL_DIR
+    EXPECTED_COVERAGE
+    EXPECTED_NATIVE_ROUTE_COUNT
+    DESCRIPTOR_OUTPUT_DIR
+    PREPARE_OUTPUT_DIR
+    EXECUTE_OUTPUT_DIR
+    TARGET
+    MAX_ELEMENTS
+    LIMIT
+    RUNNER
+    REPO_ROOT
+    PREPARE_TARGET
+  )
+  set(multi_value_args DEPENDS EXCLUDE_OPS)
+  cmake_parse_arguments(GGML_HRX_YRIDS "${options}" "${one_value_args}" "${multi_value_args}" ${ARGN})
+
+  if(NOT GGML_HRX_YRIDS_NAME)
+    message(FATAL_ERROR "add_yaml_route_import_descriptor_suite requires NAME")
+  endif()
+  if(NOT GGML_HRX_YRIDS_ROUTE_IMPORT_TARGET)
+    message(FATAL_ERROR "add_yaml_route_import_descriptor_suite requires ROUTE_IMPORT_TARGET")
+  endif()
+  if(NOT GGML_HRX_YRIDS_GROUPED_YAML)
+    message(FATAL_ERROR "add_yaml_route_import_descriptor_suite requires GROUPED_YAML")
+  endif()
+  if(NOT GGML_HRX_YRIDS_GENERATED_IMPORT_DIR)
+    message(FATAL_ERROR "add_yaml_route_import_descriptor_suite requires GENERATED_IMPORT_DIR")
+  endif()
+  if(NOT GGML_HRX_YRIDS_EXPECTED_COVERAGE)
+    message(FATAL_ERROR "add_yaml_route_import_descriptor_suite requires EXPECTED_COVERAGE")
+  endif()
+
+  set(routing_dir ${GGML_HRX_YRIDS_ROUTING_DIR})
+  if(NOT routing_dir AND GGML_HRX_ASSET_ROOT)
+    set(routing_dir ${GGML_HRX_ASSET_ROOT}/catalog/v2)
+  endif()
+  if(NOT routing_dir)
+    message(FATAL_ERROR "add_yaml_route_import_descriptor_suite requires ROUTING_DIR or GGML_HRX_ASSET_ROOT")
+  endif()
+
+  set(kernel_dir ${GGML_HRX_YRIDS_KERNEL_DIR})
+  if(NOT kernel_dir AND GGML_HRX_ASSET_ROOT)
+    set(kernel_dir ${GGML_HRX_ASSET_ROOT}/kernels/v2)
+  endif()
+  if(NOT kernel_dir)
+    message(FATAL_ERROR "add_yaml_route_import_descriptor_suite requires KERNEL_DIR or GGML_HRX_ASSET_ROOT")
+  endif()
+
+  set(route_import_depends ${GGML_HRX_YRIDS_DEPENDS})
+  if(GGML_HRX_RUNTIME_ASSET_TARGET)
+    list(APPEND route_import_depends ${GGML_HRX_RUNTIME_ASSET_TARGET})
+  endif()
+  if(GGML_HRX_ACTIVE_ASSET_ROOT_METADATA_PATH)
+    list(APPEND route_import_depends ${GGML_HRX_ACTIVE_ASSET_ROOT_METADATA_PATH})
+  endif()
+
+  set(route_import_args)
+  if(GGML_HRX_YRIDS_NO_ALL)
+    list(APPEND route_import_args NO_ALL)
+  endif()
+  if(GGML_HRX_YRIDS_EXPECTED_NATIVE_ROUTE_COUNT)
+    list(APPEND
+      route_import_args
+      EXPECTED_NATIVE_ROUTE_COUNT
+      ${GGML_HRX_YRIDS_EXPECTED_NATIVE_ROUTE_COUNT}
+    )
+  endif()
+  add_yaml_route_import_target(
+    NAME ${GGML_HRX_YRIDS_ROUTE_IMPORT_TARGET}
+    YAML_PATHS
+      ${GGML_HRX_YRIDS_GROUPED_YAML}
+    OUTPUT_DIR ${GGML_HRX_YRIDS_GENERATED_IMPORT_DIR}
+    ROUTING_DIR ${routing_dir}
+    EXPECTED_COVERAGE ${GGML_HRX_YRIDS_EXPECTED_COVERAGE}
+    DEPENDS
+      ${route_import_depends}
+    ${route_import_args}
+  )
+
+  set(descriptor_args)
+  foreach(optional_arg IN ITEMS
+      DESCRIPTOR_OUTPUT_DIR
+      PREPARE_OUTPUT_DIR
+      EXECUTE_OUTPUT_DIR
+      TARGET
+      MAX_ELEMENTS
+      LIMIT
+      RUNNER
+      REPO_ROOT
+      PREPARE_TARGET
+  )
+    if(GGML_HRX_YRIDS_${optional_arg})
+      list(APPEND descriptor_args ${optional_arg} ${GGML_HRX_YRIDS_${optional_arg}})
+    endif()
+  endforeach()
+  if(GGML_HRX_YRIDS_EXCLUDE_OPS)
+    list(APPEND descriptor_args EXCLUDE_OPS ${GGML_HRX_YRIDS_EXCLUDE_OPS})
+  endif()
+  if(GGML_HRX_YRIDS_ENABLE_HSA_EXECUTION)
+    list(APPEND descriptor_args ENABLE_HSA_EXECUTION)
+  elseif(GGML_HRX_YRIDS_ENABLE_CONFIGURED_HSA_EXECUTION AND GGML_HRX_ENABLE_HSA_DESCRIPTOR_TESTS)
+    list(APPEND descriptor_args ENABLE_HSA_EXECUTION)
+  endif()
+
+  add_yaml_route_import_descriptor_tests(
+    NAME ${GGML_HRX_YRIDS_NAME}
+    GENERATED_IMPORT_DIR ${GGML_HRX_YRIDS_GENERATED_IMPORT_DIR}
+    GROUPED_YAML ${GGML_HRX_YRIDS_GROUPED_YAML}
+    ROUTING_DIR ${routing_dir}
+    KERNEL_DIR ${kernel_dir}
+    IMPORT_TARGET ${GGML_HRX_YRIDS_ROUTE_IMPORT_TARGET}
+    ${descriptor_args}
+  )
+endfunction()
+
+function(add_loom_benchmark_script_materialization_target)
+  set(options)
+  set(one_value_args
+    NAME
+    GENERATED_IMPORT_DIR
+    PREPARE_OUTPUT_DIR
+    PREPARE_TARGET
+    OUTPUT_DIR
+    ASSET_ROOT
+    OP
+    COMMENT
+  )
+  set(multi_value_args DEPENDS)
+  cmake_parse_arguments(GGML_HRX_LBST "${options}" "${one_value_args}" "${multi_value_args}" ${ARGN})
+
+  if(NOT GGML_HRX_LBST_NAME)
+    message(FATAL_ERROR "add_loom_benchmark_script_materialization_target requires NAME")
+  endif()
+  if(NOT GGML_HRX_LBST_GENERATED_IMPORT_DIR)
+    message(FATAL_ERROR "add_loom_benchmark_script_materialization_target requires GENERATED_IMPORT_DIR")
+  endif()
+  if(NOT GGML_HRX_LBST_PREPARE_OUTPUT_DIR)
+    message(FATAL_ERROR "add_loom_benchmark_script_materialization_target requires PREPARE_OUTPUT_DIR")
+  endif()
+  if(NOT GGML_HRX_LBST_PREPARE_TARGET)
+    message(FATAL_ERROR "add_loom_benchmark_script_materialization_target requires PREPARE_TARGET")
+  endif()
+  if(NOT GGML_HRX_LBST_OUTPUT_DIR)
+    message(FATAL_ERROR "add_loom_benchmark_script_materialization_target requires OUTPUT_DIR")
+  endif()
+  if(NOT GGML_HRX_LBST_OP)
+    message(FATAL_ERROR "add_loom_benchmark_script_materialization_target requires OP")
+  endif()
+
+  set(asset_root ${GGML_HRX_LBST_ASSET_ROOT})
+  if(NOT asset_root)
+    set(asset_root ${GGML_HRX_ASSET_ROOT})
+  endif()
+  if(NOT asset_root)
+    message(FATAL_ERROR "add_loom_benchmark_script_materialization_target requires ASSET_ROOT or GGML_HRX_ASSET_ROOT")
+  endif()
+
+  set(index_path ${GGML_HRX_LBST_OUTPUT_DIR}/catalog/v2/index.json)
+  set(materialize_command
+    ${Python3_EXECUTABLE}
+    ${CMAKE_SOURCE_DIR}/tests/infra/materialize_loom_benchmarks.py
+    --prepare-root ${GGML_HRX_LBST_PREPARE_OUTPUT_DIR}
+    --repo-root ${CMAKE_SOURCE_DIR}
+    --asset-root ${asset_root}
+    --output-root ${GGML_HRX_LBST_OUTPUT_DIR}
+    --op ${GGML_HRX_LBST_OP}
+  )
+  if(GGML_HRX_TOOL_DIR)
+    list(APPEND materialize_command --tool-dir ${GGML_HRX_TOOL_DIR})
+  endif()
+
+  set(materialize_depends
+    ${GGML_HRX_LBST_PREPARE_TARGET}
+    ${GGML_HRX_LBST_GENERATED_IMPORT_DIR}/route-import.stamp
+    ${GGML_HRX_LBST_DEPENDS}
+    ${CMAKE_SOURCE_DIR}/tests/infra/materialize_loom_benchmarks.py
+    ${CMAKE_SOURCE_DIR}/src/ggml_hrx_kernel_bench/benchmarking/common.py
+    ${CMAKE_SOURCE_DIR}/src/ggml_hrx_kernel_bench/benchmarking/discovery.py
+    ${CMAKE_SOURCE_DIR}/src/ggml_hrx_kernel_bench/benchmarking/materialize.py
+    ${CMAKE_SOURCE_DIR}/src/ggml_hrx_kernel_bench/benchmarking/workbench.py
+    ${CMAKE_SOURCE_DIR}/src/ggml_hrx_kernel_bench/loom_execution_descriptor.py
+  )
+  if(GGML_HRX_TOOL_BUILD_TARGET)
+    list(APPEND materialize_depends ${GGML_HRX_TOOL_BUILD_TARGET})
+  endif()
+
+  set(command_comment ${GGML_HRX_LBST_COMMENT})
+  if(NOT command_comment)
+    set(command_comment "Generating Loom benchmark scripts for ${GGML_HRX_LBST_NAME}")
+  endif()
+
+  add_custom_command(
+    OUTPUT ${index_path}
+    COMMAND ${materialize_command}
+    DEPENDS
+      ${materialize_depends}
+    COMMENT ${command_comment}
+    VERBATIM
+  )
+
+  add_custom_target(
+    ${GGML_HRX_LBST_NAME}
+    DEPENDS
+      ${index_path}
+  )
 endfunction()
