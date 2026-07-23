@@ -59,7 +59,7 @@ def _attribute_values_equal(lhs: Any, rhs: Any) -> bool:
     return lhs == rhs
 
 
-def _is_attribute_declaration(value: Any) -> bool:
+def is_attribute_declaration(value: Any) -> bool:
     return isinstance(value, Mapping) and set(value) == {"type"} and isinstance(value["type"], str)
 
 
@@ -81,15 +81,14 @@ def _value_matches_attribute_type(value: Any, declared_type: str) -> bool:
 
 
 def route_accepts_attributes(route: V2Route, attributes: Mapping[str, Any]) -> bool:
+    # Route attributes are typed declarations only (enforced by catalog
+    # parsing); exact values are pinned through attribute constraints.
     for key, expected in route.attributes.items():
         if key not in attributes:
             return False
-        if _is_attribute_declaration(expected):
-            declared_type = str(expected["type"])
-            if not _value_matches_attribute_type(attributes[key], declared_type):
-                return False
-            continue
-        if not _attribute_values_equal(expected, attributes[key]):
+        if not is_attribute_declaration(expected):
+            return False
+        if not _value_matches_attribute_type(attributes[key], str(expected["type"])):
             return False
     return True
 

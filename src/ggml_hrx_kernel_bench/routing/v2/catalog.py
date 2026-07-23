@@ -17,6 +17,25 @@ from .models import (
 
 ROUTER_FILENAME = "router.json"
 
+# The declared-type vocabulary for route attribute declarations. Catalog
+# validation, Python matching, and native code generation all consume this
+# set; extend it here first.
+SUPPORTED_ATTRIBUTE_TYPES = frozenset(
+    {
+        "bool",
+        "f32",
+        "f32[]",
+        "f64",
+        "f64[]",
+        "i32",
+        "i32[]",
+        "i64",
+        "i64[]",
+        "string",
+        "string[]",
+    }
+)
+
 
 def _load_json(path: Path) -> Any:
     return json.loads(path.read_text(encoding="utf-8"))
@@ -499,31 +518,20 @@ def _parse_attributes(path: Path, route_index: Any, raw: Any) -> dict[str, Any]:
     if not isinstance(raw, dict):
         raise RuntimeError(f"v2 route {route_index} attributes must be a JSON object: {path}")
     parsed: dict[str, Any] = {}
-    supported_types = {
-        "bool",
-        "f32",
-        "f32[]",
-        "f64",
-        "f64[]",
-        "i32",
-        "i32[]",
-        "i64",
-        "i64[]",
-        "string",
-        "string[]",
-    }
     for key, value in raw.items():
         name = str(key)
         if not isinstance(value, dict):
-            parsed[name] = value
-            continue
+            raise RuntimeError(
+                f"v2 route {route_index} attribute {name!r} must be a typed declaration; "
+                f"pin exact values with an attribute constraint instead: {path}"
+            )
         extra_keys = set(value) - {"type"}
         if extra_keys:
             raise RuntimeError(
                 f"v2 route {route_index} attribute {name!r} has unsupported keys {sorted(extra_keys)!r}: {path}"
             )
         declared_type = _parse_non_empty_string(path, f"v2 route {route_index} attribute {name!r}.type", value.get("type"))
-        if declared_type not in supported_types:
+        if declared_type not in SUPPORTED_ATTRIBUTE_TYPES:
             raise RuntimeError(
                 f"v2 route {route_index} attribute {name!r}.type has unsupported value {declared_type!r}: {path}"
             )

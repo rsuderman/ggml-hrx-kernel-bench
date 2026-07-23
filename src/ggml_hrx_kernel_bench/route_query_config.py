@@ -82,6 +82,15 @@ ATTRIBUTE_SCALAR_ABI_BY_FAMILY: dict[str, tuple[dict[str, Any], ...]] = {
     "softmax_kqv_f32_f16": (
         {"role": "scale", "dtype": "f32", "attribute": "scale", "default": 0.75},
     ),
+    "leaky_relu_f32": (
+        {"role": "negative_slope", "dtype": "f32", "attribute": "negative_slope", "default": 0.1},
+    ),
+    "leaky_relu_f16": (
+        {"role": "negative_slope", "dtype": "f32", "attribute": "negative_slope", "default": 0.1},
+    ),
+    "softcap_f32": (
+        {"role": "softcap", "dtype": "f32", "attribute": "softcap", "default": 50.0},
+    ),
 }
 FIXTURE_BY_FAMILY_ROLE: dict[tuple[str, str], str] = {
     ("get_rows_f32", "src1"): "indices",

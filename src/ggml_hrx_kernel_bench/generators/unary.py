@@ -38,8 +38,12 @@ class UnaryOp:
     # must include its own trailing newline; "" emits nothing.
     preamble: str = ""
     dtypes: tuple[tuple[str, str], ...] = DTYPES
-    # Optional exact YAML attributes required for this route family.
-    attributes: dict[str, object] | None = None
+    # Optional runtime scalar parameters (ggml op-params): attribute name -> dtype.
+    # Each becomes a leading kernel launch operand and a typed route attribute
+    # declaration; the query supplies the value at dispatch through the scalar ABI
+    # (see route_query_config.ATTRIBUTE_SCALAR_ABI_BY_FAMILY). The compute block
+    # references the param by %name; do not also bake it as a scalar.constant.
+    scalar_params: dict[str, str] | None = None
 
 
 UNARY_OPS: dict[str, UnaryOp] = {
@@ -171,9 +175,8 @@ UNARY_OPS: dict[str, UnaryOp] = {
         (CONTIGUOUS,),
         preamble=(
             "  %zero = scalar.constant 0.0 : f32\n"
-            "  %negative_slope = scalar.constant 0.1 : f32\n"
         ),
-        attributes={"negative_slope": 0.1},
+        scalar_params={"negative_slope": "f32"},
     ),
     "log": UnaryOp(
         "\n".join(
@@ -234,9 +237,9 @@ UNARY_OPS: dict[str, UnaryOp] = {
             )
         ),
         (CONTIGUOUS,),
-        preamble="  %softcap = scalar.constant 50.0 : f32\n",
+        preamble="",
         dtypes=(("f32", "F32"),),
-        attributes={"softcap": 50.0},
+        scalar_params={"softcap": "f32"},
     ),
     "softplus": UnaryOp("    %result = scalar.softplusf<afn> %value : f32", (CONTIGUOUS, NON_CONTIGUOUS)),
     "sqr": UnaryOp(
@@ -302,10 +305,18 @@ def render_kernel_artifacts() -> dict[Path, str]:
     """Kernel .loom contents keyed by path relative to ``kernels/v2``."""
     out: dict[Path, str] = {}
     for op, spec in UNARY_OPS.items():
+        launch_scalars = "".join(
+            f"%{name}: {dtype}, " for name, dtype in (spec.scalar_params or {}).items()
+        )
         for variant in spec.variants:
             out[Path(op) / f"{variant}.loom"] = load_template(
                 "kernels", "v2", "pointwise", f"{variant}.loom.tmpl"
-            ).substitute(op=op, preamble=spec.preamble, compute_block=spec.compute_block)
+            ).substitute(
+                op=op,
+                launch_scalars=launch_scalars,
+                preamble=spec.preamble,
+                compute_block=spec.compute_block,
+            )
     return out
 
 
@@ -333,8 +344,11 @@ def render_catalog_artifacts() -> dict[Path, str]:
                         dtype=DT,
                     )
                 )
-                if spec.attributes is not None:
-                    rendered["attributes"] = spec.attributes
+                if spec.scalar_params is not None:
+                    rendered["attributes"] = {
+                        name: {"type": dtype}
+                        for name, dtype in spec.scalar_params.items()
+                    }
                 out[Path(_route_relpath(op, dt, variant))] = json.dumps(
                     rendered,
                     indent=2,
