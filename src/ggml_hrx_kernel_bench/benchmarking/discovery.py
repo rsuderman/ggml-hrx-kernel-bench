@@ -130,6 +130,11 @@ def _route_id_from_descriptor(descriptor: dict[str, Any], entry: dict[str, Any])
 
 def _binding_element_count(binding: dict[str, Any], descriptor: dict[str, Any], descriptor_dir: Path) -> int:
     name = str(binding.get("name") or "")
+    dtype = str(binding.get("dtype") or "")
+    if dtype in QUANTIZED_STORAGE_DTYPES and isinstance(binding.get("path"), str):
+        np = require_numpy()
+        path = _resolve_descriptor_file_path(binding["path"], descriptor_dir=descriptor_dir)
+        return int(np.load(path, allow_pickle=False).reshape(-1).shape[0])
     metadata = descriptor.get("metadata", {})
     if isinstance(metadata, dict):
         element_counts = metadata.get("element_counts")
