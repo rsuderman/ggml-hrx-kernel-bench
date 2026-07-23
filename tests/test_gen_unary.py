@@ -30,23 +30,47 @@ def test_generated_unary_routes_omit_lowering_metadata() -> None:
         assert "lowering" not in json.loads(contents)
 
 
-def test_generated_attribute_requirements_are_typed_declarations_with_pins() -> None:
-    artifacts = {
+def test_scalar_param_ops_take_runtime_operands_not_pinned_constants() -> None:
+    kernels = {str(path): contents for path, contents in unary.render_kernel_artifacts().items()}
+    routes = {
         str(path): json.loads(contents)
         for path, contents in unary.render_catalog_artifacts().items()
     }
-    leaky_relu = artifacts["leaky_relu/leaky_relu_f32.json"]
 
-    assert leaky_relu["attributes"] == {"negative_slope": {"type": "f32"}}
-    assert {"name": "attribute.negative_slope", "value": 0.1} in leaky_relu["constraints"]
+    cases = [
+        ("leaky_relu/contiguous_4d.loom", "leaky_relu/leaky_relu_f32.json", "negative_slope"),
+        ("softcap/contiguous_4d.loom", "softcap/softcap_f32.json", "softcap"),
+    ]
+    for kernel_path, route_path, name in cases:
+        kernel = kernels[kernel_path]
+        # The value is a runtime launch operand, never a baked constant.
+        assert f"launch(%{name}: f32, %src0: buffer, %dst: buffer)" in kernel, kernel_path
+        assert f"%{name} = scalar.constant" not in kernel, kernel_path
 
-    softcap = artifacts["softcap/softcap_f32.json"]
-    assert softcap["attributes"] == {"softcap": {"type": "f32"}}
-    assert {"name": "attribute.softcap", "value": 50.0} in softcap["constraints"]
+        route = routes[route_path]
+        # Route declares the parameter as a typed attribute with no exact-value pin.
+        assert route["attributes"] == {name: {"type": "f32"}}, route_path
+        pins = [
+            check
+            for check in route.get("constraints", [])
+            if str(check.get("name", "")).startswith("attribute.")
+        ]
+        assert pins == [], route_path
 
-    for path, route in artifacts.items():
+    # Every generated route attribute remains a typed declaration.
+    for path, route in routes.items():
         for requirement in (route.get("attributes") or {}).values():
             assert isinstance(requirement, dict) and set(requirement) == {"type"}, path
+
+
+def test_non_parameter_unary_ops_keep_buffer_only_launch() -> None:
+    kernels = {str(path): contents for path, contents in unary.render_kernel_artifacts().items()}
+    routes = {
+        str(path): json.loads(contents)
+        for path, contents in unary.render_catalog_artifacts().items()
+    }
+    assert "launch(%src0: buffer, %dst: buffer)" in kernels["abs/contiguous_4d.loom"]
+    assert "attributes" not in routes["abs/abs_f32.json"]
 
 
 def test_route_catalog_rejects_literal_attribute_requirements(tmp_path: Path) -> None:

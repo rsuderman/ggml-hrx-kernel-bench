@@ -1418,7 +1418,7 @@ def _unary_source_values(np: Any, candidate: Candidate, seed: int) -> Any:
     return f32_pattern(np, shape, seed=seed)
 
 
-def _unary_apply(np: Any, family: str, values: Any) -> Any:
+def _unary_apply(np: Any, family: str, values: Any, scalars: Mapping[str, Any]) -> Any:
     if family in {"abs_f32", "abs_f16"}:
         return np.abs(values)
     if family in {"ceil_f32", "ceil_f16"}:
@@ -1458,7 +1458,8 @@ def _unary_apply(np: Any, family: str, values: Any) -> Any:
         )
         return values * gate
     if family in {"leaky_relu_f32", "leaky_relu_f16"}:
-        return np.where(values >= np.float32(0.0), values, values * np.float32(0.1))
+        negative_slope = np.float32(scalars.get("negative_slope", 0.1))
+        return np.where(values >= np.float32(0.0), values, values * negative_slope)
     if family in {"log_f32", "log_f16"}:
         return np.log(values)
     if family in {"neg_f32", "neg_f16"}:
@@ -1480,7 +1481,7 @@ def _unary_apply(np: Any, family: str, values: Any) -> Any:
     if family in {"sin_f32", "sin_f16"}:
         return np.sin(values)
     if family == "softcap_f32":
-        softcap = np.float32(50.0)
+        softcap = np.float32(scalars.get("softcap", 50.0))
         return softcap * np.tanh(values / softcap)
     if family in {"softplus_f32", "softplus_f16"}:
         return np.log1p(np.exp(values))
@@ -1558,7 +1559,7 @@ def _strided_unary_arrays(
     if candidate.family.endswith("_f16"):
         src0_buffer = src_buffer.astype(np.float16)
         applied = _unary_apply(
-            np, candidate.family, src0_buffer[src0_indices].astype(np.float32)
+            np, candidate.family, src0_buffer[src0_indices].astype(np.float32), candidate.values
         ).astype(np.float16)
         expected = np.zeros((dst_elems,), dtype=np.float16)
         expected[dst_indices] = applied
@@ -1571,7 +1572,9 @@ def _strided_unary_arrays(
             "metadata": {"dst_type": "i16"},
         }
     src0_buffer = src_buffer.astype(np.float32)
-    applied = _unary_apply(np, candidate.family, src0_buffer[src0_indices]).astype(np.float32)
+    applied = _unary_apply(
+        np, candidate.family, src0_buffer[src0_indices], candidate.values
+    ).astype(np.float32)
     dst_init = f32_pattern(np, (dst_elems,), seed=seed + 2, scale=0.25)
     expected = dst_init.copy()
     expected[dst_indices] = applied
@@ -1600,7 +1603,9 @@ def _unary_arrays(np: Any, candidate: Candidate, seed: int) -> dict[str, Any]:
     src = _unary_source_values(np, candidate, seed)
     if candidate.family.endswith("_f16"):
         src0 = src.astype(np.float16)
-        expected = _unary_apply(np, candidate.family, src0.astype(np.float32)).astype(np.float16)
+        expected = _unary_apply(
+            np, candidate.family, src0.astype(np.float32), candidate.values
+        ).astype(np.float16)
         return {
             "arrays": {
                 "src0": src0.reshape(elems).view(np.int16),
@@ -1614,7 +1619,9 @@ def _unary_arrays(np: Any, candidate: Candidate, seed: int) -> dict[str, Any]:
         "arrays": {
             "src0": src0.reshape(elems),
             "dst_init": f32_pattern(np, (elems,), seed=seed + 2, scale=0.25),
-            "expected": _unary_apply(np, candidate.family, src0).astype(np.float32).reshape(elems),
+            "expected": _unary_apply(np, candidate.family, src0, candidate.values)
+            .astype(np.float32)
+            .reshape(elems),
         },
     }
 

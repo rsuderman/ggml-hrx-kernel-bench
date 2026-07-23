@@ -23,7 +23,7 @@ kernel.def export("${op}_f32_non_contiguous_4d") @${op}_f32_non_contiguous_4d() 
   %rounded = index.add %total, %rounding : index
   %workgroups = index.div %rounded, %workgroup_size : index
   kernel.launch.config workgroups(%workgroups, %unit, %unit) workgroup_size(%workgroup_size, %unit, %unit) : index
-} launch(%src0: buffer, %dst: buffer) {
+} launch(${launch_scalars}%src0: buffer, %dst: buffer) {
   %base = index.constant 0 : offset
 $preamble  %ne0 = config.get @shape.pointwise.ne0 : index
   %ne1 = config.get @shape.pointwise.ne1 : index
@@ -97,7 +97,7 @@ kernel.def export("${op}_f16_non_contiguous_4d") @${op}_f16_non_contiguous_4d() 
   %rounded = index.add %total, %rounding : index
   %workgroups = index.div %rounded, %workgroup_size : index
   kernel.launch.config workgroups(%workgroups, %unit, %unit) workgroup_size(%workgroup_size, %unit, %unit) : index
-} launch(%src0: buffer, %dst: buffer) {
+} launch(${launch_scalars}%src0: buffer, %dst: buffer) {
   %base = index.constant 0 : offset
 $preamble  %ne0 = config.get @shape.pointwise.ne0 : index
   %ne1 = config.get @shape.pointwise.ne1 : index
