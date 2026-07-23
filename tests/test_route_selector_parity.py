@@ -375,6 +375,9 @@ for line_number, raw_line in enumerate(payload.splitlines(), start=1):
     if not raw_line.strip():
         continue
     case = json.loads(raw_line)["case"]
+    if case == "process-error" and selector_kind == "native":
+        print("native selector failure", file=sys.stderr)
+        raise SystemExit(3)
     if case == "missing" and selector_kind == "python":
         continue
     if case == "malformed-output" and selector_kind == "python":
@@ -391,6 +394,12 @@ for line_number, raw_line in enumerate(payload.splitlines(), start=1):
             "line": line_number,
             "status": "NO_MATCH",
             "diagnostic": "no native route",
+        }
+    elif case == "unsupported" and selector_kind == "native":
+        record = {
+            "line": line_number,
+            "status": "UNSUPPORTED",
+            "diagnostic": "native cannot evaluate op",
         }
     else:
         record = {"line": line_number, "status": "MATCH", "route_id": "route.shared"}
@@ -425,24 +434,33 @@ def _run_checker(
     python_selector: Path,
     native_selector: Path,
     enforce_router_parity: str | None = None,
+    mode: str | None = None,
+    expected_native_route_count: Path | None = None,
 ) -> subprocess.CompletedProcess[str]:
     environment = os.environ.copy()
     environment.pop(ENFORCE_ROUTER_PARITY_ENV, None)
     if enforce_router_parity is not None:
         environment[ENFORCE_ROUTER_PARITY_ENV] = enforce_router_parity
+    command = [
+        sys.executable,
+        str(CHECKER),
+        "--route-queries",
+        str(query_path),
+        "--routing-dir",
+        str(routing_dir),
+        "--python-selector",
+        str(python_selector),
+        "--native-selector",
+        str(native_selector),
+    ]
+    if mode is not None:
+        command.extend(("--mode", mode))
+    if expected_native_route_count is not None:
+        command.extend(
+            ("--expected-native-route-count", str(expected_native_route_count))
+        )
     return subprocess.run(
-        [
-            sys.executable,
-            str(CHECKER),
-            "--route-queries",
-            str(query_path),
-            "--routing-dir",
-            str(routing_dir),
-            "--python-selector",
-            str(python_selector),
-            "--native-selector",
-            str(native_selector),
-        ],
+        command,
         text=True,
         capture_output=True,
         check=False,
@@ -450,9 +468,11 @@ def _run_checker(
     )
 
 
-def test_checker_cli_passes_and_sends_complete_input_once(
+@pytest.mark.parametrize("mode", [None, "parity"])
+def test_checker_cli_parity_mode_passes_and_sends_complete_input_once(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    mode: str | None,
 ) -> None:
     python_selector, native_selector, log_dir = _write_fake_selectors(tmp_path, monkeypatch)
     source = b'\r\n{"case":"same"}\r\n \t\n{"case":"same"}'
@@ -466,6 +486,7 @@ def test_checker_cli_passes_and_sends_complete_input_once(
         routing_dir=routing_dir,
         python_selector=python_selector,
         native_selector=native_selector,
+        mode=mode,
     )
 
     assert result.returncode == 0
@@ -553,3 +574,237 @@ def test_checker_cli_returns_two_when_jsonl_cannot_be_read(tmp_path: Path) -> No
     assert result.returncode == 2
     assert result.stdout == ""
     assert f"cannot read RouteQuery JSONL {missing_path}" in result.stderr
+
+
+def _write_native_route_count_fixture(tmp_path: Path, count: int) -> Path:
+    fixture_path = tmp_path / "expected-native-route-count.json"
+    fixture_path.write_text(
+        json.dumps({"native_route_count": count}) + "\n",
+        encoding="utf-8",
+    )
+    return fixture_path
+
+
+@pytest.mark.parametrize(
+    ("mode", "include_fixture", "expected_error"),
+    [
+        (
+            "native-route-count",
+            False,
+            "--expected-native-route-count is required",
+        ),
+        (
+            "parity",
+            True,
+            "--expected-native-route-count is only valid",
+        ),
+        (
+            "not-a-mode",
+            False,
+            "invalid choice: 'not-a-mode'",
+        ),
+    ],
+)
+def test_checker_cli_rejects_invalid_mode_argument_combinations(
+    tmp_path: Path,
+    mode: str,
+    include_fixture: bool,
+    expected_error: str,
+) -> None:
+    fixture_path = _write_native_route_count_fixture(tmp_path, 0)
+    result = _run_checker(
+        query_path=tmp_path / "route-queries.jsonl",
+        routing_dir=tmp_path / "routing",
+        python_selector=tmp_path / "python-selector.py",
+        native_selector=tmp_path / "native-selector",
+        mode=mode,
+        expected_native_route_count=fixture_path if include_fixture else None,
+    )
+
+    assert result.returncode == 2
+    assert result.stdout == ""
+    assert expected_error in result.stderr
+
+
+@pytest.mark.parametrize(
+    (
+        "expected_count",
+        "expected_returncode",
+        "expected_stdout",
+        "expected_stderr",
+    ),
+    [
+        (
+            1,
+            0,
+            "Native route count matched the expected baseline of 1 RouteQuery row(s).\n",
+            "",
+        ),
+        (
+            0,
+            1,
+            "",
+            "Native route count increased: expected 0, observed 1 matching "
+            "RouteQuery row(s); baseline refresh required",
+        ),
+        (
+            2,
+            1,
+            "",
+            "Native route count regression: expected 2, observed 1 matching "
+            "RouteQuery row(s).",
+        ),
+    ],
+)
+def test_checker_cli_native_route_count_compares_exact_matching_rows(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    expected_count: int,
+    expected_returncode: int,
+    expected_stdout: str,
+    expected_stderr: str,
+) -> None:
+    python_selector, native_selector, _ = _write_fake_selectors(tmp_path, monkeypatch)
+    query_path = tmp_path / "route-queries.jsonl"
+    query_path.write_text(
+        '{"case":"same"}\n'
+        '{"case":"different"}\n'
+        '{"case":"no-match"}\n'
+        '{"case":"unsupported"}\n',
+        encoding="utf-8",
+    )
+    fixture_path = _write_native_route_count_fixture(tmp_path, expected_count)
+
+    result = _run_checker(
+        query_path=query_path,
+        routing_dir=tmp_path / "routing",
+        python_selector=python_selector,
+        native_selector=native_selector,
+        mode="native-route-count",
+        expected_native_route_count=fixture_path,
+    )
+
+    assert result.returncode == expected_returncode
+    assert result.stdout == expected_stdout
+    if expected_stderr:
+        assert expected_stderr in result.stderr
+    else:
+        assert result.stderr == ""
+
+
+@pytest.mark.parametrize(
+    "fixture_text",
+    [
+        "not JSON\n",
+        "[]\n",
+        '{"native_route_count":1,"unexpected":2}\n',
+        '{"native_route_count":true}\n',
+        '{"native_route_count":"1"}\n',
+        '{"native_route_count":1.0}\n',
+        '{"native_route_count":null}\n',
+        '{"native_route_count":-1}\n',
+        '{"native_route_count":1,"native_route_count":1}\n',
+    ],
+)
+def test_checker_cli_native_route_count_rejects_malformed_fixture(
+    tmp_path: Path,
+    fixture_text: str,
+) -> None:
+    fixture_path = tmp_path / "expected-native-route-count.json"
+    fixture_path.write_text(fixture_text, encoding="utf-8")
+
+    result = _run_checker(
+        query_path=tmp_path / "route-queries.jsonl",
+        routing_dir=tmp_path / "routing",
+        python_selector=tmp_path / "python-selector.py",
+        native_selector=tmp_path / "native-selector",
+        mode="native-route-count",
+        expected_native_route_count=fixture_path,
+    )
+
+    assert result.returncode == 2
+    assert result.stdout == ""
+    assert f"invalid expected native route count fixture {fixture_path}" in result.stderr
+
+
+def test_checker_cli_native_route_count_returns_two_when_fixture_cannot_be_read(
+    tmp_path: Path,
+) -> None:
+    missing_fixture = tmp_path / "missing-native-route-count.json"
+    result = _run_checker(
+        query_path=tmp_path / "route-queries.jsonl",
+        routing_dir=tmp_path / "routing",
+        python_selector=tmp_path / "python-selector.py",
+        native_selector=tmp_path / "native-selector",
+        mode="native-route-count",
+        expected_native_route_count=missing_fixture,
+    )
+
+    assert result.returncode == 2
+    assert result.stdout == ""
+    assert f"cannot read expected native route count fixture {missing_fixture}" in result.stderr
+
+
+@pytest.mark.parametrize(
+    ("case", "expected_errors"),
+    [
+        ("malformed-output", ("protocol error: output line 1: invalid JSON",)),
+        (
+            "process-error",
+            (
+                "process error: exited with return code 3",
+                "process error: printed unexpected stderr",
+            ),
+        ),
+    ],
+)
+def test_checker_cli_native_route_count_returns_two_for_selector_failures(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    case: str,
+    expected_errors: tuple[str, ...],
+) -> None:
+    python_selector, native_selector, _ = _write_fake_selectors(tmp_path, monkeypatch)
+    query_path = tmp_path / "route-queries.jsonl"
+    query_path.write_text(json.dumps({"case": case}) + "\n", encoding="utf-8")
+    fixture_path = _write_native_route_count_fixture(tmp_path, 0)
+
+    result = _run_checker(
+        query_path=query_path,
+        routing_dir=tmp_path / "routing",
+        python_selector=python_selector,
+        native_selector=native_selector,
+        mode="native-route-count",
+        expected_native_route_count=fixture_path,
+    )
+
+    assert result.returncode == 2
+    assert result.stdout == ""
+    assert "Native route count failed because a selector process or protocol failed" in result.stderr
+    for expected_error in expected_errors:
+        assert expected_error in result.stderr
+
+
+def test_checker_cli_native_route_count_treats_an_omitted_row_as_nonmatching(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    python_selector, native_selector, _ = _write_fake_selectors(tmp_path, monkeypatch)
+    query_path = tmp_path / "route-queries.jsonl"
+    query_path.write_text('{"case":"missing"}\n', encoding="utf-8")
+    fixture_path = _write_native_route_count_fixture(tmp_path, 0)
+
+    result = _run_checker(
+        query_path=query_path,
+        routing_dir=tmp_path / "routing",
+        python_selector=python_selector,
+        native_selector=native_selector,
+        mode="native-route-count",
+        expected_native_route_count=fixture_path,
+    )
+
+    assert result.returncode == 0
+    assert result.stdout == (
+        "Native route count matched the expected baseline of 0 RouteQuery row(s).\n"
+    )
+    assert result.stderr == ""

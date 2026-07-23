@@ -15,6 +15,11 @@ from typing import Any, Sequence
 
 DEFAULT_SELECTOR_TIMEOUT_SECONDS = 10.0
 
+PARITY_MODE = "parity"
+NATIVE_ROUTE_COUNT_MODE = "native-route-count"
+_SUPPORTED_MODES = (PARITY_MODE, NATIVE_ROUTE_COUNT_MODE)
+_NATIVE_ROUTE_COUNT_FIELD = "native_route_count"
+
 _DIAGNOSTIC_STATUSES = frozenset({"NO_MATCH", "UNSUPPORTED", "ERROR"})
 _SUPPORTED_STATUSES = frozenset({"MATCH", *_DIAGNOSTIC_STATUSES})
 _BLANK_LINE_CHARACTERS = " \t\r\n\v\f"
@@ -78,6 +83,23 @@ class RouteSelectorParityReport:
     @property
     def passed(self) -> bool:
         return not self.has_global_errors and not self.discrepancies
+
+    @property
+    def native_route_count(self) -> int:
+        """Return the number of rows where both selectors chose the same route."""
+        python_rows = {row.line_number: row for row in self.python_process.rows}
+        native_rows = {row.line_number: row for row in self.native_process.rows}
+        matching_route_count = 0
+        for line_number, python_row in python_rows.items():
+            native_row = native_rows.get(line_number)
+            if (
+                python_row.status == "MATCH"
+                and native_row is not None
+                and native_row.status == "MATCH"
+                and python_row.route_id == native_row.route_id
+            ):
+                matching_route_count += 1
+        return matching_route_count
 
 
 class _DuplicateJsonKey(ValueError):
@@ -306,6 +328,40 @@ def _read_route_queries(path: Path) -> tuple[str, tuple[tuple[int, str], ...], i
     return source_text, tuple(nonblank_lines), skipped_blank_count
 
 
+def _read_expected_native_route_count(path: Path) -> int:
+    try:
+        with path.open("r", encoding="utf-8") as fixture_file:
+            payload = json.load(
+                fixture_file,
+                object_pairs_hook=_reject_duplicate_json_keys,
+            )
+    except (OSError, UnicodeError) as exc:
+        raise RuntimeError(
+            f"cannot read expected native route count fixture {path}: {exc}"
+        ) from exc
+    except (json.JSONDecodeError, _DuplicateJsonKey) as exc:
+        raise RuntimeError(
+            f"invalid expected native route count fixture {path}: {exc}"
+        ) from exc
+
+    if not isinstance(payload, dict) or set(payload) != {_NATIVE_ROUTE_COUNT_FIELD}:
+        raise RuntimeError(
+            f"invalid expected native route count fixture {path}: expected exactly "
+            f"one field named {_NATIVE_ROUTE_COUNT_FIELD!r}"
+        )
+    native_route_count = payload[_NATIVE_ROUTE_COUNT_FIELD]
+    if (
+        isinstance(native_route_count, bool)
+        or not isinstance(native_route_count, int)
+        or native_route_count < 0
+    ):
+        raise RuntimeError(
+            f"invalid expected native route count fixture {path}: "
+            f"field {_NATIVE_ROUTE_COUNT_FIELD!r} must be a nonnegative integer"
+        )
+    return native_route_count
+
+
 def compare_route_selectors(
     *,
     route_queries_path: Path,
@@ -447,15 +503,84 @@ def format_route_selector_parity_report(report: RouteSelectorParityReport) -> st
     return "\n".join(lines)
 
 
+def _format_native_route_count_process_errors(report: RouteSelectorParityReport) -> str:
+    lines = [
+        "Native route count failed because a selector process or protocol failed."
+    ]
+    if report.python_process.global_errors:
+        lines.extend(("", *_format_process_result("Python", report.python_process)))
+    if report.native_process.global_errors:
+        lines.extend(("", *_format_process_result("native", report.native_process)))
+    return "\n".join(lines)
+
+
+def _check_native_route_count(
+    report: RouteSelectorParityReport,
+    *,
+    expected_count: int,
+    fixture_path: Path,
+) -> int:
+    if report.has_global_errors:
+        print(_format_native_route_count_process_errors(report), file=sys.stderr)
+        return 2
+
+    actual_count = report.native_route_count
+    if actual_count == expected_count:
+        print(
+            "Native route count matched the expected baseline of "
+            f"{actual_count} RouteQuery row(s)."
+        )
+        return 0
+    if actual_count < expected_count:
+        print(
+            "Native route count regression: expected "
+            f"{expected_count}, observed {actual_count} matching RouteQuery row(s).",
+            file=sys.stderr,
+        )
+        return 1
+
+    print(
+        "Native route count increased: expected "
+        f"{expected_count}, observed {actual_count} matching RouteQuery row(s); "
+        f"baseline refresh required for {fixture_path}.",
+        file=sys.stderr,
+    )
+    return 1
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Compare Python and native route selection for RouteQuery JSONL rows."
     )
+    parser.add_argument("--mode", choices=_SUPPORTED_MODES, default=PARITY_MODE)
     parser.add_argument("--route-queries", type=Path, required=True)
     parser.add_argument("--routing-dir", type=Path, required=True)
     parser.add_argument("--python-selector", type=Path, required=True)
     parser.add_argument("--native-selector", type=Path, required=True)
+    parser.add_argument("--expected-native-route-count", type=Path)
     args = parser.parse_args(argv)
+
+    if args.mode == NATIVE_ROUTE_COUNT_MODE:
+        if args.expected_native_route_count is None:
+            parser.error(
+                "--expected-native-route-count is required when "
+                "--mode=native-route-count"
+            )
+    elif args.expected_native_route_count is not None:
+        parser.error(
+            "--expected-native-route-count is only valid when "
+            "--mode=native-route-count"
+        )
+
+    expected_native_route_count: int | None = None
+    if args.expected_native_route_count is not None:
+        try:
+            expected_native_route_count = _read_expected_native_route_count(
+                args.expected_native_route_count
+            )
+        except RuntimeError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
 
     try:
         report = compare_route_selectors(
@@ -467,6 +592,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     except RuntimeError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
+
+    if args.mode == NATIVE_ROUTE_COUNT_MODE:
+        assert expected_native_route_count is not None
+        assert args.expected_native_route_count is not None
+        return _check_native_route_count(
+            report,
+            expected_count=expected_native_route_count,
+            fixture_path=args.expected_native_route_count,
+        )
 
     if report.has_global_errors:
         print(format_route_selector_parity_report(report), file=sys.stderr)
